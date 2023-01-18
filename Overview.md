@@ -14,7 +14,9 @@ This documentation is organised as follows:
 
 ### Scheme
 Validators participate in elections via validation-controllers which a) accept and account funds from validation pool and validators, b) ensures that assets lended to validators can not be withdrawn, c) notify validation pool about profits and losses. Validation Pool deploy new validator-controllers (upon request from validators), distributes and revokes money to validator-controllers as Operator decides, aggregates profit/loss information from validator-controllers and notify Profit Pool about aggregated data. Profit Pool manages deposits, withdrawals and stepwise update ratio of PoolJetton to TON. PoolJetton is jetton which is used to manage assets lended to the pool. There are also additional types of jettons: awaitedPJ and awaitedTON. These jettons are used for accounting during postponement of deposits/withdrawals till the moment when TON/PJ price is known. Operator controls lending of assets to validators according to it's internal risk/reward model. Governance control parameters of the system (how much profit goes to operator, nominators, minimal and maximal allowed parameters of validator-controllers). Governance itself may be a wallet, multisignature wallet or DAO. It is expected that in final revision Governance will be jetton-based DAO with it's owng GJ: governance jetton.
-![[Untitled Diagram (1).png]]
+
+
+![scheme](scheme.png)
 
 ## Components
 ### Validator-controller
