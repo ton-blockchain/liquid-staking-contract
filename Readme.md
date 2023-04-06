@@ -13,6 +13,9 @@ This documentation is organised as follows:
 - jettons: TEP-74+TEP-89 Jettons : scalable tokens on TON blockchain
 
 ### Scheme
+
+![scheme](scheme.png)
+
 **Validators** participate in elections via **validation-controller** which
 
 1. Requests funds from Validation Pool through **Validator approval**
@@ -40,12 +43,11 @@ This documentation is organised as follows:
 2. set *Current Rate* and *Desired Utilization* parameters in **Validation pool**
 3. Assign Stopcock.
 4. Transfer governance right to another contract.
-5. Upgrade code it is the last resort emergency mechanisms for exploits which can not be fixed other way.
+5. Upgrade code. It is the last resort emergency mechanisms for exploits which can not be fixed other way.
 
 **Governance** itself may be a wallet, multisignature wallet or DAO, it can be decided later through governance transfer. It is expected that in final revision Governance will be jetton-based DAO with it's owng GJ: governance jetton.
 
 
-![scheme](scheme.png)
 
 ## Components
 ### Validator-controller
@@ -87,13 +89,11 @@ Validation pool receives deposit and withdraw requests from Profit Pool (PP belo
 
 Manages *Current Rate*: interest rate of lending. It increase/decrease rate if *Utilization rate* is not matched.
 
-Process lending requests from Validator Approvals: send funds if there are enough funds and request matches rate and limits.
+Process lending requests from Validator Approvals: send funds if there are enough funds and request matches rate and limits. Saves to *active controller list* (it is expected that there will be hundreds of those)
 
-Receives debt repayment from validator-controlers.
+Receives debt repayment from validator-controlers: remove tham from *active controller list*
 
-Account for fees.
-
-Stores all validator-controllers it lended assets (it is expected that there will be hundreds of those).
+Account for fees: send governance fee to governance? **TODO**
 
 
 Handlers of incoming messages
@@ -114,20 +114,21 @@ Outcoming messages:
 - Fees to Governance (???)
 
 ### Profit pool
-Profit pool implements Pool Jetton minter functionality.
+Profit pool implements Pool Jetton minter functionality: mints pTON, but not direcly to users, instead it will be distributed through awaited pTON.
+
 Keep track of ratio of pTON/TON.
 
 Receives deposits from nominators and mints *awaited pTON* for them. Immediately deposits assets to Validation Pool.
 
-Receives pTON burns notifications (withdrawal requests) from nominators' wallets and mints *awaited TON* for them and requests withdrawals from Validation Pool.
+Receives pTON burns notifications (withdrawal requests) from nominators' wallets and mints *awaited TON* for them, requests withdrawals from Validation Pool.
 
 Keep track of summs of **current round** awaited jettons.
 
-Receives aggregated profit notifications and withdrawal, get info on actual pTON/TON ratio.
+Receives aggregated profit notifications and withdrawal, discover new actual pTON/TON ratio.
 
-Immediately mints pTON to *awaited pTON* minter for distribution.
+Immediately mints pTON to *awaited pTON* minter for distribution (in accorance to new ratio).
 
-TONs to *awaited TON* minter are either sent immediately (if there is enough TONs) or sent later upon request to fulfill withdrawals (and when TON from round cames to PP).
+Also, in accordance to new ration, sends TONs to *awaited TON* minter either immediately (if there are enough TONs) or later upon request to fulfill withdrawals (and when TON from round cames to PP). **TODO: can we eliminate situation when there is not enough TON for withdrawal**
 
 Distribution of pTON and TON happens on *awaited pTON* and *awaited TON* minters (separate minter for each round) upon burning *awaited pTON* and *awaited TON* jettons.
 
