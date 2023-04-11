@@ -1,0 +1,7 @@
+;; common functions in all contracts
+;; it is expected that `governor`,`state` global vars exist
+
+() process_halt_request(slice sender, slice in_msg) impure inline_ref {
+    assert_sender!(sender, governor);
+    state = state::HALTED;
+}

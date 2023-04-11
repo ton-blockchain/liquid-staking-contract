@@ -1,0 +1,64 @@
+;; int_msg_info$0 ihr_disabled:Bool bounce:Bool bounced:Bool src:MsgAddress -> 011000
+const int msgflag::NON_BOUNCEABLE = 0x10;
+const int msgflag::BOUNCEABLE = 0x18;
+
+const int sendmode::REGULAR = 0;
+const int sendmode::PAY_FEES_SEPARETELY = 1;
+const int sendmode::IGNORE_ERRORS = 2;
+const int sendmode::DESTROY = 32;
+const int sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE = 64;
+const int sendmode::CARRY_ALL_BALANCE = 128;
+
+builder store_msg_flags(builder b, int msg_flag) inline { return b.store_uint(msg_flag, 6); }
+
+{-
+  Helpers below fill in default/overwritten values of message layout:
+  Relevant part of TL-B schema:
+  ... other:ExtraCurrencyCollection ihr_fee:Grams fwd_fee:Grams created_lt:uint64 created_at:uint32 = CommonMsgInfoRelaxed;
+  bits      1                               4             4                64                32                            
+  ... init:(Maybe (Either StateInit ^StateInit))  body:(Either X ^X) = Message X;
+  bits      1      1(if prev is true)                   1
+
+-}
+
+builder store_msgbody_prefix_stateinit(builder b) inline { 
+  return b.store_uint(4 + 2 + 1, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1);
+}
+builder store_msgbody_prefix_slice(builder b) inline { 
+  return b.store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1);
+}
+builder store_msgbody_prefix_ref(builder b) inline { 
+  return b.store_uint(1, 1 + 4 + 4 + 64 + 32 + 1 + 1);
+}
+
+{-
+
+addr_std$10 anycast:(Maybe Anycast) 
+   workchain_id:int8 address:bits256  = MsgAddressInt;
+-}
+
+builder store_masterchain_address(builder b, int address_hash) inline {
+  return b.store_uint(4, 3).store_int(-1, 8).store_uint(address_hash, 256);
+}
+
+
+() send_msg(slice to_address, int amount, cell payload, int flags, int send_mode) impure inline_ref {
+    int has_payload = ~ cell_null?(payload);
+
+    builder msg = begin_cell()
+        .store_msg_flags(flags)
+        .store_slice(to_address)
+        .store_coins(amount);
+
+    if (has_payload) {
+        msg = msg.store_msgbody_prefix_ref().store_ref(payload);
+    } else {
+        msg = msg.store_msgbody_prefix_slice();
+    }
+
+    send_raw_message(msg.end_cell(), send_mode);
+}
+
+() send_excesses(slice sender_address) impure inline_ref {
+    send_msg(sender_address, 0, null(), msgflag::NON_BOUNCEABLE, sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE + sendmode::SEND_MODE_IGNORE_ERRORS); ;; non-bouneable, remaining inbound message amount, fee deducted from amount, ignore errors
+}

@@ -1,0 +1,13 @@
+() assert_sender!(slice sender, slice required_address) impure inline {
+  throw_unless(78, equal_slice_bits(sender, required_address));
+}
+
+;; It is expected that `state` global variable exists
+const int state::HALTED = 0xff;
+() assert_not_halted!() impure inline {
+  throw_if(211, state == state::HALTED);
+}
+
+() assert_state!(int expected) impure inline {
+  throw_if(2111, state == expected);
+}

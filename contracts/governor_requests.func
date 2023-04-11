@@ -1,0 +1,13 @@
+;; common functions in all contracts
+;; it is expected that `governor`,`sudoer` and `state` global vars exist
+
+() process_set_sudo_request(slice sender, slice in_msg) impure inline_ref {
+    assert_sender!(sender, governor);
+    sudoer = in_msg~load_msg_addr();
+}
+
+() process_unhalt_request(slice sender, slice in_msg) impure inline_ref {
+    assert_sender!(sender, governor);
+    int new_state = in_msg~load_uint(8);
+    state = new_state;
+}

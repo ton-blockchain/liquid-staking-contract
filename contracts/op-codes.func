@@ -1,0 +1,67 @@
+{- ======== ELECTOR OPCODES =========== -}
+
+;; https://github.com/ton-blockchain/ton/blob/b38d227a469666d83ac535ad2eea80cb49d911b8/crypto/smartcont/elector-code.fc#L621
+const int elector::new_stake = 0x4e73744b;
+
+;; return_stake https://github.com/ton-blockchain/ton/blob/b38d227a469666d83ac535ad2eea80cb49d911b8/crypto/smartcont/elector-code.fc#L169
+const int elector::new_stake_error = 0xee6f454c;
+
+;; send_confirmation https://github.com/ton-blockchain/ton/blob/b38d227a469666d83ac535ad2eea80cb49d911b8/crypto/smartcont/elector-code.fc#L173
+const int elector::new_stake_ok = 0xf374484c; 
+
+;; https://github.com/ton-blockchain/ton/blob/b38d227a469666d83ac535ad2eea80cb49d911b8/crypto/smartcont/elector-code.fc#L625
+const int elector::recover_stake = 0x47657424;
+
+;; https://github.com/ton-blockchain/ton/blob/b38d227a469666d83ac535ad2eea80cb49d911b8/crypto/smartcont/elector-code.fc#L407
+const int elector::recover_stake_error = 0xfffffffe;
+
+;; https://github.com/ton-blockchain/ton/blob/b38d227a469666d83ac535ad2eea80cb49d911b8/crypto/smartcont/elector-code.fc#L426
+const int elector::recover_stake_ok = 0xf96f7324;
+
+{- ========  Validator Controller OPCODES ======== -}
+;; IN
+const int controller::top_up = 0x1; ;; TODO
+const int controller::deposit = 0x2; ;; TODO
+const int controller::request_withdraw = 0x3; ;; TODO
+const int controller::process_withdraw = 0x4; ;; TODO
+const int controller::update_validator_hash = 0x5; ;; TODO
+const int controller::deposit_validator = 0x6; ;; TODO
+const int controller::approve = 0x7; ;; TODO
+const int controller::disapprove = 0x8; ;; TODO
+const int controller::recover_stake = 0x77777777; ;; TODO
+const int controller::new_stake = elector::new_stake; ;; TODO
+const int controller::credit = 0x8673; ;;TODO
+const int controller::withdraw_validator = 0x18673; ;;TODO
+const int controller::return_unused_loan = 0x8712;
+;; OUT
+const int controller::withdrawal = 0x8; ;;TODO
+
+
+{- ======== Validator Pool OPCODES ========== -}
+const int pool::request_loan = 0x1dd5; ;; TODO
+const int pool::loan_repayment = 0x1ff5; ;; TODO
+
+
+const int sudo::send_message = 0xf12;
+const int governor::set_sudoer = 0xd11;
+const int governor::unhalt = 0x1ee;
+const int stopcock::halt = 0x3ee;
+
+
+
+
+
+(slice, (int)) ~load_op(slice s) inline { return s.load_uint(32); }
+(slice, (int)) ~load_query_id(slice s) inline { return s.load_uint(64); }
+(slice, (int, int)) ~load_body_header(slice s) inline {
+  int op = s~load_uint(32);
+  int query_id = s~load_uint(64);
+  return (s, (op, query_id));
+}
+
+builder store_op(builder b, int op) inline { return b.store_uint(op, 32); }
+builder store_query_id(builder b, int query_id) inline { return b.store_uint(query_id, 64); }
+builder store_body_header(builder b, int op, int query_id) inline {
+  return b.store_uint(op, 32)
+          .store_uint(query_id, 64);
+}
