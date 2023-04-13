@@ -60,5 +60,10 @@ builder store_masterchain_address(builder b, int address_hash) inline {
 }
 
 () send_excesses(slice sender_address) impure inline_ref {
-    send_msg(sender_address, 0, null(), msgflag::NON_BOUNCEABLE, sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE + sendmode::SEND_MODE_IGNORE_ERRORS); ;; non-bouneable, remaining inbound message amount, fee deducted from amount, ignore errors
+    send_msg(
+      sender_address,
+      0, ;; value
+      null(),
+      msgflag::NON_BOUNCEABLE,
+      sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE | sendmode::IGNORE_ERRORS); ;; non-bouneable, remaining inbound message amount, fee deducted from amount, ignore errors
 }

@@ -2,8 +2,9 @@
   throw_unless(78, equal_slice_bits(sender, required_address));
 }
 
-;; It is expected that `state` global variable exists
+global int state;
 const int state::HALTED = 0xff;
+
 () assert_not_halted!() impure inline {
   throw_if(211, state == state::HALTED);
 }

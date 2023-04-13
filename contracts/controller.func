@@ -13,9 +13,15 @@
 #include "stdlib.func";
 #include "op-codes.func";
 #include "messages.func";
+#include "asserts.func";
+#include "sudoer_requests.func";
+#include "governor_requests.func";
+#include "stopcock_requests.func";
+
 
 const int ADDR_SIZE = 256; ;; bits
 const int ONE_TON = 1000000000;
+const int ELECTOR_OPERATION_VALUE = 103 * ONE_TON / 100 ;
 const int MIN_TONS_FOR_STORAGE = 10 * ONE_TON; ;; 10 TON
 const int DEPOSIT_FEE = ONE_TON / 4; ;; 0.25 TON
 const int WITHDRAWAL_FEE = ONE_TON / 4; ;; 0.25 TON
@@ -61,21 +67,13 @@ const int state::SENT_STAKE_REQUEST = 2;
 const int state::FUNDS_STAKEN = 3;
 const int state::HALTED = 0xff;
 
-
-;; These includes depends on global vars
-#include "asserts.func";
-#include "sudoer_requests.func";
-#include "governor_requests.func";
-#include "stopcock_requests.func";
-
-
 () save_data();
 () load_data();
 
 slice elector_address();
 int is_elector_address(slice address);
 int max_recommended_punishment_for_validator_misbehaviour(int stake);
-(int, int) get_validator_config();
+(int, int, int) get_validator_config();
 int get_stake_held_for();
 int get_elections_start_before();
 (int, int, cell) get_current_validator_set();
@@ -104,10 +102,19 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
                 if (state == state::SENT_STAKE_REQUEST) {
                     state = state::REST;
                 }
-                save_data();
+            } elseif (equal_slice_bits(sender_address, pool)) {
+              if(op == pool::loan_repayment) {
+                borrowed_amount += msg_value;
+                borrowing_time = now();
+              } elseif (op == pool::request_loan) {
+                if (state == state::SENT_BORROWING_REQUEST) {
+                  state = state::REST;
+                }
+              }
             }
         }
-        ;; TODO process bounces from pool
+
+        save_data();
         return (); ;; ignore other bounces messages
     }
 
@@ -154,7 +161,7 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
                 ifnot(borrowing_time) {
                   borrowing_time = now();
                 }
-                borrowed_amount = in_msg_body~load_coins();
+                borrowed_amount += in_msg_body~load_coins();
                 in_msg_body.end_parse();
                 state = state::REST;
             } elseif (op == controller::approve) {
@@ -192,7 +199,7 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
                 int time_since_unfreeze = now() - validator_set_change_time - stake_held_for;
                 throw_unless(112, (validator_set_changes_count > 2) | (time_since_unfreeze > 60));
                 ;; https://github.com/ton-blockchain/ton/blob/b38d227a469666d83ac535ad2eea80cb49d911b8/crypto/smartcont/elector-code.fc#L887
-                throw_unless(86, msg_value >= muldiv(15, ONE_TON, 10)); ;; must be greater then elector fee
+                throw_unless(86, msg_value >= ELECTOR_OPERATION_VALUE);
 
                 cell payload = begin_cell().store_body_header(elector::recover_stake, query_id).end_cell();
                 send_msg(elector_address(),
@@ -227,7 +234,7 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
                 }
             } elseif (op == controller::withdraw_validator) { ;; withdraw validator (after recover_stake and before new_stake)
                 assert_state!(state::REST);
-                throw_if(74, borrowed_amount); 
+                throw_if(74, borrowed_amount);
                 assert_sender!(sender_address, validator);
                 int request_amount = in_msg_body~load_coins();
                 in_msg_body.end_parse();
@@ -246,7 +253,7 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
 
                 throw_unless(80, query_id); ;; query_id must be greater then 0 to receive confirmation message from elector
 
-                throw_unless(86, msg_value >= ONE_TON); ;; must be greater then new_stake sending to elector fee
+                throw_unless(86, msg_value >= ELECTOR_OPERATION_VALUE); ;; must be greater then new_stake sending to elector fee
 
                 int value = in_msg_body~load_coins();
 
@@ -254,21 +261,21 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
 
                 stake_at = check_new_stake_msg(in_msg_body);
 
-                stake_amount_sent = value - ONE_TON;
+                stake_amount_sent = value - ELECTOR_OPERATION_VALUE;
 
                 throw_unless(81, value >= MIN_STAKE_TO_SEND);
 
                 int overdue_fine = (HASH_UPDATE_FINE * 3) - STAKE_RECOVER_FINE;
 
                 throw_unless(82, balance - value >=  MIN_TONS_FOR_STORAGE - overdue_fine);
-                (int elections_start_before, stake_held_for) = get_validator_config();
+                (int elections_start_before, stake_held_for, _) = get_validator_config();
                 if (borrowed_amount) {
                   throw_unless(85, now() - borrowing_time < elections_start_before);
                 }
-                
-                int validator_amount = balance - borrowed_amount;
 
-                throw_unless(84, validator_amount >= max_recommended_punishment_for_validator_misbehaviour(stake_amount_sent) + (overdue_fine + MIN_TONS_FOR_STORAGE));
+                int validator_own_funds = balance - borrowed_amount;
+
+                throw_unless(84, validator_own_funds >= max_recommended_punishment_for_validator_misbehaviour(stake_amount_sent) + (overdue_fine + MIN_TONS_FOR_STORAGE));
 
                 state = state::SENT_STAKE_REQUEST;
 
@@ -277,7 +284,7 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
                 saved_validator_set_hash = cell_hash(vset); ;; current validator set, we will be in next validator set
                 validator_set_changes_count = 0;
                 validator_set_change_time = utime_since;
-                
+
                 send_msg(elector_address(),
                          value,
                          begin_cell().store_body_header(elector::new_stake, query_id).store_slice(msg).end_cell(),
@@ -292,18 +299,24 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
               int max_loan = in_msg_body~load_coins();
               int max_interest = in_msg_body~load_uint(16);
               in_msg_body.end_parse();
-              
+
               ;; For simplicity forbid multiple borrowing
               ;; TODO
               throw_if(1111, borrowed_amount);
-              
+
+              (int elections_start_before, _, int elections_end_before) = get_validator_config();
+              (int utime_since, int utime_until, cell vset) = get_current_validator_set();
+              throw_unless(345, now() > utime_until - elections_start_before); ;; elections started
+              throw_unless(346, now() < utime_until - elections_end_before);   ;; elections not yet closed
+
+
               ;; lets check whether we can afford it
               int elector_fine = max_recommended_punishment_for_validator_misbehaviour(max_loan + balance);
               int overdue_fine = (HASH_UPDATE_FINE * 3) - STAKE_RECOVER_FINE;
               int interest_payment = muldiv(max_loan, max_interest, 65535);
               int validator_amount = balance - borrowed_amount;
               throw_unless(987, validator_amount > (MIN_TONS_FOR_STORAGE + overdue_fine) + elector_fine + interest_payment);
-              
+
               cell payload = begin_cell()
                                          .store_body_header(pool::request_loan, query_id)
                                          .store_slice(request)
@@ -313,14 +326,13 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
                        payload,
                        msgflag::BOUNCEABLE,
                        sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);
-              state = state::SENT_BORROWING_REQUEST;              
+              state = state::SENT_BORROWING_REQUEST;
             } elseif (op == controller::return_unused_loan) {
                 assert_state!(state::REST);
                 throw_unless(912, borrowed_amount);
-                int elections_start_before = get_elections_start_before();
-                int overdue = now() - borrowing_time - elections_start_before;
-                throw_unless(11211, overdue > 0);
-                state = state::REST;
+                (int utime_since, int utime_until, cell vset) = get_current_validator_set();
+                throw_unless(11211, utime_since > borrowing_time); ;; load was requested in previous round
+                int overdue = now() - utime_since;
                 if(balance > MIN_TONS_FOR_STORAGE + borrowed_amount) {
                   send_msg(pool,
                            borrowed_amount, ;; TODO add fee???
@@ -345,7 +357,6 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
 
     save_data( );
 }
-
 
 () save_data() impure inline_ref {
     set_data(begin_cell()
@@ -372,7 +383,7 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
 
     stake_amount_sent = ds~load_coins();
     stake_at = ds~load_timestamp();
-    
+
     saved_validator_set_hash = ds~load_uint(256);
     validator_set_changes_count = ds~load_uint(8);
     validator_set_change_time = ds~load_timestamp();
@@ -380,11 +391,11 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
 
     borrowed_amount = ds~load_coins();
     borrowing_time = ds~load_timestamp();
-        
+
     sudoer = ds~load_msg_addr();
-    
+
     static_data = ds;
-    
+
     ds = ds~load_ref().begin_parse();
 
     validator = ds~load_msg_addr();
@@ -449,18 +460,18 @@ int max_recommended_punishment_for_validator_misbehaviour(int stake) inline_ref 
 
 ;; https://github.com/ton-blockchain/ton/blob/b38d227a469666d83ac535ad2eea80cb49d911b8/crypto/block/block.tlb#L632
 ;; https://github.com/ton-blockchain/ton/blob/b38d227a469666d83ac535ad2eea80cb49d911b8/crypto/smartcont/elector-code.fc#L118
-(int, int) get_validator_config() inline {
+(int, int, int) get_validator_config() inline {
     slice cs = config_param(15).begin_parse();
     (int validators_elected_for, int elections_start_before, int elections_end_before, int _stake_held_for) = (cs~load_uint(32), cs~load_uint(32), cs~load_uint(32), cs.preload_uint(32));
-    return (elections_start_before, _stake_held_for);
+    return (elections_start_before, _stake_held_for, elections_end_before);
 }
 
 int get_stake_held_for() inline_ref {
-    (int elections_start_before, int _stake_held_for) = get_validator_config();
+    (int elections_start_before, int _stake_held_for, _) = get_validator_config();
     return _stake_held_for;
 }
 int get_elections_start_before() inline_ref {
-    (int elections_start_before, int _stake_held_for) = get_validator_config();
+    (int elections_start_before, int _stake_held_for, _) = get_validator_config();
     return elections_start_before;
 }
 
@@ -493,10 +504,10 @@ int check_new_stake_msg(slice cs) impure inline_ref {
 _ get_validator_controller_data() method_id {
     load_data();
     return (
-      state, 
+      state,
       stake_amount_sent,
-      validator_amount, 
-      nominator_amount, 
+      validator_amount,
+      nominator_amount,
       unpack_config(config.begin_parse()),
       pending_deposit,
       pending_withdraw,

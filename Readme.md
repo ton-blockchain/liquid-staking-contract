@@ -14,7 +14,7 @@ This documentation is organised as follows:
 
 ### Scheme
 
-![scheme](scheme.png)
+![scheme](docs/images/scheme.png)
 
 **Validators** participate in elections via **Сontroller** which
 
@@ -83,7 +83,7 @@ Outcoming messages:
 - Debt repayment (to Pool)
 - Validator withdrawal (to Validator)
 
-[Detailed docs on Validator controler](controller.md)
+[Detailed docs on Validator controler](docs/controller.md)
 
 If Сontroller doesn't have enough assets to repay debt after stake recovery:
 halt Сontroller, and expect that Governance will "manually" decide what to do, for instance wait till validator replenish Сontroller or withdraw everything depending on conditions.

@@ -1,5 +1,5 @@
 ;; common function in all contracts
-;; it is expected that `sudoer` global var exists
+global slice sudoer;
 
 () process_sudo_request(slice sender, slice in_msg) impure inline_ref {
     assert_sender!(sender, sudoer);
