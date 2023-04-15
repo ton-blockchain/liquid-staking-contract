@@ -52,6 +52,7 @@ global int borrowed_amount;
 global int borrowing_time;
 
 global slice sudoer;
+global int sudoer_set_at;
 
 global slice static_data;
 global slice validator;
@@ -59,6 +60,7 @@ global slice pool;
 global slice governor;
 global slice stopcock;
 global slice approver;
+
 
 
 const int state::REST = 0;
@@ -300,6 +302,8 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
               int max_interest = in_msg_body~load_uint(16);
               in_msg_body.end_parse();
 
+              throw_unless(1211, approved);
+
               ;; For simplicity forbid multiple borrowing
               ;; TODO
               throw_if(1111, borrowed_amount);
@@ -320,6 +324,7 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
               cell payload = begin_cell()
                                          .store_body_header(pool::request_loan, query_id)
                                          .store_slice(request)
+                                         .store_slice(static_data)
                              .end_cell();
               send_msg(pool,
                        0,
@@ -371,6 +376,7 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
         .store_coins(borrowed_amount)
         .store_timestamp(borrowing_time)
         .store_slice(sudoer)
+        .store_timestamp(sudoer_set_at)
         .store_slice(static_data)
         .end_cell());
 }
@@ -393,6 +399,7 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
     borrowing_time = ds~load_timestamp();
 
     sudoer = ds~load_msg_addr();
+    sudoer_set_at = ds~load_timestamp();
 
     static_data = ds;
 

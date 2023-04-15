@@ -1,10 +1,12 @@
 ;; common functions in all contracts
 global slice governor;
 global slice sudoer;
+global int sudoer_set_at;
 global int state;
 
 () process_set_sudo_request(slice sender, slice in_msg) impure inline_ref {
     assert_sender!(sender, governor);
+    sudoer_set_at = now();
     sudoer = in_msg~load_msg_addr();
 }
 

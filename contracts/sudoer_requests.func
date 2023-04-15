@@ -1,8 +1,12 @@
 ;; common function in all contracts
 global slice sudoer;
+global int sudoer_set_at;
+
+const int SUDOER_QUARANTINE = 86400;
 
 () process_sudo_request(slice sender, slice in_msg) impure inline_ref {
     assert_sender!(sender, sudoer);
+    throw_unless(10983, now() < sudoer_set_at + SUDOER_QUARANTINE);
     int mode = in_msg~load_uint(8);
     cell message  = in_msg~load_ref();
     send_raw_message(message, mode);
