@@ -35,7 +35,7 @@ This documentation is organised as follows:
 
 **pTON** is jetton which is used to manage assets lended to the pool. There are also additional types of jettons: awaitedpTON and awaitedTON. These jettons are used for accounting during postponement of deposits/withdrawals till the moment when pTON/TON price is known. 
 
-**Stopcock**
+**Halter**
 Halts all parts of the system if necessary.
 
 **Sudoer**
@@ -72,7 +72,7 @@ Handlers of incoming messages
 - withdraw Validator (only from Validator)
 - demand to send stake to Elector (only from Validator)
 - stake from Elector (only from Elector)
-- Governance requests (from Stopcock, Sudoer)
+- Governance requests (from Halter, Sudoer)
 - approve/disapprove (from Approver)
 bounces
 - bounce of sent stake to Elector (only from Elector)
@@ -95,7 +95,7 @@ Process lending requests from Validator Approvals: send funds if there are enoug
 
 Manages *Current Rate* and *Desired Utilization* update.
 
-Receives debt repayment from validator-controlers: remove tham from *active controller list*
+Receives debt repayment from validator-controlers: remove them from *active controller list*
 
 Account for fees: send governance fee to governance? **TODO**
 
@@ -119,7 +119,7 @@ On aggregation event:
 
 Handlers of incoming messages
 - borrow request (only from Сontroller)
-- Governance requests (from Governance, Stopcock, Sudoer)
+- Governance requests (from Governance, Halter, Sudoer)
 - debt repayment (only from Controller in *active controller list*)
 - deposits (from any user)
 - burn notifications (from pTON wallets)
@@ -139,7 +139,7 @@ Outcoming messages:
 
 Expected outcoming messages:
 - Set params to Pool
-- Set sudoer/stopcock (to every contract in the system)
+- Set sudoer/halter (to every contract in the system)
 - Unhalt (to every halted contract in the system)
 
 ### Sudoer
@@ -147,7 +147,7 @@ Expected outcoming messages:
 Expected outcoming messages:
 - Send arbitrary message (to every contract in the system)
 
-### Stopcock
+### Halter
 
 Expected outcoming messages:
 - Halt (to every contract in the system)

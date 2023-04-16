@@ -16,7 +16,7 @@
 #include "asserts.func";
 #include "sudoer_requests.func";
 #include "governor_requests.func";
-#include "stopcock_requests.func";
+#include "halter_requests.func";
 
 
 const int ADDR_SIZE = 256; ;; bits
@@ -58,7 +58,7 @@ global slice static_data;
 global slice validator;
 global slice pool;
 global slice governor;
-global slice stopcock;
+global slice halter;
 global slice approver;
 
 
@@ -178,7 +178,7 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
                 process_set_sudo_request(sender_address, in_msg_body);
             }  elseif (op == governor::unhalt) {
                 process_unhalt_request(sender_address, in_msg_body);
-            } elseif (op == stopcock::halt) {
+            } elseif (op == halter::halt) {
                 process_halt_request(sender_address, in_msg_body);
             } elseif (op == controller::recover_stake) { ;; send recover_stake to elector
                 assert_state!(state::FUNDS_STAKEN);
@@ -412,7 +412,7 @@ builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(t
     ds = ds~load_ref().begin_parse();
 
     approver = ds~load_msg_addr();
-    stopcock = ds~load_msg_addr();
+    halter = ds~load_msg_addr();
 }
 
 

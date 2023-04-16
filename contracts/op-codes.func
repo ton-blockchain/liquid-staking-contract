@@ -45,7 +45,7 @@ const int pool::loan_repayment = 0x1ff5; ;; TODO
 const int sudo::send_message = 0xf12;
 const int governor::set_sudoer = 0xd11;
 const int governor::unhalt = 0x1ee;
-const int stopcock::halt = 0x3ee;
+const int halter::halt = 0x3ee;
 
 
 

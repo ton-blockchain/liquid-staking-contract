@@ -6,7 +6,7 @@
 1. Addresses (authorization for different actions)
   - validator address
   - validation pool address
-  - stopcock address
+  - halter address
   - sudoer address
   - approver address
 2. Round contol (when it is allowed to stake money)
@@ -25,7 +25,7 @@
 
 Validator deploys controller.
 
-Controller address depends on `[validator, pool, stopcock, approver]`. If any of these addresses changed (rotation of Governor for instance), validator need to deploy new controller (since old one will not pass address based authentication).
+Controller address depends on `[validator, pool, halter, approver]`. If any of these addresses changed (rotation of Governor for instance), validator need to deploy new controller (since old one will not pass address based authentication).
 
 `sudoer` by default is `addr_none`.
 
@@ -39,7 +39,7 @@ Validator controller can be in the following states:
 - sent borrowing request
 - sent stake request
 - staked funds
-- halted (by stopcock)
+- halted (by halter)
 
 Additionally there is flag whether credit is active or not.
 

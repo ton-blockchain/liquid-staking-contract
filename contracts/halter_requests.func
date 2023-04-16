@@ -1,8 +1,8 @@
 ;; common functions in all contracts
-global slice governor;
+global slice halter;
 global int state;
 
 () process_halt_request(slice sender, slice in_msg) impure inline_ref {
-    assert_sender!(sender, governor);
+    assert_sender!(sender, halter);
     state = state::HALTED;
 }

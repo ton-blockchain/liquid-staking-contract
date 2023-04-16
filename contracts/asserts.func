@@ -10,5 +10,8 @@ const int state::HALTED = 0xff;
 }
 
 () assert_state!(int expected) impure inline {
-  throw_if(2111, state == expected);
+  throw_unless(2111, state == expected);
+}
+() assert_1of2_state!(int expected1, int expected2) impure inline {
+  throw_unless(2111, (state == expected1) | (state == expected2));
 }
