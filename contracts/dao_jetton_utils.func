@@ -1,0 +1,29 @@
+cell pack_jetton_wallet_data (int balance, slice owner,
+                              slice jetton_master, cell token_wallet_code,
+                              int locked, int locked_expiration,
+                              cell vote_controller_code) inline {
+    return  begin_cell()
+            .store_coins(balance)
+            .store_slice(owner)
+            .store_slice(jetton_master)
+            .store_ref(token_wallet_code)
+            .store_coins(locked)
+            .store_uint(locked_expiration, 48)
+            .store_ref(vote_controller_code)
+            .end_cell();
+}
+{-
+    _ split_depth:(Maybe (## 5)) special:(Maybe TickTock)
+      code:(Maybe ^Cell) data:(Maybe ^Cell)
+      library:(HashmapE 256 SimpleLib) = StateInit;
+-}
+cell calculate_jetton_wallet_state_init (slice owner, slice jetton_master, cell code, cell vote_controller_code) inline {
+    return begin_cell()
+            .store_uint(0,1 + 1) ;; split_depth (Maybe = 0) and special (Maybe = 0)
+            .store_maybe_ref(code)
+            .store_maybe_ref(pack_jetton_wallet_data(0, owner, jetton_master, code, 0, 0, vote_controller_code))
+            .store_uint(0,1) ;; libraries - empty cell
+            .end_cell();
+}
+
+

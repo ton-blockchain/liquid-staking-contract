@@ -40,16 +40,43 @@ const int controller::withdrawal = 0x8; ;;TODO
 {- ======== Validator Pool OPCODES ========== -}
 const int pool::request_loan = 0x1dd5; ;; TODO
 const int pool::loan_repayment = 0x1ff5; ;; TODO
+const int pool::deposit = 0x4ee5;
+const int pool::burn_notification = 0x8870a;
 
 
 const int sudo::send_message = 0xf12;
+const int sudo::upgrade = 0xf12111;
 const int governor::set_sudoer = 0xd11;
+const int governor::set_roles = 0xd116;
 const int governor::unhalt = 0x1ee;
+const int governor::operation_fee = 0x93a;
 const int halter::halt = 0x3ee;
 
+const int interest_manager::stats = 0x7776;
+
+{- ========== Jetton OPCODES ========== -}
+const int jetton::transfer = 0xf8a7ea5;
+const int jetton::transfer_notification = 0x7362d09c;
+const int jetton::internal_transfer = 0x178d4519;
+const int jetton::excesses = 0xd53276db;
+const int jetton::burn = 0x595f07bc;
+const int jetton::burn_notification = 0x7bdd97de;
+const int jetton::withdraw_tons = 0x6d8e5e3c;
+const int jetton::withdraw_jettons = 0x768a50b2;
+
+const int jetton::provide_wallet_address = 0x2c76b973;
+const int jetton::take_wallet_address = 0xd1735400;
+const int jetton::change_content = 0x5773d1f5;
+
+const int minter::mint = 0x1674b0a0;
+const int minter::burn_notification = 0x8899aa;
+const int payout::init = 0xf5aa8943;
 
 
+const int payouts::start_distribution = 0xaa9988;
 
+{- =========== awaited Jettons ============= -}
+const int payouts::mint = 0x8887;
 
 (slice, (int)) ~load_op(slice s) inline { return s.load_uint(32); }
 (slice, (int)) ~load_query_id(slice s) inline { return s.load_uint(64); }

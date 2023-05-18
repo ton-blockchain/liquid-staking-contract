@@ -1,0 +1,2 @@
+const int error::unauthorized_burn_request = 0x92283;
+

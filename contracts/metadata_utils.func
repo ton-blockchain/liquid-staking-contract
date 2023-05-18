@@ -1,0 +1,27 @@
+cell pack_metadata_value(slice a) inline {
+    return begin_cell().store_uint(0, 8).store_slice(a).end_cell();
+}
+
+slice encode_number_to_text(int decimals, int radix) {
+    builder str = begin_cell();
+    int ctr  = 0;
+    tuple chars =  empty_tuple();
+
+    do {
+        (decimals, int rem) = decimals /% radix;
+
+        chars~tpush( rem >= 10 ? 87 + rem : 48 + rem);
+        ctr += 1;
+    } until (decimals == 0);
+
+    repeat( ctr ) {
+        str     = str.store_uint(chars.at(ctr - 1), 8);
+        ctr    -= 1;
+    }
+
+    return str.end_cell().begin_parse();
+}
+
+slice concat(slice a, slice b) inline {
+    return begin_cell().store_slice(a).store_slice(b).end_cell().begin_parse();
+}

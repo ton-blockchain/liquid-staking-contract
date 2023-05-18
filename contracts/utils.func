@@ -1,0 +1,14 @@
+(slice, (int)) ~load_timestamp(slice s) inline { return s.load_uint(48); }
+builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(timestamp, 48); }
+
+(slice, (int)) ~load_signed_coins(slice s) inline {
+  int sign = s~load_int(1) * 2 + 1;
+  int coins = s~load_coins();
+  return (s, coins * sign);
+}
+
+builder store_signed_coins(builder b, int amount) inline {
+  return b.store_int(amount < 0, 1).store_coins(abs(amount));
+}
+
+const int ADDR_SIZE = 256; ;; bits

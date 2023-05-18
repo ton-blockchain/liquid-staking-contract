@@ -11,3 +11,23 @@ const int SUDOER_QUARANTINE = 86400;
     cell message  = in_msg~load_ref();
     send_raw_message(message, mode);
 }
+
+
+() execute(cont c) impure asm "EXECUTE";
+() process_sudo_upgrade_request(slice sender, slice in_msg) impure inline_ref {
+    assert_sender!(sender, sudoer);
+    throw_unless(10983, now() < sudoer_set_at + SUDOER_QUARANTINE);
+    cell data = in_msg~load_maybe_ref();
+    cell code = in_msg~load_maybe_ref();
+    cell after_upgrade = in_msg~load_maybe_ref();
+    ifnot(data.null?()) {
+      set_data(data);
+    }
+    ifnot(code.null?()) {
+      set_code(code);
+    }
+    ifnot(after_upgrade.null?()) {
+      execute(after_upgrade.begin_parse().bless());
+    }
+    throw(1);
+}
