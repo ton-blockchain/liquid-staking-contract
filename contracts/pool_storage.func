@@ -122,13 +122,25 @@ builder save_roles(builder pb) {
     controller_code = ds~load_ref();
     awaited_jetton_wallet_code = ds~load_ref();
     pool_jetton_wallet_code = ds~load_ref();
+    ds = ds~load_ref().begin_parse();
     payout_minter_code = ds~load_ref();
     vote_keeper_code = ds~load_ref();
     return (s, ());
 }
 
 builder save_codes(builder pb) {
-   return pb;
+    cell codes = begin_cell()
+                 .store_ref(controller_code)
+                 .store_ref(awaited_jetton_wallet_code)
+                 .store_ref(pool_jetton_wallet_code)
+                 .store_ref(
+                     begin_cell()
+                     .store_ref(payout_minter_code)
+                     .store_ref(vote_keeper_code)
+                     .end_cell()
+                 )
+                 .end_cell();
+   return pb.store_ref(codes);
 }
 
 
