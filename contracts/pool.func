@@ -37,6 +37,7 @@ global int requested_for_withdrawal; ;; in jettons
 
 ;; ROLES
 global slice sudoer;            ;; hav right to send any message on behalf of any contract
+global int sudoer_set_at;
 global slice governor;          ;; set roles, unhalt and get reward
 global slice interest_manager;  ;; get round stats and update interest
 global slice halter;            ;; halts operation

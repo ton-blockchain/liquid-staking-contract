@@ -90,6 +90,7 @@ builder save_minters_data(builder pb) {
 (slice, ()) ~load_roles(slice s) impure inline {
     slice ds = s~load_ref().begin_parse();
     sudoer = ds~load_msg_addr();
+    sudoer_set_at = ds~load_uint(48);
     governor = ds~load_msg_addr();
     interest_manager = ds~load_msg_addr();
     ds = ds~load_ref().begin_parse();
@@ -102,6 +103,7 @@ builder save_minters_data(builder pb) {
 builder save_roles(builder pb) {
     cell roles = begin_cell()
                  .store_slice(sudoer)
+                 .store_uint(sudoer_set_at, 48)
                  .store_slice(governor)
                  .store_slice(interest_manager)
                  .store_ref(
