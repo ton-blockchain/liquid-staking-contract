@@ -9,7 +9,7 @@
 #include "governor_requests.func";
 #include "halter_requests.func";
 #include "network_config_utils.func";
-#include "dao_jetton_utils.func";
+#include "jetton_dao/contracts/jetton-utils.func";
 
 ;; Whole storage is put to global variables
 
