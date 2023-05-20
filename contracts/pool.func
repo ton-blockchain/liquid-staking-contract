@@ -66,7 +66,7 @@ const int FINALIZE_ROUND_FEE = ONE_TON;
 const int DEPOSIT_FEE = ONE_TON; ;;TODO reconsider
 const int WITHDRAWAL_FEE = ONE_TON;
 const int TRANSFER_NOTIFICATION_AMOUNT = ONE_TON / 10;
-const int JETTON_WALLET_FEE = ONE_TON / 20;
+const int JETTON_WALLET_FEE = ONE_TON / 9; ;; Due to consigliere wallet_fee is >= 0.1
 const int MINT_FEE = ONE_TON / 20;
 const int MINT_AWAITED_FEE = MINT_FEE;
 const int MINTER_DEPLOY_FEE = ONE_TON / 5;
@@ -429,6 +429,7 @@ int check_controller_address (slice sender, slice validator) {
                            .store_slice(awaited_jetton_minter_jetton_wallet)
                          .end_cell()
                       );
+        send_raw_message(msg.end_cell(), sendmode::REGULAR);
     }
     send_mint_message(current_awaited_jetton_minter, query_id, destination, amount, begin_cell());
 }
@@ -452,6 +453,7 @@ int check_controller_address (slice sender, slice validator) {
                            .store_coins(0)
                          .end_cell()
                       );
+        send_raw_message(msg.end_cell(), sendmode::REGULAR);
     }
     send_mint_message(current_awaited_ton_minter, query_id, destination, amount, begin_cell());
 }
