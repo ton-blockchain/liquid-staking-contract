@@ -31,26 +31,30 @@ builder store_round_data(builder b, [cell, int, int, int, int, int] round_data) 
 
     current_awaited_jetton_minter = null();
     requested_for_deposit = 0;
-    ;; (Maybe (Either X, ^X)) 
+    ;; (Maybe (Either X, ^X))
     if(ds~load_int(1)) {
-      slice ajm_s = ds;
       if(ds~load_int(1)) {
-        ajm_s = ds~load_ref().begin_parse();
+        slice ajm_s = ds~load_ref().begin_parse();
+        current_awaited_jetton_minter = ajm_s~load_msg_addr();
+        requested_for_deposit = ajm_s~load_coins();
+      } else {
+        current_awaited_jetton_minter = ds~load_msg_addr();
+        requested_for_deposit = ds~load_coins();
       }
-      current_awaited_jetton_minter = ajm_s~load_msg_addr();
-      requested_for_deposit = ajm_s~load_coins();
     }
 
     current_awaited_ton_minter = null();
     requested_for_withdrawal = 0;
     ;;(Maybe (Either X, ^X)) 
     if(ds~load_int(1)) {
-      slice atm_s = ds;
       if(ds~load_int(1)) {
-        atm_s = ds~load_ref().begin_parse();
+          slice atm_s = ds~load_ref().begin_parse();
+          current_awaited_ton_minter = atm_s~load_msg_addr();
+          requested_for_withdrawal = atm_s~load_coins();
+      } else {
+          current_awaited_ton_minter = ds~load_msg_addr();
+          requested_for_withdrawal = ds~load_coins();
       }
-      current_awaited_ton_minter = atm_s~load_msg_addr();
-      requested_for_withdrawal = atm_s~load_coins();
     }
     return (s, ());
 }
@@ -60,26 +64,29 @@ builder save_minters_data(builder pb) {
                  .store_slice(jetton_minter)
                  .store_coins(supply);
     if(current_awaited_jetton_minter.null?()) {
-      b.store_int(false, 1);
+      b = b.store_int(false, 1);
     } else {
-      b.store_int(true, 1);
-      b.store_slice(current_awaited_jetton_minter);
-      b.store_coins(requested_for_deposit);
+      b = b.store_int(true, 1) ;; Maybe
+           .store_int(false, 1) ;;Either X
+           .store_slice(current_awaited_jetton_minter)
+           .store_coins(requested_for_deposit);
     }
     if(current_awaited_ton_minter.null?()) {
-      b.store_int(false, 1);
+      b = b.store_int(false, 1);
     } else {
-      b.store_int(true, 1);
+      b = b.store_int(true, 1);
       if(b.builder_bits() > 1023 - 267 - 124) {
-        b.store_ref(
-          begin_cell()
-            .store_slice(current_awaited_ton_minter)
-            .store_coins(requested_for_withdrawal)
-          .end_cell()
-        );
+        b = b.store_int(true, 1) ;;Either ^X
+              .store_ref(
+              begin_cell()
+                .store_slice(current_awaited_ton_minter)
+                .store_coins(requested_for_withdrawal)
+              .end_cell()
+            );
       } else {
-        b.store_slice(current_awaited_ton_minter);
-        b.store_coins(requested_for_withdrawal);
+        b = b.store_int(false, 1) ;;Either X
+             .store_slice(current_awaited_ton_minter)
+             .store_coins(requested_for_withdrawal);
       }
     }
     return pb.store_ref(b.end_cell());
@@ -146,6 +153,7 @@ builder save_codes(builder pb) {
 
 () load_data() impure inline_ref {
     slice ds = get_data().begin_parse();
+    state = ds~load_uint(8);
     total_balance = ds~load_coins();
     interest_rate = ds~load_uint(18);
     saved_validator_set_hash = ds~load_uint(256);
@@ -163,6 +171,7 @@ builder save_codes(builder pb) {
 
 () save_data() impure inline_ref {
     set_data(begin_cell()
+        .store_uint(state, 8)
         .store_coins(total_balance)
         .store_uint(interest_rate, 18)
         .store_uint(saved_validator_set_hash, 256)
