@@ -1,7 +1,15 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano, internal, storeMessageRelaxed} from 'ton-core';
 
 
-export type DAOJettonMinterConfig = {admin: Address; content: Cell; wallet_code: Cell, voting_code: Cell, vote_keeper_code: Cell};
+export type DAOJettonMinterConfig = {admin: Address;
+                                     content: Cell;
+                                     wallet_code: Cell,
+                                     voting_code: Cell,
+                                     vote_keeper_code: Cell};
+export type DAOJettonMinterContent = {
+    type:0|1,
+    uri:string
+};
 
 export function daoJettonMinterConfigToCell(config: DAOJettonMinterConfig): Cell {
     return beginCell()
@@ -15,7 +23,7 @@ export function daoJettonMinterConfigToCell(config: DAOJettonMinterConfig): Cell
            .endCell();
 }
 
-export function jettonContentToCell(content:JettonMinterContent) {
+export function jettonContentToCell(content:DAOJettonMinterContent) {
     return beginCell()
                       .storeUint(content.type, 8)
                       .storeStringTail(content.uri) //Snake logic under the hood
@@ -26,7 +34,7 @@ export class DAOJettonMinter implements Contract {
     constructor(readonly address: Address, readonly init?: { code: Cell; data: Cell }) {}
 
     static createFromAddress(address: Address) {
-        return new JettonMinter(address);
+        return new DAOJettonMinter(address);
     }
 
     static createFromConfig(config: DAOJettonMinterConfig, code: Cell, workchain = 0) {
@@ -52,7 +60,7 @@ export class DAOJettonMinter implements Contract {
     async sendMint(provider: ContractProvider, via: Sender, to: Address, jetton_amount: bigint, forward_ton_amount: bigint, total_ton_amount: bigint,) {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: JettonMinter.mintMessage(to, jetton_amount, forward_ton_amount, total_ton_amount,),
+            body: DAOJettonMinter.mintMessage(to, jetton_amount, forward_ton_amount, total_ton_amount,),
             value: total_ton_amount + toNano("0.1"),
         });
     }
