@@ -312,7 +312,10 @@ int check_controller_address (slice sender, slice validator) {
     int fee = max(muldiv(governance_fee, profit, 256), 0);
     profit -= fee + FINALIZE_ROUND_FEE;
     total_balance += profit;
-    conversion_ratio = (supply * conversion_ratio + profit * CONVERSION_DENOMINATOR) / supply;
+    total_balance = max(total_balance, 0);
+    if(supply > 0) {
+      conversion_ratio = (supply * conversion_ratio + profit * CONVERSION_DENOMINATOR) / supply;
+    }
     if (fee > SERVICE_NOTIFICATION_AMOUNT) { ;; otherwise it is less than fee
       send_msg_builder(governor, fee,
                begin_cell().store_body_header(governor::operation_fee, cur_lt()),
@@ -323,7 +326,7 @@ int check_controller_address (slice sender, slice validator) {
                .store_body_header(interest_manager::stats, cur_lt())
                .store_coins(lended)
                .store_coins(returned)
-               .store_coins(profit), ;; duplication at this point?
+               .store_signed_coins(profit), ;; duplication at this point?
              msgflag::NON_BOUNCEABLE, sendmode::PAY_FEES_SEPARETELY);
     log_round_completion(round_id, lended, returned, profit);
     finalize_deposit_withdrawal_round(round_id);
@@ -454,6 +457,9 @@ int check_controller_address (slice sender, slice validator) {
 }
 
 () initiate_distribution_of_tons(round_id) impure {
+    ifnot(requested_for_withdrawal) {
+        return ();
+    }
     int ton_withdrawal = muldiv(requested_for_withdrawal, conversion_ratio, CONVERSION_DENOMINATOR);
     if(pair_first(get_balance()) < ton_withdrawal + MIN_TONS_FOR_STORAGE) {
       ;; not enough money to withdraw
@@ -476,6 +482,9 @@ int check_controller_address (slice sender, slice validator) {
 }
 
 () initiate_distribution_of_pool_jettons(round_id) impure {
+    ifnot(requested_for_deposit) {
+        return ();
+    }
     int jetton_mint = muldiv(requested_for_deposit, CONVERSION_DENOMINATOR, conversion_ratio);
 
     request_to_mint_pool_jettons(current_awaited_jetton_minter,
