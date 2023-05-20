@@ -7,7 +7,7 @@
                 ds~load_coins(),            ;; lended
                 ds~load_coins(),            ;; returned
                 ds~load_signed_coins()];    ;; profit
-   return (ds, (data));
+   return (s, (data));
 }
 
 builder store_round_data(builder b, [cell, int, int, int, int, int] round_data) {
@@ -151,8 +151,8 @@ builder save_codes(builder pb) {
     saved_validator_set_hash = ds~load_uint(256);
     conversion_ratio = ds~load_uint(32);
     slice round_data = ds~load_ref().begin_parse();
-    current_round_lenders = round_data~load_round_data();
-    prev_round_lenders = round_data~load_round_data();
+        current_round_lenders = round_data~load_round_data();
+        prev_round_lenders = round_data~load_round_data();
     min_loan_per_validator = ds~load_coins();
     max_loan_per_validator = ds~load_coins();
     governance_fee = ds~load_uint(8);
