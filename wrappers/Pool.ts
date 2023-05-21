@@ -68,7 +68,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeCoins(0) // total_balance
               .storeUint(100, 18) // interest_rate
               .storeUint(0, 256) // saved_validator_set_hash
-              .storeUint(65536, 32) // interest_rate
+              .storeUint(65536, 32) // conversion_ratio
               .storeRef(
                 beginCell()
                   .storeRef(emptyRoundData)
