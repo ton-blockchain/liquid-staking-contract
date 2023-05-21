@@ -73,7 +73,7 @@ const int minter::burn_notification = 0x8899aa;
 const int payout::init = 0xf5aa8943;
 
 
-const int payouts::start_distribution = 0xaa9988;
+const int payouts::start_distribution = 0x1140a64f;
 
 {- =========== awaited Jettons ============= -}
 const int payouts::mint = 0x8887;

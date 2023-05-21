@@ -64,7 +64,7 @@ const int MAX_LOAN_DICT_DEPTH = 12;
 const int SERVICE_NOTIFICATION_AMOUNT = ONE_TON / 10;
 const int FINALIZE_ROUND_FEE = ONE_TON;
 const int DEPOSIT_FEE = ONE_TON; ;;TODO reconsider
-const int WITHDRAWAL_FEE = ONE_TON;
+const int WITHDRAWAL_FEE = ONE_TON / 2;
 const int TRANSFER_NOTIFICATION_AMOUNT = ONE_TON / 10;
 const int JETTON_WALLET_FEE = ONE_TON / 9; ;; Due to consigliere wallet_fee is >= 0.1
 const int MINT_FEE = ONE_TON / 20;
@@ -186,11 +186,13 @@ int current_round_index();
         assert_1of2_state!(state::NORMAL, state::REPAYMENT_ONLY);
         int jetton_amount = in_msg_body~load_coins();
         slice from_address = in_msg_body~load_msg_addr();
-        throw_unless(2991, msg_value < WITHDRAWAL_FEE);
+        slice response_address = in_msg_body~load_msg_addr();
+        throw_unless(2991, msg_value > WITHDRAWAL_FEE);
         throw_unless(error::unauthorized_burn_request, equal_slice_bits(jetton_minter, sender_address) );
         request_to_mint_awaited_tons(from_address, jetton_amount, query_id);
         requested_for_withdrawal += jetton_amount;
         supply -= jetton_amount;
+        ;; TODO send response to response_address
     }
     {- ========== General operations ========== -}
 
@@ -311,10 +313,13 @@ int check_controller_address (slice sender, slice validator) {
     throw_unless(8125, active_lenders == 0); ;; TODO - halt here?
     int fee = max(muldiv(governance_fee, profit, 256), 0);
     profit -= fee + FINALIZE_ROUND_FEE;
+    profit = max( - total_balance, profit); ;; loss (== -profit) can consume no more than total_balance
     total_balance += profit;
-    total_balance = max(total_balance, 0);
-    if(supply > 0) {
-      conversion_ratio = (supply * conversion_ratio + profit * CONVERSION_DENOMINATOR) / supply;
+    ;;total_balance = max(total_balance, 0);
+    int effective_supply = supply + requested_for_withdrawal;
+
+    if(effective_supply > 0) {
+      conversion_ratio = (effective_supply * conversion_ratio + profit * CONVERSION_DENOMINATOR) / effective_supply;
     }
     if (fee > SERVICE_NOTIFICATION_AMOUNT) { ;; otherwise it is less than fee
       send_msg_builder(governor, fee,
@@ -364,8 +369,8 @@ int check_controller_address (slice sender, slice validator) {
       
       if((~ lenders_dict.null?()) | (active_lenders > 0)) {
         ;; not all lenders of previous round returned loans
-        ;; do not rotate round, switch to REPAYMENT_ONLY
-        state = state::REPAYMENT_ONLY;
+        ;; do not rotate round
+        ;; state = state::REPAYMENT_ONLY;
         return ();
       } else {
         prev_round_lenders~finalize_lending_round();
@@ -424,7 +429,7 @@ int check_controller_address (slice sender, slice validator) {
                       .store_ref(
                          begin_cell()
                            .store_uint(0, 1) ;; distribution not started
-                           .store_uint(0, 1) ;; jettons
+                           .store_uint(1, 1) ;; jettons
                            .store_coins(0)
                            .store_slice(awaited_jetton_minter_jetton_wallet)
                          .end_cell()
@@ -449,7 +454,7 @@ int check_controller_address (slice sender, slice validator) {
                       .store_ref(
                          begin_cell()
                            .store_uint(0, 1) ;; distribution not started
-                           .store_uint(1, 1) ;; TONs
+                           .store_uint(0, 1) ;; TONs
                            .store_coins(0)
                          .end_cell()
                       );
@@ -463,20 +468,19 @@ int check_controller_address (slice sender, slice validator) {
         return ();
     }
     int ton_withdrawal = muldiv(requested_for_withdrawal, conversion_ratio, CONVERSION_DENOMINATOR);
+    slice prev_awaited_ton_minter = current_awaited_ton_minter;
     if(pair_first(get_balance()) < ton_withdrawal + MIN_TONS_FOR_STORAGE) {
       ;; not enough money to withdraw
       state = state::HALTED; 
     } else {
-      requested_for_withdrawal = 0;
+        requested_for_withdrawal = 0;
+        current_awaited_ton_minter = null();
     }
-
-    cell state_init = calculate_payout_state_init(my_address(), round_id, false);
-    slice to_address = calc_address(JETTONS_WORKCHAIN, state_init);
 
     total_balance -= ton_withdrawal;
     var msg = begin_cell()
             .store_msg_flags(msgflag::BOUNCEABLE)
-            .store_slice(to_address)
+            .store_slice(prev_awaited_ton_minter)
             .store_coins(ton_withdrawal)
             .store_msgbody_prefix_slice()
             .store_body_header(payouts::start_distribution, cur_lt());
@@ -495,11 +499,20 @@ int check_controller_address (slice sender, slice validator) {
                                    .store_body_header(payouts::start_distribution, cur_lt())
                                 );
     total_balance += requested_for_deposit;
+    current_awaited_jetton_minter = null();
     requested_for_deposit = 0;
 }
 
-int current_round_index() method_id {
+int current_round_index() {
     ;;TODO optimize
     var [lenders_dict, round_id, active_lenders, lended, returned, profit] = current_round_lenders;
     return round_id;
+}
+slice get_current_round_awaited_jetton_minter() method_id {
+    load_data();
+    return current_awaited_jetton_minter;
+}
+slice get_current_round_awaited_ton_minter() method_id {
+    load_data();
+    return current_awaited_ton_minter;
 }

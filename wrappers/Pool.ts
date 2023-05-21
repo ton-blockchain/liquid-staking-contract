@@ -1,4 +1,7 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from 'ton-core';
+import { DAOJettonMinter } from './DAOJettonMinter';
+import {JettonMinter as AwaitedJettonMinter} from '../contracts/awaited_minter/wrappers/JettonMinter';
+
 
 export type PoolConfig = {
   pool_jetton: Address;
@@ -61,6 +64,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
                     )
                 .endCell();
     return beginCell()
+              .storeUint(0, 8) // state NORMAL
               .storeCoins(0) // total_balance
               .storeUint(100, 18) // interest_rate
               .storeUint(0, 256) // saved_validator_set_hash
@@ -102,5 +106,35 @@ export class Pool implements Contract {
                      .storeUint(0, 64) // query id
                   .endCell(),
         });
+    }
+
+    async sendDeposit(provider: ContractProvider, via: Sender, value: bigint) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                     .storeUint(0x4ee5, 32) // op
+                     .storeUint(1, 64) // query id
+                  .endCell(),
+        });
+    }
+
+
+
+
+
+
+
+
+
+    async getAwaitedJettonMinter(provider: ContractProvider) {
+        let res = await provider.get('get_current_round_awaited_jetton_minter', []);
+        let minter = res.stack.readAddress();
+        return AwaitedJettonMinter.createFromAddress(minter);
+    }
+    async getAwaitedTonMinter(provider: ContractProvider) {
+        let res = await provider.get('get_current_round_awaited_ton_minter', []);
+        let minter = res.stack.readAddress();
+        return AwaitedJettonMinter.createFromAddress(minter);
     }
 }

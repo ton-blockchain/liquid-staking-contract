@@ -1,5 +1,5 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano, internal, storeMessageRelaxed} from 'ton-core';
-
+// TODO remove and use original wrapper
 
 export type DAOJettonMinterConfig = {admin: Address;
                                      content: Cell;
@@ -65,7 +65,6 @@ export class DAOJettonMinter implements Contract {
         });
     }
 
-    /*
     static discoveryMessage(owner: Address, include_address: boolean) {
         return beginCell().storeUint(0x2c76b973, 32).storeUint(0, 64) // op, queryId
                           .storeAddress(owner).storeBit(include_address)
@@ -75,7 +74,7 @@ export class DAOJettonMinter implements Contract {
     async sendDiscovery(provider: ContractProvider, via: Sender, owner: Address, include_address: boolean, value:bigint = toNano('0.1')) {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: JettonMinter.discoveryMessage(owner, include_address),
+            body: DAOJettonMinter.discoveryMessage(owner, include_address),
             value,
         });
     }
@@ -89,10 +88,12 @@ export class DAOJettonMinter implements Contract {
     async sendChangeAdmin(provider: ContractProvider, via: Sender, newOwner: Address) {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: JettonMinter.changeAdminMessage(newOwner),
+            body: DAOJettonMinter.changeAdminMessage(newOwner),
             value: toNano("0.1"),
         });
     }
+
+    /*
     static changeContentMessage(content: Cell) {
         return beginCell().storeUint(0x5773d1f5, 32).storeUint(0, 64) // op, queryId
                           .storeRef(content)
@@ -149,7 +150,7 @@ export class DAOJettonMinter implements Contract {
             value
         });
     }
-
+    */
     async getWalletAddress(provider: ContractProvider, owner: Address): Promise<Address> {
         const res = await provider.get('get_wallet_address', [{ type: 'slice', cell: beginCell().storeAddress(owner).endCell() }])
         return res.stack.readAddress()
@@ -193,5 +194,4 @@ export class DAOJettonMinter implements Contract {
         const res = await provider.get('get_voting_code', [])
         return res.stack.readCell();
     }
-    */
 }
