@@ -132,7 +132,8 @@ int current_round_index();
           int creditable_funds = balance
                                  - muldiv(requested_for_withdrawal, conversion_ratio, CONVERSION_DENOMINATOR)
                                  - MIN_TONS_FOR_STORAGE;
-          int available_funds = min( creditable_funds, muldiv(256 + disbalance_tolerance, total_balance, 512) );
+          ;;TODO
+          int available_funds = creditable_funds; ;;min( creditable_funds, muldiv(256 + disbalance_tolerance, total_balance, 512) );
           
           min_loan = max(min_loan, min_loan_per_validator);
           max_loan = min(max_loan, max_loan_per_validator);
@@ -141,15 +142,17 @@ int current_round_index();
           
           int actual_loan = min(available_funds, max_loan);
           
-          throw_unless(283, min_loan <= actual_loan);
+          throw_unless(283, min_loan >= actual_loan);
           
           int interest = muldiv(actual_loan, interest_rate, 65535);
-
-          send_msg_builder(sender_address, actual_loan,
-                   begin_cell()
-                     .store_body_header(controller::credit, query_id)
-                     .store_coins(actual_loan + interest),
-                   msgflag::BOUNCEABLE, sendmode::REGULAR);
+          builder msg = begin_cell()
+                    .store_msg_flags(msgflag::BOUNCEABLE)
+                    .store_slice(sender_address)
+                    .store_coins(actual_loan)
+                    .store_msgbody_prefix_slice()
+                    .store_body_header(controller::credit, query_id)
+                    .store_coins(actual_loan + interest);
+          send_raw_message(msg.end_cell(), sendmode::REGULAR);
 
           log_loan(sender_address, actual_loan);
           int total_loan = 0;
@@ -234,7 +237,7 @@ int current_round_index();
 }
 
 int check_controller_address (slice sender, slice validator) {
-    builder static_data = begin_cell()
+    cell static_data = begin_cell()
                           .store_slice(validator)
                           .store_slice(my_address())
                           .store_slice(governor)
@@ -243,7 +246,8 @@ int check_controller_address (slice sender, slice validator) {
                              .store_slice(approver)
                              .store_slice(halter)
                              .end_cell()
-                          );
+                          )
+                        .end_cell();
     slice expected_address = calc_address(CONTROLLER_WORKCHAIN, controller_init_state(static_data));
     return equal_slice_bits(sender, expected_address);
 }
@@ -255,7 +259,7 @@ int check_controller_address (slice sender, slice validator) {
     throw_unless(876, wc == CONTROLLER_WORKCHAIN);
 
     int already_lended = 0;
-    (slice prev_data, int found?) = lenders_dict.udict_get?(addr_hash, ADDR_SIZE);
+    (slice prev_data, int found?) = lenders_dict.udict_get?(ADDR_SIZE, addr_hash);
     if(found?) {
       already_lended = prev_data~load_coins();
     } else {
@@ -264,7 +268,7 @@ int check_controller_address (slice sender, slice validator) {
     already_lended += loan_body + interest;
     lended += loan_body + interest;
     
-    lenders_dict~udict_set_builder(addr_hash, ADDR_SIZE, begin_cell().store_coins(already_lended));
+    lenders_dict~udict_set_builder(ADDR_SIZE, addr_hash, begin_cell().store_coins(already_lended));
     
     throw_unless(820, cell_depth(lenders_dict) < MAX_LOAN_DICT_DEPTH);
     
@@ -277,7 +281,7 @@ int check_controller_address (slice sender, slice validator) {
     (int wc, int addr_hash) = parse_std_addr(borrower);
     throw_unless(876, wc == CONTROLLER_WORKCHAIN);
 
-    (slice prev_data, int found?) = lenders_dict~udict_delete_get?(addr_hash, ADDR_SIZE);
+    (slice prev_data, int found?) = lenders_dict~udict_delete_get?(ADDR_SIZE, addr_hash);
     ifnot (found?) {
       return (lenders_data, false);
     }

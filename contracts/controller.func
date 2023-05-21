@@ -70,8 +70,8 @@ const int state::SENT_STAKE_REQUEST = 2;
 const int state::FUNDS_STAKEN = 3;
 const int state::HALTED = 0xff;
 
-() save_data();
-() load_data();
+() save_data() impure;
+() load_data() impure;
 
 slice elector_address();
 int is_elector_address(slice address);
@@ -322,7 +322,7 @@ int check_new_stake_msg(slice cs);
               cell payload = begin_cell()
                                          .store_body_header(pool::request_loan, query_id)
                                          .store_slice(request)
-                                         .store_slice(static_data)
+                                         .store_slice(static_data~load_ref().begin_parse())
                              .end_cell();
               send_msg(pool,
                        0,

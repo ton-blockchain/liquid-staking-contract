@@ -8,7 +8,7 @@ global cell payout_minter_code;
 slice addr_none() asm "b{00} PUSHSLICE";
 builder store_zeros(builder b, int n) asm "STZEROES";
 
-cell controller_init_data (builder static_data) {
+cell controller_init_data (cell static_data) {
   ;; TODO optimize with store_zeros
   return begin_cell()
             .store_uint(0, 8) ;; state
@@ -21,13 +21,13 @@ cell controller_init_data (builder static_data) {
             .store_timestamp(0) ;; stake_held_for
             .store_coins(0) ;; borrowed_amount
             .store_timestamp(0) ;; borrowing_time
-            .store_slice(sudoer) ;; sudoer
+            .store_uint(0, 2) ;; sudoer addr_none
             .store_timestamp(0) ;; sudoer_set_at
-            .store_builder(static_data)
+            .store_ref(static_data)
            .end_cell();
 }
 
-cell controller_init_state (builder static_data) {
+cell controller_init_state (cell static_data) {
     return begin_cell()
             .store_uint(0, 1 + 1) ;; split_depth (Maybe = 0) and special (Maybe = 0)
             .store_maybe_ref(controller_code)

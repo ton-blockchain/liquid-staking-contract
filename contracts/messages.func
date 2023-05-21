@@ -75,8 +75,8 @@ builder store_masterchain_address(builder b, int address_hash) inline {
     if (payload_length + msg.builder_bits() > 1023 - (1 + 4 + 4 + 64 + 32 + 1 + 1)) {
         msg = msg.store_msgbody_prefix_ref(begin_cell().store_builder(payload).end_cell());
     } else {
-        msg = msg.store_msgbody_prefix_slice();
-        msg.store_builder(payload);
+        msg = msg.store_msgbody_prefix_slice()
+                 .store_builder(payload);
     }
 
     send_raw_message(msg.end_cell(), send_mode);
