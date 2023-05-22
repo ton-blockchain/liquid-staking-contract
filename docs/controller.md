@@ -25,9 +25,20 @@
 
 Validator deploys controller.
 
-Controller address depends on `[validator, pool, halter, approver]`. If any of these addresses changed (rotation of Governor for instance), validator need to deploy new controller (since old one will not pass address based authentication).
+Controller address depends on `[validator, pool, governor, halter, approver]`. If any of these addresses changed (rotation of Governor for instance), validator need to deploy new controller (since old one will not pass address based authentication).
 
 `sudoer` by default is `addr_none`.
+
+## Basics
+Controller may borrow funds from pool while elections are open.
+
+When borrowing, controller agrees to pay fixed premium for fund usage.
+
+Controller should return funds if not won in election.
+
+Controller should return funds after funds release from elector.
+
+If controller fails to return funds (when possible) during grace period, anybody can trigger funds release and get premium.
 
 
 ## State
