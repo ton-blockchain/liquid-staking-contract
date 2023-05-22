@@ -145,7 +145,7 @@ Outcoming messages:
 - mint pTON (to awaited pTON)
 - TONs (to awaited TON)
 
-[Detailed docs on Validator controler](docs/pool.md)
+[Detailed docs on Pool](docs/pool.md)
 
 ### PTON
 Jetton that represents share in pool assets. It can be implemented as DAO Jetton in such a way that owners of pool jetton will be able to vote for network config updates.
