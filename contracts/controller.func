@@ -322,7 +322,7 @@ int check_new_stake_msg(slice cs);
               cell payload = begin_cell()
                                          .store_body_header(pool::request_loan, query_id)
                                          .store_slice(request)
-                                         .store_slice(static_data~load_ref().begin_parse())
+                                         .store_slice(static_data.preload_ref().begin_parse())
                              .end_cell();
               send_msg(pool,
                        0,
