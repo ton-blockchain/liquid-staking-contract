@@ -16,7 +16,6 @@
 global int total_balance;
 global int interest_rate;
 global int saved_validator_set_hash;
-global int conversion_ratio;
 
 ;; [lenders_dict, round_id, active_lenders, lended, returned, profit]
 global [cell, int, int, int, int, int] current_round_lenders;
@@ -71,8 +70,6 @@ const int MINT_FEE = ONE_TON / 20;
 const int MINT_AWAITED_FEE = MINT_FEE;
 const int MINTER_DEPLOY_FEE = ONE_TON / 5;
 const int JETTONS_WORKCHAIN = 0;
-
-const int CONVERSION_DENOMINATOR = 65536;
 
 #include "pool_storage.func";
 
@@ -130,7 +127,7 @@ int current_round_index();
           
           ;; maybe too harsh conditions
           int creditable_funds = balance
-                                 - muldiv(requested_for_withdrawal, conversion_ratio, CONVERSION_DENOMINATOR)
+                                 - (supply ? muldiv(requested_for_withdrawal, total_balance, supply) : 0)
                                  - MIN_TONS_FOR_STORAGE;
           ;;TODO
           int available_funds = creditable_funds; ;;min( creditable_funds, muldiv(256 + disbalance_tolerance, total_balance, 512) );
@@ -323,9 +320,6 @@ int check_controller_address (slice sender, slice validator) {
     ;;total_balance = max(total_balance, 0);
     ;;int effective_supply = supply + requested_for_withdrawal;
 
-    if(supply > 0) {
-      conversion_ratio = (supply * conversion_ratio + profit * CONVERSION_DENOMINATOR) / supply;
-    }
     if (fee > SERVICE_NOTIFICATION_AMOUNT) { ;; otherwise it is less than fee
       send_msg_builder(governor, fee,
                begin_cell().store_body_header(governor::operation_fee, cur_lt()),
@@ -472,7 +466,7 @@ int check_controller_address (slice sender, slice validator) {
     ifnot(requested_for_withdrawal) {
         return ();
     }
-    int ton_withdrawal = muldiv(requested_for_withdrawal, conversion_ratio, CONVERSION_DENOMINATOR);
+    int ton_withdrawal = muldiv(requested_for_withdrawal, total_balance, supply);
     slice prev_awaited_ton_minter = current_awaited_ton_minter;
     if(pair_first(get_balance()) < ton_withdrawal + MIN_TONS_FOR_STORAGE) {
       ;; not enough money to withdraw
@@ -498,7 +492,10 @@ int check_controller_address (slice sender, slice validator) {
     ifnot(requested_for_deposit) {
         return ();
     }
-    int jetton_mint = muldiv(requested_for_deposit, CONVERSION_DENOMINATOR, conversion_ratio);
+    int jetton_mint = requested_for_deposit;
+    ifnot((supply == 0) & (total_balance == 0)) { ;; both are zero in the beginning, then set conversion ratio 1:1
+        int jetton_mint = muldiv(requested_for_deposit, supply, total_balance);
+    }
     request_to_mint_pool_jettons(current_awaited_jetton_minter,
                                  jetton_mint,
                                  begin_cell()
@@ -523,7 +520,7 @@ slice get_current_round_awaited_ton_minter() method_id {
     return current_awaited_ton_minter;
 }
 
-(int, int, int, int, int, int) get_finance_data() method_id {
+(int, int, int, int) get_finance_data() method_id {
     load_data();
-    return (total_balance, supply, requested_for_deposit, requested_for_withdrawal, conversion_ratio, CONVERSION_DENOMINATOR);
+    return (total_balance, supply, requested_for_deposit, requested_for_withdrawal);
 }

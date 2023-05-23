@@ -157,7 +157,6 @@ builder save_codes(builder pb) {
     total_balance = ds~load_coins();
     interest_rate = ds~load_uint(18);
     saved_validator_set_hash = ds~load_uint(256);
-    conversion_ratio = ds~load_uint(32);
     slice round_data = ds~load_ref().begin_parse();
         current_round_lenders = round_data~load_round_data();
         prev_round_lenders = round_data~load_round_data();
@@ -175,7 +174,6 @@ builder save_codes(builder pb) {
         .store_coins(total_balance)
         .store_uint(interest_rate, 18)
         .store_uint(saved_validator_set_hash, 256)
-        .store_uint(conversion_ratio, 32)
         .store_ref(
           begin_cell()
           .store_round_data(current_round_lenders)

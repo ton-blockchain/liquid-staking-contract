@@ -68,7 +68,6 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeCoins(0) // total_balance
               .storeUint(100, 18) // interest_rate
               .storeUint(0, 256) // saved_validator_set_hash
-              .storeUint(65536, 32) // conversion_ratio
               .storeRef(
                 beginCell()
                   .storeRef(emptyRoundData)
@@ -136,5 +135,13 @@ export class Pool implements Contract {
         let res = await provider.get('get_current_round_awaited_ton_minter', []);
         let minter = res.stack.readAddress();
         return AwaitedJettonMinter.createFromAddress(minter);
+    }
+    async getFinanceData(provider: ContractProvider) {
+        let res = await provider.get('get_finance_data', []);
+        let totalBalance = res.stack.readBigNumber();
+        let supply = res.stack.readBigNumber();
+        let requestedForDeposit = res.stack.readBigNumber();
+        let requestedForWithdrawal = res.stack.readBigNumber();
+        return {totalBalance, supply, requestedForDeposit, requestedForWithdrawal};
     }
 }
