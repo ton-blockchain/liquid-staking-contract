@@ -291,7 +291,7 @@ int check_new_stake_msg(slice cs);
                          msgflag::BOUNCEABLE,
                          sendmode::PAY_FEES_SEPARETELY); ;; pay fee separately, revert on errors
 
-            } elseif (op == pool::request_loan) {
+            } elseif (op == controller::send_request_loan) {
               assert_state!(state::REST);
               assert_sender!(sender_address, validator);
               slice request = in_msg_body;

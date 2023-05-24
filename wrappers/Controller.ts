@@ -70,7 +70,7 @@ export class Controller implements Contract {
             value: toNano('0.1'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0x7, 32) // op
+                     .storeUint(0x7b4b42e6, 32) // op
                      .storeUint(1, 64) // query id
                   .endCell(),
         });
@@ -81,7 +81,7 @@ export class Controller implements Contract {
             value: toNano('0.5'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0x1dd5, 32) // op
+                     .storeUint(0x452f7112, 32) // op
                      .storeUint(1, 64) // query id
                      .storeCoins(minLoan)
                      .storeCoins(maxLoan)
@@ -94,7 +94,7 @@ export class Controller implements Contract {
             value: toNano('0.5'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0x8712, 32) // op
+                     .storeUint(0xed7378a6, 32) // op
                      .storeUint(1, 64) // query id
                   .endCell(),
         });

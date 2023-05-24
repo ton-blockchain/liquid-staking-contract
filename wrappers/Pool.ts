@@ -112,7 +112,7 @@ export class Pool implements Contract {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0x4ee5, 32) // op
+                     .storeUint(0x47d54391, 32) // op
                      .storeUint(1, 64) // query id
                   .endCell(),
         });

@@ -20,39 +20,36 @@ const int elector::recover_stake_ok = 0xf96f7324;
 
 {- ========  Validator Controller OPCODES ======== -}
 ;; IN
-const int controller::top_up = 0x1; ;; TODO
-const int controller::deposit = 0x2; ;; TODO
-const int controller::request_withdraw = 0x3; ;; TODO
-const int controller::process_withdraw = 0x4; ;; TODO
-const int controller::update_validator_hash = 0x5; ;; TODO
-const int controller::deposit_validator = 0x6; ;; TODO
-const int controller::approve = 0x7; ;; TODO
-const int controller::disapprove = 0x8; ;; TODO
-const int controller::recover_stake = 0x77777777; ;; TODO
-const int controller::new_stake = elector::new_stake; ;; TODO
-const int controller::credit = 0x8673; ;;TODO
-const int controller::withdraw_validator = 0x18673; ;;TODO
-const int controller::return_unused_loan = 0x8712;
+const int controller::top_up = 0xd372158c;
+const int controller::update_validator_hash = 0xf0fd2250; ;; TODO
+const int controller::approve = 0x7b4b42e6;
+const int controller::disapprove = 0xe8a0abfe;
+const int controller::recover_stake = 0xeb373a05;
+const int controller::new_stake = elector::new_stake;
+const int controller::credit = 0x1690c604;
+const int controller::withdraw_validator = 0xcefaaefd;
+const int controller::return_unused_loan = 0xed7378a6;
 ;; OUT
 const int controller::withdrawal = 0x8; ;;TODO
+const int controller::send_request_loan = 0x452f7112;
 
 
 {- ======== Validator Pool OPCODES ========== -}
-const int pool::request_loan = 0x1dd5; ;; TODO
-const int pool::loan_repayment = 0x1ff5; ;; TODO
-const int pool::deposit = 0x4ee5;
-const int pool::burn_notification = 0x8870a;
+const int pool::request_loan = 0x7ccd46e9;
+const int pool::loan_repayment = 0xdfdca27b;
+const int pool::deposit = 0x47d54391;
+const int pool::withdraw = 0x319b0cdc; ;;TODO
 
 
-const int sudo::send_message = 0xf12;
-const int sudo::upgrade = 0xf12111;
-const int governor::set_sudoer = 0xd11;
-const int governor::set_roles = 0xd116;
-const int governor::unhalt = 0x1ee;
-const int governor::operation_fee = 0x93a;
-const int halter::halt = 0x3ee;
+const int sudo::send_message = 0x270695fb;
+const int sudo::upgrade = 0x96e7f528;
+const int governor::set_sudoer = 0x79e7c016;
+const int governor::set_roles = 0x7a756db8; ;; TODO
+const int governor::unhalt = 0x7247e7a5;
+const int governor::operation_fee = 0x93a; ;; TODO
+const int halter::halt = 0x139a1b4e;
 
-const int interest_manager::stats = 0x7776;
+const int interest_manager::stats = 0x7776; ;; TODO
 
 {- ========== Jetton OPCODES ========== -}
 const int jetton::transfer = 0xf8a7ea5;
@@ -69,7 +66,7 @@ const int jetton::take_wallet_address = 0xd1735400;
 const int jetton::change_content = 0x5773d1f5;
 
 const int minter::mint = 0x1674b0a0;
-const int minter::burn_notification = 0x8899aa;
+const int minter::burn_notification = pool::withdraw;
 const int payout::init = 0xf5aa8943;
 
 

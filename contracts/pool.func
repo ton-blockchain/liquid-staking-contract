@@ -181,7 +181,7 @@ int current_round_index();
         request_to_mint_awaited_jettons(sender_address, deposit_amount, query_id);
         requested_for_deposit += deposit_amount;
     }
-    if (op == minter::burn_notification) {
+    if (op == pool::withdraw) {
         assert_1of2_state!(state::NORMAL, state::REPAYMENT_ONLY);
         int jetton_amount = in_msg_body~load_coins();
         slice from_address = in_msg_body~load_msg_addr();
