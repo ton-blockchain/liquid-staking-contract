@@ -3,4 +3,4 @@
 	url = https://github.com/EmelyanenkoK/jetton_dao
 [submodule "contracts/awaited_minter"]
 	path = contracts/awaited_minter
-	url = https://github.com/1IxI1/share-distributor-contract/
+	url = https://github.com/EmelyanenkoK/modern_jetton/
