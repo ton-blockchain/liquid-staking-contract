@@ -109,8 +109,12 @@ int current_round_index();
     }
 
     (int op, int query_id) = in_msg_body~load_body_header();
-    
-    update_round();
+
+    if (op == halter::halt) {
+                process_halt_request(sender_address, in_msg_body);
+    } else {    
+        update_round();
+    }
     {- ========== Pool operations ========== -}
     if (op == pool::request_loan) {
 
@@ -181,7 +185,7 @@ int current_round_index();
         request_to_mint_awaited_jettons(sender_address, deposit_amount, query_id);
         requested_for_deposit += deposit_amount;
     }
-    if (op == pool::withdraw) {
+    if (op == pool::withdraw) { 
         assert_1of2_state!(state::NORMAL, state::REPAYMENT_ONLY);
         int jetton_amount = in_msg_body~load_coins();
         slice from_address = in_msg_body~load_msg_addr();
@@ -226,9 +230,6 @@ int current_round_index();
       }
     }
 
-    if (op == halter::halt) {
-                process_halt_request(sender_address, in_msg_body);
-    }
     save_data();
 }
 
