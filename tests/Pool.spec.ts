@@ -108,9 +108,9 @@ describe('Pool', () => {
                          on: poolJetton.address,
                          success: true,
         });
-        const controllerDeployResult = await controller.sendDeploy(deployer.getSender());
+        const controllerDeployResult = await pool.sendRequestControllerDeploy(deployer.getSender(), toNano('100000'));
         expect(controllerDeployResult.transactions).toHaveTransaction({
-                         from: deployer.address,
+                         from: pool.address,
                          to: controller.address,
                          deploy: true,
                          success: true,
@@ -122,6 +122,7 @@ describe('Pool', () => {
                          success: true,
         });
     });
+
     let prevWallet: SandboxContract<AwaitedJettonWallet>;
     it('should deposit', async () => {
         //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
@@ -302,7 +303,7 @@ describe('Pool', () => {
                          from: pool.address,
                          to: controller.address,
                          success: true,
-                         op:0x8673
+                         op:0x1690c604
         });
 
     });
@@ -327,7 +328,7 @@ describe('Pool', () => {
         expect(controllerDeployResult.transactions).toHaveTransaction({
                          from: controller.address,
                          to: pool.address,
-                         op:0x1ff5,
+                         op:0xdfdca27b,
                          success: true,
         });
 

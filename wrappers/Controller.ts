@@ -59,7 +59,7 @@ export class Controller implements Contract {
             value: toNano('20000'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(1, 32) // op = top up
+                     .storeUint(0xd372158c, 32) // op = top up
                      .storeUint(0, 64) // query id
                   .endCell(),
         });
