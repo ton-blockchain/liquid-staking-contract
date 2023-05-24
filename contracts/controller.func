@@ -443,25 +443,23 @@ int check_new_stake_msg(slice cs) impure inline_ref {
 }
 
 ;; Get methods
-{-
+
 _ get_validator_controller_data() method_id {
     load_data();
     return (
-      state,
-      stake_amount_sent,
-      validator_amount,
-      nominator_amount,
-      unpack_config(config.begin_parse()),
-      pending_deposit,
-      pending_withdraw,
-      stake_at,
+      state, approved,
+      
+      stake_amount_sent, stake_at,
+      
       saved_validator_set_hash,
       validator_set_changes_count,
       validator_set_change_time,
-      stake_held_for);
+      stake_held_for,
+      
+      borrowed_amount, borrowing_time
+      );
 }
--}
+
 int get_max_punishment(int stake) method_id {
     return max_recommended_punishment_for_validator_misbehaviour(stake);
 }
-
