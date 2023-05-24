@@ -29,6 +29,7 @@ const int controller::new_stake = elector::new_stake;
 const int controller::credit = 0x1690c604;
 const int controller::withdraw_validator = 0xcefaaefd;
 const int controller::return_unused_loan = 0xed7378a6;
+
 ;; OUT
 const int controller::withdrawal = 0x8; ;;TODO
 const int controller::send_request_loan = 0x452f7112;
@@ -39,6 +40,9 @@ const int pool::request_loan = 0x7ccd46e9;
 const int pool::loan_repayment = 0xdfdca27b;
 const int pool::deposit = 0x47d54391;
 const int pool::withdraw = 0x319b0cdc; ;;TODO
+
+
+const int pool::deploy_controller = 0xdf108122;
 
 
 const int sudo::send_message = 0x270695fb;
