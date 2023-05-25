@@ -548,3 +548,11 @@ slice get_current_round_awaited_ton_minter() method_id {
     var (controller_address, _) = build_controller_address(validator);
     return controller_address;
 }
+
+(int, int) get_controller_address_legacy(int wc, int addr_hash) method_id {
+    var (controller_address, _) = build_controller_address(
+      begin_cell()
+           .store_uint(4, 3).store_int(wc, 8).store_uint(addr_hash, ADDR_SIZE)
+      .end_cell().begin_parse());
+    return parse_std_addr(controller_address);
+}
