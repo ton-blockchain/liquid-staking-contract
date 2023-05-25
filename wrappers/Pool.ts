@@ -15,7 +15,7 @@ export type PoolConfig = {
   approver: Address;
   
   controller_code: Cell;
-  awaited_jetton_wallet_code: Cell;
+  payout_wallet_code: Cell;
   pool_jetton_wallet_code: Cell;
   payout_minter_code: Cell;
   vote_keeper_code: Cell;
@@ -36,8 +36,8 @@ export function poolConfigToCell(config: PoolConfig): Cell {
     let mintersData = beginCell()
                           .storeAddress(config.pool_jetton)
                           .storeCoins(config.pool_jetton_supply)
-                          .storeUint(0, 1) // no awaited_jetton_minter
-                          .storeUint(0, 1) // no awaited_ton_minter
+                          .storeUint(0, 1) // no deposit_minter
+                          .storeUint(0, 1) // no withdrawal_minter
                       .endCell();
     let roles = beginCell()
                    .storeAddress(config.sudoer)
@@ -54,7 +54,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
                 .endCell();
     let codes = beginCell()
                     .storeRef(config.controller_code)
-                    .storeRef(config.awaited_jetton_wallet_code)
+                    .storeRef(config.payout_wallet_code)
                     .storeRef(config.pool_jetton_wallet_code)
                     .storeRef(
                       beginCell()
@@ -137,13 +137,13 @@ export class Pool implements Contract {
 
 
 
-    async getAwaitedJettonMinter(provider: ContractProvider) {
-        let res = await provider.get('get_current_round_awaited_jetton_minter', []);
+    async getDepositMinter(provider: ContractProvider) {
+        let res = await provider.get('get_current_round_deposit_minter', []);
         let minter = res.stack.readAddress();
         return AwaitedJettonMinter.createFromAddress(minter);
     }
-    async getAwaitedTonMinter(provider: ContractProvider) {
-        let res = await provider.get('get_current_round_awaited_ton_minter', []);
+    async getWithdrawalMinter(provider: ContractProvider) {
+        let res = await provider.get('get_current_round_withdrawal_minter', []);
         let minter = res.stack.readAddress();
         return AwaitedJettonMinter.createFromAddress(minter);
     }

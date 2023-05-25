@@ -1,7 +1,7 @@
 #include "metadata_utils.func";
 
 global cell controller_code;
-global cell awaited_jetton_wallet_code;
+global cell payout_wallet_code;
 global cell pool_jetton_wallet_code;
 global cell payout_minter_code;
 
@@ -51,7 +51,7 @@ global slice consigliere;
 cell calculate_payout_state_init(slice pool_address, int round_id, int distributing_jettons?) {
   cell content_dict = new_dict();
   ;; TODO optimize
-  slice name = concat(distributing_jettons? ? "Jetton " : "TON ", concat("Payout#", encode_number_to_text(round_id, 10)));
+  slice name = concat(distributing_jettons? ? "Deposit " : "Withdrawal ", concat("Payout#", encode_number_to_text(round_id, 10)));
   content_dict~udict_set_ref(256, "name"H, pack_metadata_value(name));
   content_dict~udict_set_ref(256, "description"H, pack_metadata_value("Utility jetton: do not use directly"));
   slice symbol = distributing_jettons? ? "⏲️J" : "⏲️💎";
@@ -67,7 +67,7 @@ cell calculate_payout_state_init(slice pool_address, int round_id, int distribut
             .store_slice(consigliere)         ;; stake_amount_sent
             .store_maybe_ref(null())          ;; Distribution
             .store_ref(onchain_content)       ;; Content
-            .store_ref(awaited_jetton_wallet_code)
+            .store_ref(payout_wallet_code)
            .end_cell();
   return begin_cell()
             .store_uint(0, 1 + 1) ;; split_depth (Maybe = 0) and special (Maybe = 0)

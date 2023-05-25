@@ -53,6 +53,7 @@ const int governor::unhalt = 0x7247e7a5;
 const int governor::operation_fee = 0x93a; ;; TODO
 const int halter::halt = 0x139a1b4e;
 
+const int interest_manager::request_notification = 0x1234; ;; TODO
 const int interest_manager::stats = 0x7776; ;; TODO
 
 {- ========== Jetton OPCODES ========== -}

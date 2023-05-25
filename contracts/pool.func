@@ -29,9 +29,9 @@ global int governance_fee; ;; base256
 global slice jetton_minter;
 global int supply;
 
-global slice current_awaited_jetton_minter;
+global slice deposit_payout;
 global int requested_for_deposit;    ;; in TONs
-global slice current_awaited_ton_minter;
+global slice withdrawal_payout;
 global int requested_for_withdrawal; ;; in jettons
 
 ;; ROLES
@@ -45,7 +45,7 @@ global slice approver;          ;; approves controllers to ask for credit
 
 ;; CHILD CONTRACT CODES
 global cell controller_code;
-global cell awaited_jetton_wallet_code;
+global cell payout_wallet_code;
 global cell pool_jetton_wallet_code;
 global cell payout_minter_code;
 global cell vote_keeper_code;
@@ -67,7 +67,7 @@ const int WITHDRAWAL_FEE = ONE_TON / 2;
 const int TRANSFER_NOTIFICATION_AMOUNT = ONE_TON / 10;
 const int JETTON_WALLET_FEE = ONE_TON / 9; ;; Due to consigliere wallet_fee is >= 0.1
 const int MINT_FEE = ONE_TON / 20;
-const int MINT_AWAITED_FEE = MINT_FEE;
+const int MINT_PAYOUT_FEE = MINT_FEE;
 const int MINTER_DEPLOY_FEE = ONE_TON / 5;
 const int JETTONS_WORKCHAIN = 0;
 
@@ -91,8 +91,8 @@ int check_controller_address (slice address, slice validator) impure;
 (slice, cell) build_controller_address(slice validator);
 
 () request_to_mint_pool_jettons(slice destination, int amount, builder payload) impure;
-() request_to_mint_awaited_jettons(slice destination, int amount, int query_id) impure;
-() request_to_mint_awaited_tons(slice destination, int amount, int query_id) impure;
+() request_to_mint_deposit(slice destination, int amount, int query_id) impure;
+() request_to_mint_withdrawal(slice destination, int amount, int query_id) impure;
 
 () initiate_distribution_of_tons (int round_id) impure;
 () initiate_distribution_of_pool_jettons (int round_id) impure;
@@ -194,7 +194,7 @@ int current_round_index();
         assert_state!(state::NORMAL);
         int deposit_amount = msg_value - DEPOSIT_FEE;
         throw_unless(2778, deposit_amount > 0);
-        request_to_mint_awaited_jettons(sender_address, deposit_amount, query_id);
+        request_to_mint_deposit(sender_address, deposit_amount, query_id);
         requested_for_deposit += deposit_amount;
     }
     if (op == pool::withdraw) { 
@@ -204,7 +204,7 @@ int current_round_index();
         slice response_address = in_msg_body~load_msg_addr();
         throw_unless(2991, msg_value > WITHDRAWAL_FEE);
         throw_unless(error::unauthorized_burn_request, equal_slice_bits(jetton_minter, sender_address) );
-        request_to_mint_awaited_tons(from_address, jetton_amount, query_id);
+        request_to_mint_withdrawal(from_address, jetton_amount, query_id);
         requested_for_withdrawal += jetton_amount;
         ;;supply -= jetton_amount; supply will be decreased when tons will be distributed
         ;; TODO send response to response_address
@@ -429,18 +429,18 @@ int check_controller_address (slice sender, slice validator) {
     supply += amount;
 }
 
-() request_to_mint_awaited_jettons(slice destination, int amount, int query_id) impure {
-    if(current_awaited_jetton_minter.null?()) {
+() request_to_mint_deposit(slice destination, int amount, int query_id) impure {
+    if(deposit_payout.null?()) {
         ;; we need to deploy new minter
         cell state_init = calculate_payout_state_init(my_address(), current_round_index(), true);
         slice to_address = calc_address(JETTONS_WORKCHAIN, state_init);
-        current_awaited_jetton_minter = to_address;
-        slice awaited_jetton_minter_jetton_wallet = calc_address(JETTONS_WORKCHAIN,
+        deposit_payout = to_address;
+        slice deposit_minter_jetton_wallet = calc_address(JETTONS_WORKCHAIN,
           calculate_jetton_wallet_state_init(to_address, jetton_minter, pool_jetton_wallet_code, vote_keeper_code)
         );
         builder msg = begin_cell()
                       .store_msg_flags(msgflag::BOUNCEABLE)
-                      .store_slice(current_awaited_jetton_minter)
+                      .store_slice(deposit_payout)
                       .store_coins(MINTER_DEPLOY_FEE)
                       .store_msgbody_prefix_stateinit_slice(state_init)
                       .store_body_header(payout::init, cur_lt())
@@ -449,23 +449,23 @@ int check_controller_address (slice sender, slice validator) {
                            .store_uint(0, 1) ;; distribution not started
                            .store_uint(1, 1) ;; jettons
                            .store_coins(0)
-                           .store_slice(awaited_jetton_minter_jetton_wallet)
+                           .store_slice(deposit_minter_jetton_wallet)
                          .end_cell()
                       );
         send_raw_message(msg.end_cell(), sendmode::REGULAR);
     }
-    send_mint_message(current_awaited_jetton_minter, query_id, destination, amount, begin_cell());
+    send_mint_message(deposit_payout, query_id, destination, amount, begin_cell());
 }
 
-() request_to_mint_awaited_tons(slice destination, int amount, int query_id) impure {
-    if(current_awaited_ton_minter.null?()) {
+() request_to_mint_withdrawal(slice destination, int amount, int query_id) impure {
+    if(withdrawal_payout.null?()) {
         ;; we need to deploy new minter
         cell state_init = calculate_payout_state_init(my_address(), current_round_index(), false);
         slice to_address = calc_address(JETTONS_WORKCHAIN, state_init);
-        current_awaited_ton_minter = to_address;
+        withdrawal_payout = to_address;
         builder msg = begin_cell()
                       .store_msg_flags(msgflag::BOUNCEABLE)
-                      .store_slice(current_awaited_ton_minter)
+                      .store_slice(withdrawal_payout)
                       .store_coins(MINTER_DEPLOY_FEE)
                       .store_msgbody_prefix_stateinit_slice(state_init)
                       .store_body_header(payout::init, cur_lt())
@@ -478,7 +478,7 @@ int check_controller_address (slice sender, slice validator) {
                       );
         send_raw_message(msg.end_cell(), sendmode::REGULAR);
     }
-    send_mint_message(current_awaited_ton_minter, query_id, destination, amount, begin_cell());
+    send_mint_message(withdrawal_payout, query_id, destination, amount, begin_cell());
 }
 
 () initiate_distribution_of_tons(round_id) impure {
@@ -486,7 +486,7 @@ int check_controller_address (slice sender, slice validator) {
         return ();
     }
     int ton_withdrawal = muldiv(requested_for_withdrawal, total_balance, supply);
-    slice prev_awaited_ton_minter = current_awaited_ton_minter;
+    slice prev_withdrawal_payout = withdrawal_payout;
     if(pair_first(get_balance()) < ton_withdrawal + MIN_TONS_FOR_STORAGE) {
       ;; not enough money to withdraw
       state = state::HALTED;
@@ -494,13 +494,13 @@ int check_controller_address (slice sender, slice validator) {
     } else {
         supply -= requested_for_withdrawal;
         requested_for_withdrawal = 0;
-        current_awaited_ton_minter = null();
+        withdrawal_payout = null();
     }
 
     total_balance -= ton_withdrawal;
     var msg = begin_cell()
             .store_msg_flags(msgflag::BOUNCEABLE)
-            .store_slice(prev_awaited_ton_minter)
+            .store_slice(prev_withdrawal_payout)
             .store_coins(ton_withdrawal)
             .store_msgbody_prefix_slice()
             .store_body_header(payouts::start_distribution, cur_lt());
@@ -515,13 +515,13 @@ int check_controller_address (slice sender, slice validator) {
     ifnot((supply == 0) & (total_balance == 0)) { ;; both are zero in the beginning, then set conversion ratio 1:1
         int jetton_mint = muldiv(requested_for_deposit, supply, total_balance);
     }
-    request_to_mint_pool_jettons(current_awaited_jetton_minter,
+    request_to_mint_pool_jettons(deposit_payout,
                                  jetton_mint,
                                  begin_cell()
                                    .store_body_header(payouts::start_distribution, cur_lt())
                                 );
     total_balance += requested_for_deposit;
-    current_awaited_jetton_minter = null();
+    deposit_payout = null();
     requested_for_deposit = 0;
 }
 
@@ -530,13 +530,13 @@ int current_round_index() {
     var [lenders_dict, round_id, active_lenders, lended, returned, profit] = current_round_lenders;
     return round_id;
 }
-slice get_current_round_awaited_jetton_minter() method_id {
+slice get_current_round_deposit_minter() method_id {
     load_data();
-    return current_awaited_jetton_minter;
+    return deposit_payout;
 }
-slice get_current_round_awaited_ton_minter() method_id {
+slice get_current_round_withdrawal_minter() method_id {
     load_data();
-    return current_awaited_ton_minter;
+    return withdrawal_payout;
 }
 
 (int, int, int, int) get_finance_data() method_id {

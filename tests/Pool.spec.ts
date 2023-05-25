@@ -4,8 +4,8 @@ import { Pool } from '../wrappers/Pool';
 import { Controller } from '../wrappers/Controller';
 import { DAOJettonMinter, jettonContentToCell } from '../wrappers/DAOJettonMinter';
 import {JettonWallet as PoolJettonWallet } from '../contracts/jetton_dao/wrappers/JettonWallet';
-import {JettonWallet as AwaitedJettonWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
-import {JettonWallet as AwaitedTonWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
+import {JettonWallet as DepositWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
+import {JettonWallet as WithdrawalWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
 import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
 
@@ -16,8 +16,8 @@ const loadConfig = (config:Cell) => {
 describe('Pool', () => {
     let pool_code: Cell;
     let controller_code: Cell;
-    let awaited_minter_code: Cell;
-    let awaited_wallet_code: Cell;
+    let payout_minter_code: Cell;
+    let payout_wallet_code: Cell;
 
     let dao_minter_code: Cell;
     let dao_wallet_code: Cell;
@@ -33,8 +33,8 @@ describe('Pool', () => {
     beforeAll(async () => {
         pool_code = await compile('Pool');
         controller_code = await compile('Controller');
-        awaited_minter_code = await compile('AwaitedJettonMinter');
-        awaited_wallet_code = await compile('AwaitedJettonWallet');
+        payout_minter_code = await compile('AwaitedJettonMinter');
+        payout_wallet_code = await compile('DepositWallet');
 
         dao_minter_code = await compile('DAOJettonMinter');
         dao_wallet_code = await compile('DAOJettonWallet');
@@ -65,9 +65,9 @@ describe('Pool', () => {
               approver : deployer.address,
 
               controller_code : controller_code,
-              awaited_jetton_wallet_code : awaited_wallet_code,
+              payout_wallet_code : payout_wallet_code,
               pool_jetton_wallet_code : dao_wallet_code,
-              payout_minter_code : awaited_minter_code,
+              payout_minter_code : payout_minter_code,
               vote_keeper_code : dao_vote_keeper_code,
         };
 
@@ -123,20 +123,20 @@ describe('Pool', () => {
         });
     });
 
-    let prevWallet: SandboxContract<AwaitedJettonWallet>;
+    let prevWallet: SandboxContract<DepositWallet>;
     it('should deposit', async () => {
         //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
         const depositResult = await pool.sendDeposit(deployer.getSender(), toNano('10'));
-        let awaitedJettonMinter = blockchain.openContract(await pool.getAwaitedJettonMinter());
-        let myAwaitedJettonWallet = await awaitedJettonMinter.getWalletAddress(deployer.address);
-        prevWallet = blockchain.openContract(AwaitedJettonWallet.createFromAddress(myAwaitedJettonWallet));
+        let awaitedJettonMinter = blockchain.openContract(await pool.getDepositMinter());
+        let myDepositWallet = await awaitedJettonMinter.getWalletAddress(deployer.address);
+        prevWallet = blockchain.openContract(DepositWallet.createFromAddress(myDepositWallet));
         expect(depositResult.transactions).toHaveTransaction({
             from: deployer.address,
             on: pool.address,
             success: true,
         });
         expect(depositResult.transactions).toHaveTransaction({
-            from: myAwaitedJettonWallet,
+            from: myDepositWallet,
             on: deployer.address,
             op: 0x7362d09c, // transfer notification
             success: true,
@@ -154,7 +154,7 @@ describe('Pool', () => {
             op: 0xf5aa8943, // init
         });
         expect(deposit2Result.transactions).toHaveTransaction({
-            from: myAwaitedJettonWallet,
+            from: myDepositWallet,
             on: deployer.address,
             op: 0x7362d09c, // transfer notification
             success: true,
@@ -163,7 +163,7 @@ describe('Pool', () => {
 
     it('should rotate round', async () => {
 
-        let prevAwaitedJettonMinter = blockchain.openContract(await pool.getAwaitedJettonMinter());
+        let prevAwaitedJettonMinter = blockchain.openContract(await pool.getDepositMinter());
         //await blockchain.setVerbosityForAddress(prevAwaitedJettonMinter.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
 
         const confDict = loadConfig(blockchain.config);
@@ -173,8 +173,8 @@ describe('Pool', () => {
 
         const depositResult = await pool.sendDeposit(deployer.getSender(), toNano('1.05'));
 
-        let awaitedJettonMinter = blockchain.openContract(await pool.getAwaitedJettonMinter());
-        let myAwaitedJettonWallet = await awaitedJettonMinter.getWalletAddress(deployer.address);
+        let awaitedJettonMinter = blockchain.openContract(await pool.getDepositMinter());
+        let myDepositWallet = await awaitedJettonMinter.getWalletAddress(deployer.address);
         expect(depositResult.transactions).toHaveTransaction({
             on: prevAwaitedJettonMinter.address,
             success: true,
@@ -185,7 +185,7 @@ describe('Pool', () => {
             success: true,
         });
         expect(depositResult.transactions).toHaveTransaction({
-            from: myAwaitedJettonWallet,
+            from: myDepositWallet,
             on: deployer.address,
             op: 0x7362d09c, // transfer notification
             success: true,
@@ -237,7 +237,7 @@ describe('Pool', () => {
 
 
         expect(burnResult.transactions).toHaveTransaction({
-            //from: myAwaitedTonWallet.address,
+            //from: myWithdrawalWallet.address,
             on: deployer.address,
             op: 0x7362d09c, // excesses
             success: true,
@@ -247,9 +247,9 @@ describe('Pool', () => {
 
     it('should pay out tons', async () => {
 
-        let awaitedTonMinter = blockchain.openContract(await pool.getAwaitedTonMinter());
-        let myAwaitedTonWalletAddress = await awaitedTonMinter.getWalletAddress(deployer.address);
-        let myAwaitedTonWallet = blockchain.openContract(AwaitedTonWallet.createFromAddress(myAwaitedTonWalletAddress));
+        let awaitedTonMinter = blockchain.openContract(await pool.getWithdrawalMinter());
+        let myWithdrawalWalletAddress = await awaitedTonMinter.getWalletAddress(deployer.address);
+        let myWithdrawalWallet = blockchain.openContract(WithdrawalWallet.createFromAddress(myWithdrawalWalletAddress));
 
         // rotate round another time
         const confDict = loadConfig(blockchain.config);
@@ -266,12 +266,12 @@ describe('Pool', () => {
             success: true,
         });
 
-        const jettonAmount = await myAwaitedTonWallet.getJettonBalance();
-        const burnResult = await myAwaitedTonWallet.sendBurn(deployer.getSender(), toNano('1.0'), jettonAmount, deployer.address, null);
+        const jettonAmount = await myWithdrawalWallet.getJettonBalance();
+        const burnResult = await myWithdrawalWallet.sendBurn(deployer.getSender(), toNano('1.0'), jettonAmount, deployer.address, null);
 
 
         expect(burnResult.transactions).toHaveTransaction({
-            //from: myAwaitedTonWallet.address,
+            //from: myWithdrawalWallet.address,
             on: deployer.address,
             op: 0xdb3b8abd, // distribution
             success: true,

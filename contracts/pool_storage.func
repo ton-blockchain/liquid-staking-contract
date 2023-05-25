@@ -29,30 +29,30 @@ builder store_round_data(builder b, [cell, int, int, int, int, int] round_data) 
     jetton_minter = ds~load_msg_addr();
     supply = ds~load_coins();
 
-    current_awaited_jetton_minter = null();
+    deposit_payout = null();
     requested_for_deposit = 0;
     ;; (Maybe (Either X, ^X))
     if(ds~load_int(1)) {
       if(ds~load_int(1)) {
         slice ajm_s = ds~load_ref().begin_parse();
-        current_awaited_jetton_minter = ajm_s~load_msg_addr();
+        deposit_payout = ajm_s~load_msg_addr();
         requested_for_deposit = ajm_s~load_coins();
       } else {
-        current_awaited_jetton_minter = ds~load_msg_addr();
+        deposit_payout = ds~load_msg_addr();
         requested_for_deposit = ds~load_coins();
       }
     }
 
-    current_awaited_ton_minter = null();
+    withdrawal_payout = null();
     requested_for_withdrawal = 0;
     ;;(Maybe (Either X, ^X)) 
     if(ds~load_int(1)) {
       if(ds~load_int(1)) {
           slice atm_s = ds~load_ref().begin_parse();
-          current_awaited_ton_minter = atm_s~load_msg_addr();
+          withdrawal_payout = atm_s~load_msg_addr();
           requested_for_withdrawal = atm_s~load_coins();
       } else {
-          current_awaited_ton_minter = ds~load_msg_addr();
+          withdrawal_payout = ds~load_msg_addr();
           requested_for_withdrawal = ds~load_coins();
       }
     }
@@ -63,15 +63,15 @@ builder save_minters_data(builder pb) {
     builder b = begin_cell()
                  .store_slice(jetton_minter)
                  .store_coins(supply);
-    if(current_awaited_jetton_minter.null?()) {
+    if(deposit_payout.null?()) {
       b = b.store_int(false, 1);
     } else {
       b = b.store_int(true, 1) ;; Maybe
            .store_int(false, 1) ;;Either X
-           .store_slice(current_awaited_jetton_minter)
+           .store_slice(deposit_payout)
            .store_coins(requested_for_deposit);
     }
-    if(current_awaited_ton_minter.null?()) {
+    if(withdrawal_payout.null?()) {
       b = b.store_int(false, 1);
     } else {
       b = b.store_int(true, 1);
@@ -79,13 +79,13 @@ builder save_minters_data(builder pb) {
         b = b.store_int(true, 1) ;;Either ^X
               .store_ref(
               begin_cell()
-                .store_slice(current_awaited_ton_minter)
+                .store_slice(withdrawal_payout)
                 .store_coins(requested_for_withdrawal)
               .end_cell()
             );
       } else {
         b = b.store_int(false, 1) ;;Either X
-             .store_slice(current_awaited_ton_minter)
+             .store_slice(withdrawal_payout)
              .store_coins(requested_for_withdrawal);
       }
     }
@@ -127,7 +127,7 @@ builder save_roles(builder pb) {
 (slice, ()) ~load_codes(slice s) impure inline {
     slice ds = s~load_ref().begin_parse();
     controller_code = ds~load_ref();
-    awaited_jetton_wallet_code = ds~load_ref();
+    payout_wallet_code = ds~load_ref();
     pool_jetton_wallet_code = ds~load_ref();
     ds = ds~load_ref().begin_parse();
     payout_minter_code = ds~load_ref();
@@ -138,7 +138,7 @@ builder save_roles(builder pb) {
 builder save_codes(builder pb) {
     cell codes = begin_cell()
                  .store_ref(controller_code)
-                 .store_ref(awaited_jetton_wallet_code)
+                 .store_ref(payout_wallet_code)
                  .store_ref(pool_jetton_wallet_code)
                  .store_ref(
                      begin_cell()

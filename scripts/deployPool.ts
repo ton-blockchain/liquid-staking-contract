@@ -10,8 +10,8 @@ export async function run(provider: NetworkProvider) {
 
     const pool_code = await compile('Pool');
     const controller_code = await compile('Controller');
-    const awaited_minter_code = await compile('AwaitedJettonMinter');
-    const awaited_wallet_code = await compile('AwaitedJettonWallet');
+    const payout_minter_code = await compile('PayoutMinter');
+    const payout_wallet_code = await compile('PayoutWallet');
 
     const dao_minter_code = await compile('DAOJettonMinter');
     const dao_wallet_code = await compile('DAOJettonWallet');
@@ -39,9 +39,9 @@ export async function run(provider: NetworkProvider) {
           approver : admin,
 
           controller_code : controller_code,
-          awaited_jetton_wallet_code : awaited_wallet_code,
+          payout_wallet_code : payout_wallet_code,
           pool_jetton_wallet_code : dao_wallet_code,
-          payout_minter_code : awaited_minter_code,
+          payout_minter_code : payout_minter_code,
           vote_keeper_code : dao_vote_keeper_code,
     };
 
