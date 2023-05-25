@@ -18,7 +18,7 @@ export async function run(provider: NetworkProvider) {
     const dao_vote_keeper_code = await compile('DAOVoteKeeper');
     const dao_voting_code = await compile('DAOVoting');
 
-    const content = jettonContentToCell({type:1,uri:"https://example.com/2.json"});
+    const content = jettonContentToCell({type:1,uri:"https://gist.githubusercontent.com/EmelyanenkoK/cf435a18de72141c236218cbf3ce1102/raw/dc723a2ac22717ef0101e8a3d58b14e311d6c1c7/tuna.json"});
 
     const minter  = DAOJettonMinter.createFromConfig({
                                                   admin,
