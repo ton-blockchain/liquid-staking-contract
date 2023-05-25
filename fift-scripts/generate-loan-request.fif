@@ -1,0 +1,16 @@
+#!/usr/bin/fift -s
+"TonUtil.fif" include
+
+{ ."usage: " @' $0 type ." min_loan max_loan max_interest [<savefile>]" cr
+  ."Creates msg body for send_request_loan request to validator-controller " cr
+  ."min_loan and max_loan are in TON" cr 
+  ."max_interest is maximal interest is share of loan, controller ready to pay per round as 65536 based rational" cr 1 halt
+} : usage
+$# dup 3 < swap 3 > or ' usage if
+
+$1 $>GR =: min_loan
+$2 $>GR =: max_loan
+$3 parse-int =: max_interest
+
+<b 0x7ccd46e9 32 u, now 64 u, min_loan Gram, max_loan Gram, max_interest 18 u, b> 2 boc+>B 
+"loan_request.boc" B>file
