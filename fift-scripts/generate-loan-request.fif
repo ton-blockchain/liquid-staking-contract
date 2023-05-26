@@ -12,5 +12,5 @@ $1 $>GR =: min_loan
 $2 $>GR =: max_loan
 $3 parse-int =: max_interest
 
-<b 0x452f7112 32 u, now 64 u, min_loan Gram, max_loan Gram, max_interest 18 u, b> 2 boc+>B 
+<b 0x452f7112 32 u, now 64 u, min_loan Gram, max_loan Gram, max_interest 16 u, b> 2 boc+>B 
 "loan_request.boc" B>file
