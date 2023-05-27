@@ -1,0 +1,16 @@
+#!/usr/bin/fift -s
+"TonUtil.fif" include
+
+{ ."usage: " @' $0 type ." withdraw_amount [<savefile>]" cr
+  ."Creates withdraw request to validator-controller " cr
+  ."withdraw_amount is in TON" cr 
+  1 halt
+} : usage
+$# dup 1 < swap 2 > or ' usage if
+
+2 :$1..n
+$1 $>GR =: amount
+$2 "withdraw_request.boc" replace-if-null =: file-base
+
+<b 0xcefaaefd 32 u, now 64 u, amount Gram, b> 2 boc+>B 
+file-base B>file
