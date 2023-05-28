@@ -313,15 +313,9 @@ int check_controller_address (slice sender, slice validator) {
 
     lenders_data = [lenders_dict, round_id, active_lenders, lended, returned, profit];
     
-    {-
-      We can finalize round early here, however we prefer to postpone it till
-      update_round(), this way we will synchronize lending_rounds and validation rounds
-      and simplify logic
-    
       if (active_lenders == 0) {
-        lenders_data~finalize_lending_round();
+        update_round();
       }
-     -}
     
     return (lenders_data, true);
 }
@@ -545,11 +539,13 @@ slice get_current_round_withdrawal_minter() method_id {
 }
 
 (slice) get_controller_address(slice validator) method_id {
+    load_data();
     var (controller_address, _) = build_controller_address(validator);
     return controller_address;
 }
 
 (int, int) get_controller_address_legacy(int wc, int addr_hash) method_id {
+    load_data();
     var (controller_address, _) = build_controller_address(
       begin_cell()
            .store_uint(4, 3).store_int(wc, 8).store_uint(addr_hash, ADDR_SIZE)

@@ -23,10 +23,10 @@
 
 const int ONE_TON = 1000000000;
 const int ELECTOR_OPERATION_VALUE = 103 * ONE_TON / 100 ;
-const int MIN_TONS_FOR_STORAGE = 10 * ONE_TON; ;; 10 TON
+const int MIN_TONS_FOR_STORAGE = 2 * ONE_TON; ;; 10 TON
 const int DEPOSIT_FEE = ONE_TON / 4; ;; 0.25 TON
 const int WITHDRAWAL_FEE = ONE_TON / 4; ;; 0.25 TON
-const int MIN_STAKE_TO_SEND = 300000 * ONE_TON; ;; 300 000 TON
+const int MIN_STAKE_TO_SEND = 50000 * ONE_TON; ;; 300 000 TON
 const int MASTERCHAIN = -1;
 
 ;; Time in seconds for validator to make mandatory actions, such as
