@@ -458,7 +458,8 @@ _ get_validator_controller_data() method_id {
       validator_set_change_time,
       stake_held_for,
       
-      borrowed_amount, borrowing_time
+      borrowed_amount, borrowing_time,
+      validator, pool, sudoer
       );
 }
 
