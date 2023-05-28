@@ -66,7 +66,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
     return beginCell()
               .storeUint(0, 8) // state NORMAL
               .storeCoins(0) // total_balance
-              .storeUint(100, 18) // interest_rate
+              .storeUint(100, 16) // interest_rate
               .storeUint(0, 256) // saved_validator_set_hash
               .storeRef(
                 beginCell()
@@ -101,8 +101,10 @@ export class Pool implements Contract {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0, 32) // op
+            //TODO make proper init message
+                     .storeUint(0x7247e7a5, 32) // op = unhalt
                      .storeUint(0, 64) // query id
+                     .storeUint(0, 8) // query id
                   .endCell(),
         });
     }
