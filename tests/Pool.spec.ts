@@ -33,8 +33,8 @@ describe('Pool', () => {
     beforeAll(async () => {
         pool_code = await compile('Pool');
         controller_code = await compile('Controller');
-        payout_minter_code = await compile('AwaitedJettonMinter');
-        payout_wallet_code = await compile('DepositWallet');
+        payout_minter_code = await compile('PayoutMinter');
+        payout_wallet_code = await compile('PayoutWallet');
 
         dao_minter_code = await compile('DAOJettonMinter');
         dao_wallet_code = await compile('DAOJettonWallet');
