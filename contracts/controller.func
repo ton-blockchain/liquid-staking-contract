@@ -466,3 +466,14 @@ _ get_validator_controller_data() method_id {
 int get_max_punishment(int stake) method_id {
     return max_recommended_punishment_for_validator_misbehaviour(stake);
 }
+
+(int, int) required_balance_for_loan(int credit, int interest) method_id {
+    load_data();
+    int balance = pair_first(get_balance());
+    int elector_fine = max_recommended_punishment_for_validator_misbehaviour(credit + balance);
+    int overdue_fine = (HASH_UPDATE_FINE * 3) - STAKE_RECOVER_FINE;
+    int interest_payment = muldiv(credit, interest, 65535);
+    int validator_amount = balance - borrowed_amount;
+    return (MIN_TONS_FOR_STORAGE + overdue_fine + elector_fine + interest_payment,
+            validator_amount);
+}
