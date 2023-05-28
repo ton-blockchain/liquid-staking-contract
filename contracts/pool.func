@@ -251,6 +251,11 @@ int current_round_index();
         consigliere = in_msg_body~load_msg_addr();
       }
     }
+    if (op == interest_manager::set_interest) {
+        assert_state!(state::NORMAL);
+        assert_sender!(sender_address, interest_manager);
+        interest_rate = in_msg_body~load_uint(16);
+    }
 
     save_data();
 }

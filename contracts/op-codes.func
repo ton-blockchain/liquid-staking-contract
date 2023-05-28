@@ -55,6 +55,7 @@ const int halter::halt = 0x139a1b4e;
 
 const int interest_manager::request_notification = 0x1234; ;; TODO
 const int interest_manager::stats = 0x7776; ;; TODO
+const int interest_manager::set_interest = 0x448866; ;;TODO
 
 {- ========== Jetton OPCODES ========== -}
 const int jetton::transfer = 0xf8a7ea5;
