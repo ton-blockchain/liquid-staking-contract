@@ -269,7 +269,7 @@ int check_new_stake_msg(slice cs);
                 int overdue_fine = (HASH_UPDATE_FINE * 3) - STAKE_RECOVER_FINE;
 
                 throw_unless(82, balance - value >=  MIN_TONS_FOR_STORAGE - overdue_fine);
-                (_, _, int elections_end_before) = get_validator_config();
+                (_, stake_held_for, int elections_end_before) = get_validator_config();
                 (int utime_since, int utime_until, cell vset) = get_current_validator_set();
                 if (borrowed_amount) {
                   ;; it is allowed to use credit funds only in the same round when they were obtained
