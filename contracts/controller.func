@@ -268,9 +268,11 @@ int check_new_stake_msg(slice cs);
                 int overdue_fine = (HASH_UPDATE_FINE * 3) - STAKE_RECOVER_FINE;
 
                 throw_unless(82, balance - value >=  MIN_TONS_FOR_STORAGE - overdue_fine);
-                (int elections_start_before, stake_held_for, _) = get_validator_config();
+                (_, _, int elections_end_before) = get_validator_config();
+                (int utime_since, int utime_until, cell vset) = get_current_validator_set();
                 if (borrowed_amount) {
-                  throw_unless(85, now() - borrowing_time < elections_start_before);
+                  ;; it is allowed to use credit funds only in the same round when they were obtained
+                  throw_unless(85, (borrowing_time > utime_since) & (now() < utime_until - elections_end_before));
                 }
 
                 int validator_own_funds = balance - borrowed_amount;
@@ -279,7 +281,7 @@ int check_new_stake_msg(slice cs);
 
                 state = state::SENT_STAKE_REQUEST;
 
-                (int utime_since, int utime_until, cell vset) = get_current_validator_set();
+
 
                 saved_validator_set_hash = cell_hash(vset); ;; current validator set, we will be in next validator set
                 validator_set_changes_count = 0;
