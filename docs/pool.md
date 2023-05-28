@@ -6,7 +6,6 @@
 - `state`
 - `total_balance` - amount of TONs accounted when deposit, withdraw and profit
 - `interest_rate` - surplus of credit that should be returned with credit body. Set as integer equal share of credit volume times 65536
-- `conversion_ratio` - pTON/TON ratio given as number of pTON units per 65536 nanoTONs
 - `current_round_lenders` - Current _round\_data_
   * `lenders` - dict of lenders: `controller_address -> lended_amount`
   * `round_id`
@@ -26,12 +25,12 @@
 - `governance_fee` - share of profit sent to governance
 
 - **Minters Data**
-  * pTON jetton minter address
-  * pTON supply
-  * awaitedPTON jetton minter address
-  * awaitedPTON supply == number of deposited TON
-  * awaitedTON jetton minter address
-  * awaitedTON supply == number of burned pTON
+  * pool jetton jetton minter address
+  * pool jetton supply
+  * Deposit Payout (minter) address
+  * Deposit Payout supply == number of deposited TON in this round
+  * Withdrawal Payout (minter) address
+  * Withdrawal Payout supply == number of burned pool jettons in this round
 
 - **Roles** addresses
   * sudoer
@@ -45,11 +44,11 @@
   * `controller_code` - needed for controller authorization
   * `awaited_jetton_wallet_code` - needed for awaited*TON deployment
   * `payout_minter_code` - needed for awaited*TON deployment
-  * `pool_jetton_wallet_code` - needed for calculation of address of awaitedPTON wallet
-  * `vote_keeper_code` - needed for calculation of address of awaitedPTON wallet
+  * `pool_jetton_wallet_code` - needed for calculation of address of Deposit Payout wallet
+  * `vote_keeper_code` - needed for calculation of address of Deposit Payout wallet
 
 ## Deploy
 
-Pool and pTON minter are deployed separately. Pool deploys awaited*TON minters and initiate it. Address of pTON wallet for awaitedPTON minter is calculated on Pool and passed to awaitedpTON minter in init message.
+Pool and pool jetton minter are deployed separately. Pool deploys Payout minters and initiate it. Address of pool jetton wallet for Deposit Payout (minter) is calculated on Pool and passed to Deposit Payout in init message.
 
 ![scheme](images/pool-scheme.png)

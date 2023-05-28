@@ -33,7 +33,7 @@ This documentation is organised as follows:
   - Interaction with stakers
     6. manages deposits and withdrawals
 
-**pTON** is jetton which is used to manage assets lended to the pool. There are also additional types of jettons: awaitedpTON and awaitedTON. These jettons are used for accounting during postponement of deposits/withdrawals till the moment when pTON/TON price is known. 
+**pool jetton** is jetton which is used to manage assets lended to the pool. There are also additional types of jettons: Deposits and Withdrawals. These jettons are used for accounting during postponement of deposits/withdrawals till the moment when pool jetton/TON price is known. 
 
 
 #### Roles
@@ -48,7 +48,7 @@ Empty by default role, which is able to send arbitrary message from arbitrary pa
 Role to approve Controllers for lend requests
 
 **Consigliere**
-Helps to transform awaitedTONs/awaitedJettons to TON/pTON accordingly
+Helps to transform payouts to TON/pool jetton accordingly
 
 **Interest Manager**
 Get round stats and update interest params
@@ -116,24 +116,24 @@ Aggregate profit/loss data for each round
 
 
 #### User part
-Keep track of ratio of pTON/TON.
+Keep track of ratio of pool jetton/TON.
 
-Receives deposits from nominators and mints *awaited pTON* for them.
+Receives deposits from nominators and mints *Deposit Payout jettons* for them.
 
-Receives pTON burns notifications (withdrawal requests) from nominators' wallets and mints *awaited TON* for them
+Receives pool jetton burns notifications (withdrawal requests) from nominators' wallets and mints *Withdrawal Payout jettons* for them
 
-Keep track of summs of **current round** awaited jettons.
+Keep track of summs of **current round** payout jettons.
 
 On aggregation event:
-- mints pTON to *awaited pTON* minter for distribution
-- sends TONs to *awaited TON* minter to fulfill withdrawals (and when TON from round cames to PP)
+- mints pool jetton to *Deposit Payout* minter for distribution
+- sends TONs to *Withdrawal Payout* minter to fulfill withdrawals (and when TON from round cames to PP)
 
 Handlers of incoming messages
 - borrow request (only from Сontroller)
 - Governance requests (from Governance, Halter, Sudoer)
 - debt repayment (only from Controller in *active controller list*)
 - deposits (from any user)
-- burn notifications (from pTON wallets)
+- burn notifications (from pool jetton wallets)
 bounces
 - TODO
 
@@ -142,27 +142,27 @@ Outcoming messages:
 - deposit to controller (to Controller, insert into _active controller list_)
 - aggregated profit notification (to PP)
 - Fees to Governance (???)
-- mint pTON (to awaited pTON)
-- TONs (to awaited TON)
+- mint pool jetton (to Deposit Payout)
+- TONs (to Withdrawal Payout)
 
 [Detailed docs on Pool](docs/pool.md)
 
-### PTON
+### Pool jetton
 Jetton that represents share in pool assets. It can be implemented as DAO Jetton in such a way that owners of pool jetton will be able to vote for network config updates.
 
-### Awaited jettons
-During validation round TON deposited to the pool and used for validation stake are indeed at stake. That means that it is not clear how much TON will be returned back and to how much TON is equal 1 pTON. That is why it is impossible to correctly swap pTON to TON during the round, otherwise the following attacks are possible:
+### Payout jettons
+During validation round TON deposited to the pool and used for validation stake are indeed at stake. That means that it is not clear how much TON will be returned back and to how much TON is equal 1 pool jetton. That is why it is impossible to correctly swap pool jetton to TON during the round, otherwise the following attacks are possible:
 - put assets right before funds are released from Elector and withdraw them immediately after, thus get full premium without prolonged fund lock and even without fund working as a stake. It is essectially stealing of premium from fair stakers.
-- constantly monitor validator behavior and in case of misbehavior witdraw funds right before funds are released and loss (due to fine) are accounted and pTON/TON decreased. It is essentially shifting losses to other users.
+- constantly monitor validator behavior and in case of misbehavior witdraw funds right before funds are released and loss (due to fine) are accounted and pool jetton/TON decreased. It is essentially shifting losses to other users.
 
-That is why conversion of TON->pTON (deposits) and pTON->TON (withdrawals) should be postponed and synchronized with validation round ending.
+That is why conversion of TON->pool jetton (deposits) and pool jetton->TON (withdrawals) should be postponed and synchronized with validation round ending.
 
 To allow request deposits/withdrawals at any time and to avoid storing all requests in one contract storage we are using special type of jettons which will be converted to desired assets on round end.
 
-This jettons are called awaitedPTON (for deposits, represents assets which will be converted to PTON) and awaitedTON (for withdrawals, represents assets which will be converted to TON), correspondingly.
+This jettons are called *Deposit payout* (or simply deposits, represents assets which will be converted to pool jetton) and *Withdrawal Payout* (or withdrawals, represents assets which will be converted to TON), correspondingly.
 
-When you deposit TON to pool you immediately get awaitedPTON jettons. Later after current validation round ends and funds are released from Elector, correct pTON/TON ratio is discovered, amount of pTON corresponded to total deposits value is calculated and sent to awaitedPTON minter. After that awaitePTON jettons can be burned to retrieve pTONs from minter. User may burn it herself, however, for convenience special *consigliere* role is introduced which have permissions to call burn from any awaited jetton wallet. If successfull (that means if distribution is already started), user gets her pTONs and *consigliere* reimbursement for fees. That way from user perspective, in a few hours after deposit she automatically gets pTON.
+When you deposit TON to pool you immediately get Deposit jettons. Later after current validation round ends and funds are released from Elector, correct poolJetton/TON ratio is discovered, amount of pool jetton corresponded to total deposits value is calculated and sent to Deposit minter. After that Deposit jettons can be burned to retrieve pool jettons from minter. User may burn it herself, however, for convenience special *consigliere* role is introduced which have permissions to call burn from any payout jetton wallet. If successfull (that means if distribution is already started), user gets her pool jettons and *consigliere* reimbursement for fees. That way from user perspective, in a few hours after deposit she automatically gets pool jetton.
 
 The same way withdrawals are processed.
 
-Separate awaitedPTON and awaitedTON are deployed per each round.
+Separate deposit and withdrawal payouts (that is different kind of jettons) are deployed per each round.
