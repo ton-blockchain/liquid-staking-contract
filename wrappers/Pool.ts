@@ -109,13 +109,14 @@ export class Pool implements Contract {
         });
     }
 
-    async sendRequestControllerDeploy(provider: ContractProvider, via: Sender, value: bigint) {
+    async sendRequestControllerDeploy(provider: ContractProvider, via: Sender, value: bigint, controllerId: number) {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
                      .storeUint(0xdf108122, 32) // op
                      .storeUint(0, 64) // query id
+                     .storeUint(controllerId, 32) // controller_id
                   .endCell(),
         });
     }

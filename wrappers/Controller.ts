@@ -3,6 +3,7 @@ import { Address, toNano, beginCell, Cell, Contract, contractAddress, ContractPr
 
 export type ControllerConfig = {
 
+  controllerId: number;
   validator: Address;
   pool: Address;
   governor: Address;
@@ -27,6 +28,7 @@ export function controllerConfigToCell(config: ControllerConfig): Cell {
               .storeUint(0, 48)  // sudoer_set_at
               .storeRef(
                   beginCell()
+                  .storeUint(config.controllerId, 32)
                   .storeAddress(config.validator)
                   .storeAddress(config.pool)
                   .storeAddress(config.governor)

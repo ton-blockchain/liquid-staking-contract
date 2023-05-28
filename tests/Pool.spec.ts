@@ -73,6 +73,7 @@ describe('Pool', () => {
 
         pool = blockchain.openContract(Pool.createFromConfig(poolConfig, pool_code));
         let controllerConfig = {
+          controllerId:0,
           validator: deployer.address,
           pool: pool.address,
           governor: deployer.address,
@@ -108,7 +109,7 @@ describe('Pool', () => {
                          on: poolJetton.address,
                          success: true,
         });
-        const controllerDeployResult = await pool.sendRequestControllerDeploy(deployer.getSender(), toNano('100000'));
+        const controllerDeployResult = await pool.sendRequestControllerDeploy(deployer.getSender(), toNano('100000'), 0);
         expect(controllerDeployResult.transactions).toHaveTransaction({
                          from: pool.address,
                          to: controller.address,
