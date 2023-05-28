@@ -6,11 +6,13 @@
   ."min_loan and max_loan are in TON" cr 
   ."max_interest is maximal interest is share of loan, controller ready to pay per round as 65536 based rational" cr 1 halt
 } : usage
-$# dup 3 < swap 3 > or ' usage if
+$# dup 3 < swap 4 > or ' usage if
 
+4 :$1..n
 $1 $>GR =: min_loan
 $2 $>GR =: max_loan
 $3 parse-int =: max_interest
+$4 "loan_request.boc" replace-if-null =: file-base
 
 <b 0x452f7112 32 u, now 64 u, min_loan Gram, max_loan Gram, max_interest 16 u, b> 2 boc+>B 
-"loan_request.boc" B>file
+file-base B>file
