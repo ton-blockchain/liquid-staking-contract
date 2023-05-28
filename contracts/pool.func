@@ -60,7 +60,7 @@ const int disbalance_tolerance = 30; ;; x/256
 const int MIN_TONS_FOR_STORAGE = 10 * ONE_TON; ;; 10 TON
 const int CONTROLLER_WORKCHAIN = -1; ;; masterchain
 const int MAX_LOAN_DICT_DEPTH = 12;
-const int SERVICE_NOTIFICATION_AMOUNT = ONE_TON / 10;
+const int SERVICE_NOTIFICATION_AMOUNT = ONE_TON / 100;
 const int FINALIZE_ROUND_FEE = ONE_TON;
 const int DEPOSIT_FEE = ONE_TON; ;;TODO reconsider
 const int WITHDRAWAL_FEE = ONE_TON / 2;
@@ -159,6 +159,13 @@ int current_round_index();
           log_loan(sender_address, actual_loan);
           int total_loan = current_round_lenders~add_loan(sender_address, actual_loan, interest);
           throw_unless(1872, total_loan <= max_loan + interest);
+          send_msg_builder(interest_manager, SERVICE_NOTIFICATION_AMOUNT,
+                    begin_cell()
+                            .store_body_header(interest_manager::request_notification, cur_lt())
+                            .store_coins(min_loan)
+                            .store_coins(max_loan)
+                            .store_uint(max_interest, 16),
+                    msgflag::NON_BOUNCEABLE, sendmode::PAY_FEES_SEPARETELY);
           
     }
     if (op == pool::loan_repayment) {
