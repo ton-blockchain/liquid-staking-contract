@@ -13,8 +13,10 @@
 
 ;; Whole storage is put to global variables
 
+global int state;
 global int total_balance;
 global int interest_rate;
+global int optimistic_deposit_withdrawals;
 global int saved_validator_set_hash;
 
 ;; [lenders_dict, round_id, active_lenders, lended, returned, profit]
@@ -71,6 +73,8 @@ const int MINT_PAYOUT_FEE = MINT_FEE;
 const int MINTER_DEPLOY_FEE = ONE_TON / 5;
 const int JETTONS_WORKCHAIN = 0;
 
+const int OPTIMISTIC_DEPOSIT_LOCKUP_DURATION = 86400;
+
 #include "pool_storage.func";
 
 () update_round() impure;
@@ -90,7 +94,7 @@ const int JETTONS_WORKCHAIN = 0;
 slice get_controller_address (int controller_id, slice validator) method_id;
 (slice, cell) build_controller_address(int controller_id, slice validator);
 
-() request_to_mint_pool_jettons(slice destination, int amount, builder payload) impure;
+() request_to_mint_pool_jettons(slice destination, int amount, int query_id, int lockup_duration, builder payload) impure;
 () request_to_mint_deposit(slice destination, int amount, int query_id) impure;
 () request_to_mint_withdrawal(slice destination, int amount, int query_id) impure;
 
@@ -207,20 +211,43 @@ int current_round_index();
         assert_state!(state::NORMAL);
         int deposit_amount = msg_value - DEPOSIT_FEE;
         throw_unless(error::deposit_amount_too_low, deposit_amount > 0);
-        request_to_mint_deposit(sender_address, deposit_amount, query_id);
-        requested_for_deposit += deposit_amount;
+        if(optimistic_deposit_withdrawals) {
+          int amount = muldiv(deposit_amount, supply, total_balance);
+          request_to_mint_pool_jettons(sender_address, amount, query_id, OPTIMISTIC_DEPOSIT_LOCKUP_DURATION, begin_cell());
+          total_balance += deposit_amount;
+          supply += amount;
+        } else {
+          request_to_mint_deposit(sender_address, deposit_amount, query_id);
+          requested_for_deposit += deposit_amount;
+        }
     }
     if (op == pool::withdraw) { 
         assert_1of2_state!(state::NORMAL, state::REPAYMENT_ONLY);
         int jetton_amount = in_msg_body~load_coins();
         slice from_address = in_msg_body~load_msg_addr();
         slice response_address = in_msg_body~load_msg_addr();
+        int request_immediate_withdrawal = true; ;;in_msg_body~load_int(); TODO
         throw_unless(error::not_enough_TON_to_process, msg_value > WITHDRAWAL_FEE);
         assert_sender!(sender_address, jetton_minter);
-        request_to_mint_withdrawal(from_address, jetton_amount, query_id);
-        requested_for_withdrawal += jetton_amount;
-        ;;supply -= jetton_amount; supply will be decreased when tons will be distributed
-        ;; TODO send response to response_address
+        int approximate_amount = muldiv(jetton_amount, total_balance, supply);
+        if(optimistic_deposit_withdrawals &
+           request_immediate_withdrawal & 
+           (balance - msg_value - MIN_TONS_FOR_STORAGE > approximate_amount)) {
+          total_balance -= approximate_amount;
+          supply -= jetton_amount;
+          var msg = begin_cell()
+                  .store_msg_flags(msgflag::NON_BOUNCEABLE)
+                  .store_slice(from_address)
+                  .store_coins(approximate_amount)
+                  .store_msgbody_prefix_slice()
+                  .store_body_header(pool::withdrawal, query_id);
+          send_raw_message(msg.end_cell(), sendmode::REGULAR | sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);
+        } else {
+          request_to_mint_withdrawal(from_address, jetton_amount, query_id);
+          requested_for_withdrawal += jetton_amount;
+          ;;supply -= jetton_amount; supply will be decreased when tons will be distributed
+          ;; TODO send response to response_address
+        }
     }
     {- ========== General operations ========== -}
 
@@ -432,8 +459,8 @@ int current_round_index();
     send_raw_message(msg.end_cell(), sendmode::PAY_FEES_SEPARETELY); ;; pay transfer fees separately, revert on errors
 }
 
-() request_to_mint_pool_jettons(slice destination, int amount, builder payload) impure {
-    send_mint_message(jetton_minter, cur_lt(), destination, amount, payload);
+() request_to_mint_pool_jettons(slice destination, int amount, int query_id, int lockup_duration, builder payload) impure {
+    send_mint_message(jetton_minter, query_id, destination, amount, payload);
     supply += amount;
 }
 
@@ -525,6 +552,8 @@ int current_round_index();
     }
     request_to_mint_pool_jettons(deposit_payout,
                                  jetton_mint,
+                                 cur_lt(),
+                                 0, ;; no lockup
                                  begin_cell()
                                    .store_body_header(payouts::start_distribution, cur_lt())
                                 );

@@ -156,6 +156,7 @@ builder save_codes(builder pb) {
     state = ds~load_uint(8);
     total_balance = ds~load_coins();
     interest_rate = ds~load_uint(16);
+    optimistic_deposit_withdrawals = ds~load_int(1);
     saved_validator_set_hash = ds~load_uint(256);
     slice round_data = ds~load_ref().begin_parse();
         current_round_lenders = round_data~load_round_data();
@@ -173,6 +174,7 @@ builder save_codes(builder pb) {
         .store_uint(state, 8)
         .store_coins(total_balance)
         .store_uint(interest_rate, 16)
+        .store_int(optimistic_deposit_withdrawals, 1)
         .store_uint(saved_validator_set_hash, 256)
         .store_ref(
           begin_cell()
