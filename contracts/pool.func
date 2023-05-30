@@ -91,7 +91,7 @@ const int OPTIMISTIC_DEPOSIT_LOCKUP_DURATION = 86400;
 ([cell, int, int, int, int, int], (int)) ~add_loan([cell, int, int, int, int, int] lenders_data, slice borrower, int loan_body, int interest);
 ([cell, int, int, int, int, int], (int, int)) ~close_loan([cell, int, int, int, int, int] lenders_data, slice borrower, int amount);
 
-slice get_controller_address (int controller_id, slice validator) method_id;
+slice _get_controller_address (int controller_id, slice validator) method_id;
 (slice, cell) build_controller_address(int controller_id, slice validator);
 
 () request_to_mint_pool_jettons(slice destination, int amount, int query_id, int lockup_duration, builder payload) impure;
@@ -133,7 +133,7 @@ int current_round_index();
           int controller_id = in_msg_body~load_uint(32);
           slice validator = in_msg_body~load_msg_addr();
 
-          assert_sender!(sender_address, get_controller_address(controller_id, validator));
+          assert_sender!(sender_address, _get_controller_address(controller_id, validator));
           throw_unless(error::interest_too_low, max_interest >= interest_rate);
           
           ;; maybe too harsh conditions
@@ -581,10 +581,14 @@ slice get_current_round_withdrawal_minter() method_id {
     return (total_balance, supply, requested_for_deposit, requested_for_withdrawal, jetton_minter);
 }
 
-(slice) get_controller_address(int controller_id, slice validator) method_id {
-    load_data();
+(slice) _get_controller_address(int controller_id, slice validator) inline {
     var (controller_address, _) = build_controller_address(controller_id, validator);
     return controller_address;
+}
+
+(slice) get_controller_address(int controller_id, slice validator) method_id {
+    load_data();
+    return _get_controller_address(controller_id, validator);
 }
 
 (int, int) get_controller_address_legacy(int controller_id, int wc, int addr_hash) method_id {
