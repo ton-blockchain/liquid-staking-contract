@@ -19,9 +19,9 @@ global int interest_rate;
 global int optimistic_deposit_withdrawals;
 global int saved_validator_set_hash;
 
-;; [lenders_dict, round_id, active_lenders, lended, returned, profit]
-global [cell, int, int, int, int, int] current_round_lenders;
-global [cell, int, int, int, int, int] prev_round_lenders;
+;; [lenders_dict, round_id, active_lenders, lended, expected, returned, profit]
+global [cell, int, int, int, int, int, int] current_round_lenders;
+global [cell, int, int, int, int, int, int] prev_round_lenders;
 
 global int min_loan_per_validator;
 global int max_loan_per_validator;
@@ -73,7 +73,6 @@ const int MINT_PAYOUT_FEE = MINT_FEE;
 const int MINTER_DEPLOY_FEE = ONE_TON / 5;
 const int JETTONS_WORKCHAIN = 0;
 
-const int OPTIMISTIC_DEPOSIT_LOCKUP_DURATION = 86400;
 
 #include "pool_storage.func";
 
@@ -84,22 +83,24 @@ const int OPTIMISTIC_DEPOSIT_LOCKUP_DURATION = 86400;
 () log_round_completion (int, int, int, int) impure;
 () log_round_rotation (int) impure;
 
-([cell, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int] lenders_data)  impure; ;; called from close_loan
+([cell, int, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int, int] lenders_data)  impure; ;; called from close_loan
 () finalize_deposit_withdrawal_round (int round_id)  impure; ;; called from finalize_lending_round
 
 
-([cell, int, int, int, int, int], (int)) ~add_loan([cell, int, int, int, int, int] lenders_data, slice borrower, int loan_body, int interest);
-([cell, int, int, int, int, int], (int, int)) ~close_loan([cell, int, int, int, int, int] lenders_data, slice borrower, int amount);
+([cell, int, int, int, int, int, int], (int)) ~add_loan([cell, int, int, int, int, int, int] lenders_data, slice borrower, int loan_body, int interest);
+([cell, int, int, int, int, int, int], (int, int)) ~close_loan([cell, int, int, int, int, int, int] lenders_data, slice borrower, int amount);
 
 slice _get_controller_address (int controller_id, slice validator) method_id;
 (slice, cell) build_controller_address(int controller_id, slice validator);
 
-() request_to_mint_pool_jettons(slice destination, int amount, int query_id, int lockup_duration, builder payload) impure;
+() request_to_mint_pool_jettons(slice destination, int amount, int query_id, builder payload) impure;
 () request_to_mint_deposit(slice destination, int amount, int query_id) impure;
 () request_to_mint_withdrawal(slice destination, int amount, int query_id) impure;
 
 () initiate_distribution_of_tons (int round_id) impure;
 () initiate_distribution_of_pool_jettons (int round_id) impure;
+
+(int, int) _get_projected_conversion_ratio () inline;
 
 int current_round_index();
 
@@ -212,8 +213,11 @@ int current_round_index();
         int deposit_amount = msg_value - DEPOSIT_FEE;
         throw_unless(error::deposit_amount_too_low, deposit_amount > 0);
         if(optimistic_deposit_withdrawals) {
-          int amount = muldiv(deposit_amount, supply, total_balance);
-          request_to_mint_pool_jettons(sender_address, amount, query_id, OPTIMISTIC_DEPOSIT_LOCKUP_DURATION, begin_cell());
+          ;; we convert TON to Jetton at projected (expected) price at the round end
+          (int expected_balance, int expected_supply) = _get_projected_conversion_ratio();
+          int amount = muldiv(deposit_amount, expected_supply, expected_balance);
+
+          request_to_mint_pool_jettons(sender_address, amount, query_id, begin_cell());
           total_balance += deposit_amount;
           supply += amount;
         } else {
@@ -308,8 +312,8 @@ int current_round_index();
     return (controller_address, init_state);
 }
 
-([cell, int, int, int, int, int], (int)) ~add_loan([cell, int, int, int, int, int] lenders_data, slice borrower, int loan_body, int interest) {
-    var [lenders_dict, round_id, active_lenders, lended, returned, profit] = lenders_data;
+([cell, int, int, int, int, int, int], (int)) ~add_loan([cell, int, int, int, int, int, int] lenders_data, slice borrower, int loan_body, int interest) {
+    var [lenders_dict, round_id, active_lenders, lended, expected, returned, profit] = lenders_data;
 
     (int wc, int addr_hash) = parse_std_addr(borrower);
     throw_unless(error::controller_in_wrong_workchain, wc == CONTROLLER_WORKCHAIN);
@@ -325,17 +329,18 @@ int current_round_index();
     }
     already_lended += loan_body;
     accounted_interest += interest;
-    lended += loan_body + interest;
+    lended += loan_body;
+    expected +=  loan_body + interest;
     
     lenders_dict~udict_set_builder(ADDR_SIZE, addr_hash, begin_cell().store_coins(already_lended).store_coins(accounted_interest));
     
     throw_unless(error::credit_book_too_deep, cell_depth(lenders_dict) < MAX_LOAN_DICT_DEPTH);
     
-    return ([lenders_dict, round_id, active_lenders, lended, returned, profit], already_lended);
+    return ([lenders_dict, round_id, active_lenders, expected, lended, returned, profit], already_lended);
 }
 
-([cell, int, int, int, int, int], (int, int)) ~close_loan([cell, int, int, int, int, int] lenders_data, slice borrower, int amount) {
-    var [lenders_dict, round_id, active_lenders, lended, returned, profit] = lenders_data;
+([cell, int, int, int, int, int, int], (int, int)) ~close_loan([cell, int, int, int, int, int, int] lenders_data, slice borrower, int amount) {
+    var [lenders_dict, round_id, active_lenders, lended, expected, returned, profit] = lenders_data;
 
     (int wc, int addr_hash) = parse_std_addr(borrower);
     throw_unless(error::controller_in_wrong_workchain, wc == CONTROLLER_WORKCHAIN);
@@ -355,14 +360,14 @@ int current_round_index();
 
     log_repayment(borrower, was_lended, amount - was_lended);
 
-    lenders_data = [lenders_dict, round_id, active_lenders, lended, returned, profit];
+    lenders_data = [lenders_dict, round_id, active_lenders, lended, expected, returned, profit];
     int last_one = active_lenders;
     
     return (lenders_data, (true, last_one));
 }
 
-([cell, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int] lenders_data) impure {
-    var [lenders_dict, round_id, active_lenders, lended, returned, profit] = lenders_data;
+([cell, int, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int, int] lenders_data) impure {
+    var [lenders_dict, round_id, active_lenders, lended, expected, returned, profit] = lenders_data;
     throw_unless(error::finalizing_active_credit_round, lenders_dict.null?());
     throw_unless(error::finalizing_active_credit_round, active_lenders == 0); ;; TODO - halt here?
     var b = [profit, total_balance];
@@ -389,7 +394,7 @@ int current_round_index();
     log_round_completion(round_id, lended, returned, profit);
     finalize_deposit_withdrawal_round(round_id);
     ;; do we need to nulify data here ???
-    return ([null(), round_id, 0, 0, 0, 0], ());
+    return ([null(), round_id, 0, 0, 0, 0, 0], ());
 }
 
 () log_loan(slice lender, int amount) impure {
@@ -418,7 +423,7 @@ int current_round_index();
     (int utime_since, int utime_until, cell vset) = get_current_validator_set();
     int current_hash = cell_hash(vset);
     if (saved_validator_set_hash != current_hash) {
-      var [lenders_dict, round_id, active_lenders, lended, returned, profit] = prev_round_lenders;
+      var [lenders_dict, round_id, active_lenders, lended, expected, returned, profit] = prev_round_lenders;
       
       if((~ lenders_dict.null?()) | (active_lenders > 0)) {
         ;; not all lenders of previous round returned loans
@@ -432,7 +437,7 @@ int current_round_index();
       saved_validator_set_hash = current_hash;
       int round_index = current_round_index() + 1;
       log_round_rotation(round_index);
-      (prev_round_lenders, current_round_lenders) = (current_round_lenders, [null(), round_index, 0, 0, 0, 0]);
+      (prev_round_lenders, current_round_lenders) = (current_round_lenders, [null(), round_index, 0, 0, 0, 0, 0]);
     }
 }
 
@@ -459,7 +464,7 @@ int current_round_index();
     send_raw_message(msg.end_cell(), sendmode::PAY_FEES_SEPARETELY); ;; pay transfer fees separately, revert on errors
 }
 
-() request_to_mint_pool_jettons(slice destination, int amount, int query_id, int lockup_duration, builder payload) impure {
+() request_to_mint_pool_jettons(slice destination, int amount, int query_id, builder payload) impure {
     send_mint_message(jetton_minter, query_id, destination, amount, payload);
     supply += amount;
 }
@@ -553,7 +558,6 @@ int current_round_index();
     request_to_mint_pool_jettons(deposit_payout,
                                  jetton_mint,
                                  cur_lt(),
-                                 0, ;; no lockup
                                  begin_cell()
                                    .store_body_header(payouts::start_distribution, cur_lt())
                                 );
@@ -564,7 +568,7 @@ int current_round_index();
 
 int current_round_index() {
     ;;TODO optimize
-    var [lenders_dict, round_id, active_lenders, lended, returned, profit] = current_round_lenders;
+    var [lenders_dict, round_id, active_lenders, lended, expected, returned, profit] = current_round_lenders;
     return round_id;
 }
 slice get_current_round_deposit_minter() method_id {
@@ -589,6 +593,17 @@ slice get_current_round_withdrawal_minter() method_id {
 (slice) get_controller_address(int controller_id, slice validator) method_id {
     load_data();
     return _get_controller_address(controller_id, validator);
+}
+
+(int, int) _get_projected_conversion_ratio () inline {
+    var [lenders_dict, round_id, active_lenders, lended, expected, returned, profit] = prev_round_lenders;
+    return (expected - lended + total_balance, supply);
+}
+
+
+(int, int) get_projected_conversion_ratio () method_id {
+  load_data();
+  return _get_projected_conversion_ratio();
 }
 
 (int, int) get_controller_address_legacy(int controller_id, int wc, int addr_hash) method_id {

@@ -28,6 +28,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
                              .storeUint(0, 32) // round_id
                              .storeUint(0, 32) // active lenders
                              .storeCoins(0) // lended
+                             .storeCoins(0) // expected
                              .storeCoins(0) // returned
                              .storeUint(0, 1) // profit sign
                              .storeCoins(0) // profit
