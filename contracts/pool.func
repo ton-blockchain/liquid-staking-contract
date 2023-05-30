@@ -87,7 +87,7 @@ const int JETTONS_WORKCHAIN = 0;
 ([cell, int, int, int, int, int], (int)) ~add_loan([cell, int, int, int, int, int] lenders_data, slice borrower, int loan_body, int interest);
 ([cell, int, int, int, int, int], (int, int)) ~close_loan([cell, int, int, int, int, int] lenders_data, slice borrower, int amount);
 
-int check_controller_address (slice address, int controller_id, slice validator) impure;
+slice get_controller_address (int controller_id, slice validator) method_id;
 (slice, cell) build_controller_address(int controller_id, slice validator);
 
 () request_to_mint_pool_jettons(slice destination, int amount, builder payload) impure;
@@ -129,8 +129,8 @@ int current_round_index();
           int controller_id = in_msg_body~load_uint(32);
           slice validator = in_msg_body~load_msg_addr();
 
-          throw_unless(887, check_controller_address(sender_address, controller_id, validator));
-          throw_unless(976, max_interest >= interest_rate);
+          assert_sender!(sender_address, get_controller_address(controller_id, validator));
+          throw_unless(error::interest_too_low, max_interest >= interest_rate);
           
           ;; maybe too harsh conditions
           int creditable_funds = balance
@@ -142,11 +142,11 @@ int current_round_index();
           min_loan = max(min_loan, min_loan_per_validator);
           max_loan = min(max_loan, max_loan_per_validator);
           
-          throw_unless(777, min_loan <= max_loan);
+          throw_unless(error::contradicting_borrowing_params, min_loan <= max_loan);
           
           int actual_loan = min(available_funds, max_loan);
           
-          throw_unless(283, actual_loan >=  min_loan);
+          throw_unless(error::not_enough_funds_for_loan, actual_loan >=  min_loan);
           
           int interest = muldiv(actual_loan, interest_rate, 65535);
           builder msg = begin_cell()
@@ -160,7 +160,7 @@ int current_round_index();
 
           log_loan(sender_address, actual_loan);
           int total_loan = current_round_lenders~add_loan(sender_address, actual_loan, interest);
-          throw_unless(1872, total_loan <= max_loan + interest);
+          throw_unless(error::total_credit_too_high, total_loan <= max_loan + interest);
           send_msg_builder(interest_manager, SERVICE_NOTIFICATION_AMOUNT,
                     begin_cell()
                             .store_body_header(interest_manager::request_notification, cur_lt())
@@ -206,7 +206,7 @@ int current_round_index();
     if (op == pool::deposit) {
         assert_state!(state::NORMAL);
         int deposit_amount = msg_value - DEPOSIT_FEE;
-        throw_unless(2778, deposit_amount > 0);
+        throw_unless(error::deposit_amount_too_low, deposit_amount > 0);
         request_to_mint_deposit(sender_address, deposit_amount, query_id);
         requested_for_deposit += deposit_amount;
     }
@@ -215,8 +215,8 @@ int current_round_index();
         int jetton_amount = in_msg_body~load_coins();
         slice from_address = in_msg_body~load_msg_addr();
         slice response_address = in_msg_body~load_msg_addr();
-        throw_unless(2991, msg_value > WITHDRAWAL_FEE);
-        throw_unless(error::unauthorized_burn_request, equal_slice_bits(jetton_minter, sender_address) );
+        throw_unless(error::not_enough_TON_to_process, msg_value > WITHDRAWAL_FEE);
+        assert_sender!(sender_address, jetton_minter);
         request_to_mint_withdrawal(from_address, jetton_amount, query_id);
         requested_for_withdrawal += jetton_amount;
         ;;supply -= jetton_amount; supply will be decreased when tons will be distributed
@@ -281,16 +281,11 @@ int current_round_index();
     return (controller_address, init_state);
 }
 
-int check_controller_address (slice sender, int controller_id, slice validator) {
-    var (expected_address, _) = build_controller_address(controller_id, validator);
-    return equal_slice_bits(sender, expected_address);
-}
-
 ([cell, int, int, int, int, int], (int)) ~add_loan([cell, int, int, int, int, int] lenders_data, slice borrower, int loan_body, int interest) {
     var [lenders_dict, round_id, active_lenders, lended, returned, profit] = lenders_data;
 
     (int wc, int addr_hash) = parse_std_addr(borrower);
-    throw_unless(876, wc == CONTROLLER_WORKCHAIN);
+    throw_unless(error::controller_in_wrong_workchain, wc == CONTROLLER_WORKCHAIN);
 
     int already_lended = 0;
     int accounted_interest = 0;
@@ -307,7 +302,7 @@ int check_controller_address (slice sender, int controller_id, slice validator) 
     
     lenders_dict~udict_set_builder(ADDR_SIZE, addr_hash, begin_cell().store_coins(already_lended).store_coins(accounted_interest));
     
-    throw_unless(820, cell_depth(lenders_dict) < MAX_LOAN_DICT_DEPTH);
+    throw_unless(error::credit_book_too_deep, cell_depth(lenders_dict) < MAX_LOAN_DICT_DEPTH);
     
     return ([lenders_dict, round_id, active_lenders, lended, returned, profit], already_lended);
 }
@@ -316,7 +311,7 @@ int check_controller_address (slice sender, int controller_id, slice validator) 
     var [lenders_dict, round_id, active_lenders, lended, returned, profit] = lenders_data;
 
     (int wc, int addr_hash) = parse_std_addr(borrower);
-    throw_unless(876, wc == CONTROLLER_WORKCHAIN);
+    throw_unless(error::controller_in_wrong_workchain, wc == CONTROLLER_WORKCHAIN);
 
     (slice prev_data, int found?) = lenders_dict~udict_delete_get?(ADDR_SIZE, addr_hash);
     ifnot (found?) {
@@ -341,8 +336,8 @@ int check_controller_address (slice sender, int controller_id, slice validator) 
 
 ([cell, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int] lenders_data) impure {
     var [lenders_dict, round_id, active_lenders, lended, returned, profit] = lenders_data;
-    throw_unless(8121, lenders_dict.null?());
-    throw_unless(8125, active_lenders == 0); ;; TODO - halt here?
+    throw_unless(error::finalizing_active_credit_round, lenders_dict.null?());
+    throw_unless(error::finalizing_active_credit_round, active_lenders == 0); ;; TODO - halt here?
     var b = [profit, total_balance];
     profit -= FINALIZE_ROUND_FEE;
     int fee = max(muldiv(governance_fee, profit, 256), 0);
@@ -552,9 +547,9 @@ slice get_current_round_withdrawal_minter() method_id {
     return withdrawal_payout;
 }
 
-(int, int, int, int) get_finance_data() method_id {
+(int, int, int, int, slice) get_finance_data() method_id {
     load_data();
-    return (total_balance, supply, requested_for_deposit, requested_for_withdrawal);
+    return (total_balance, supply, requested_for_deposit, requested_for_withdrawal, jetton_minter);
 }
 
 (slice) get_controller_address(int controller_id, slice validator) method_id {
