@@ -68,7 +68,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeUint(0, 8) // state NORMAL
               .storeCoins(0) // total_balance
               .storeUint(100, 16) // interest_rate
-              .storeInt(0, 1) // optimistic_deposit_withdrawals
+              .storeInt(0n, 1) // optimistic_deposit_withdrawals
               .storeUint(0, 256) // saved_validator_set_hash
               .storeRef(
                 beginCell()
