@@ -239,7 +239,7 @@ int current_round_index();
         int jetton_amount = in_msg_body~load_coins();
         slice from_address = in_msg_body~load_msg_addr();
         slice response_address = in_msg_body~load_msg_addr();
-        int request_immediate_withdrawal = true; ;;in_msg_body~load_int(); TODO
+        int request_immediate_withdrawal = in_msg_body~load_int(1);
         throw_unless(error::not_enough_TON_to_process, msg_value > WITHDRAWAL_FEE);
         assert_sender!(sender_address, jetton_minter);
         int approximate_amount = muldiv(jetton_amount, total_balance, supply);
