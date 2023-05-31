@@ -102,6 +102,14 @@ slice _get_controller_address (int controller_id, slice validator) method_id;
 
 (int, int) _get_projected_conversion_ratio () inline;
 
+;; special muldiv which is friendly for b == c == 0
+int muldiv_extra(int a, int b, int c) inline {
+    if(b == c) {
+      return a;
+    }
+    return muldiv(a, b, c);
+}
+
 int current_round_index();
 
 () recv_internal(int balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
@@ -139,7 +147,7 @@ int current_round_index();
           
           ;; maybe too harsh conditions
           int creditable_funds = balance
-                                 - (supply ? muldiv(requested_for_withdrawal, total_balance, supply) : 0)
+                                 - muldiv_extra(requested_for_withdrawal, total_balance, supply)
                                  - MIN_TONS_FOR_STORAGE;
           ;;TODO
           int available_funds = creditable_funds; ;;min( creditable_funds, muldiv(256 + disbalance_tolerance, total_balance, 512) );
@@ -215,7 +223,8 @@ int current_round_index();
         if(optimistic_deposit_withdrawals) {
           ;; we convert TON to Jetton at projected (expected) price at the round end
           (int expected_balance, int expected_supply) = _get_projected_conversion_ratio();
-          int amount = muldiv(deposit_amount, expected_supply, expected_balance);
+
+          int amount = muldiv_extra(deposit_amount, expected_supply, expected_balance);
 
           request_to_mint_pool_jettons(sender_address, amount, query_id, begin_cell());
           total_balance += deposit_amount;
@@ -551,10 +560,7 @@ int current_round_index();
     ifnot(requested_for_deposit) {
         return ();
     }
-    int jetton_mint = requested_for_deposit;
-    ifnot((supply == 0) & (total_balance == 0)) { ;; both are zero in the beginning, then set conversion ratio 1:1
-        int jetton_mint = muldiv(requested_for_deposit, supply, total_balance);
-    }
+    int jetton_mint = muldiv_extra(requested_for_deposit, supply, total_balance);
     request_to_mint_pool_jettons(deposit_payout,
                                  jetton_mint,
                                  cur_lt(),
