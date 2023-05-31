@@ -173,7 +173,7 @@ describe('Pool', () => {
         blockchain.setConfig(beginCell().storeDictDirect(confDict).endCell());
 
 
-        const depositResult = await pool.sendDeposit(deployer.getSender(), toNano('1.05'));
+        const depositResult = await pool.sendDeposit(deployer.getSender(), toNano('3.05'));
 
         let awaitedJettonMinter = blockchain.openContract(await pool.getDepositMinter());
         let myDepositWallet = await awaitedJettonMinter.getWalletAddress(deployer.address);
@@ -335,4 +335,5 @@ describe('Pool', () => {
         });
 
     });
+
 });
