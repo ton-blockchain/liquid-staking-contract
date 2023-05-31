@@ -56,6 +56,7 @@ describe('Pool', () => {
         let poolConfig = {
               pool_jetton : poolJetton.address,
               pool_jetton_supply : 0n,
+              optimistic_deposit_withdrawals: 0n,
 
               sudoer : deployer.address,
               governor : deployer.address,

@@ -6,6 +6,7 @@ import {JettonMinter as AwaitedJettonMinter} from '../contracts/awaited_minter/w
 export type PoolConfig = {
   pool_jetton: Address;
   pool_jetton_supply: bigint;
+  optimistic_deposit_withdrawals: bigint;
   
   sudoer: Address;
   governor: Address;
@@ -68,7 +69,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeUint(0, 8) // state NORMAL
               .storeCoins(0) // total_balance
               .storeUint(100, 16) // interest_rate
-              .storeInt(0n, 1) // optimistic_deposit_withdrawals
+              .storeInt(config.optimistic_deposit_withdrawals, 1) // optimistic_deposit_withdrawals
               .storeUint(0, 256) // saved_validator_set_hash
               .storeRef(
                 beginCell()
