@@ -1,4 +1,7 @@
 import { Address, toNano, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from 'ton-core';
+import { buff2bigint } from '../utils';
+import { signData } from "./ValidatorUtils";
+import { Conf } from "../PoolConstants";
 
 
 export type ControllerConfig = {
@@ -56,9 +59,9 @@ export class Controller implements Contract {
         return new Controller(contractAddress(workchain, init), init);
     }
 
-    async sendDeploy(provider: ContractProvider, via: Sender) {
+    async sendDeploy(provider: ContractProvider, via: Sender, value:bigint = toNano('2000')) {
         await provider.internal(via, {
-            value: toNano('20000'),
+            value: value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
                      .storeUint(0xd372158c, 32) // op = top up
@@ -101,4 +104,70 @@ export class Controller implements Contract {
                   .endCell(),
         });
     }
+
+    static newStakeMessage(stake_val: bigint,
+                           src: Address,
+                           public_key: Buffer,
+                           private_key: Buffer,
+                           stake_at: number | bigint,
+                           max_factor: number,
+                           adnl_address: bigint,
+                           query_id:bigint | number = 1) {
+
+        const signCell = beginCell().storeUint(0x654c5074, 32)
+                                    .storeUint(stake_at, 32)
+                                    .storeUint(max_factor, 32)
+                                    .storeUint(buff2bigint(src.hash), 256)
+                                    .storeUint(adnl_address, 256)
+                         .endCell()
+
+        const signature = signData(signCell, private_key);
+
+        return  beginCell().storeUint(0x4e73744b, 32)
+                           .storeUint(query_id, 64)
+                           .storeCoins(stake_val)
+                           .storeUint(buff2bigint(public_key), 256)
+                           .storeUint(stake_at, 32)
+                           .storeUint(max_factor, 32)
+                           .storeUint(adnl_address, 256)
+                           .storeRef(signature)
+                .endCell();
+    }
+
+
+    async sendNewStake(provider: ContractProvider,
+                       via: Sender,
+                       stake_val: bigint,
+                       public_key: Buffer,
+                       private_key: Buffer,
+                       stake_at: number | bigint,
+                       max_factor: number = 1 << 16,
+                       adnl_address: bigint = 0n,
+                       query_id:bigint | number = 1,
+                       value: bigint = Conf.electorOpValue) {
+        await provider.internal(via,{
+            value,
+            body: Controller.newStakeMessage(stake_val,
+                                             this.address,
+                                             public_key,
+                                             private_key,
+                                             stake_at,
+                                             max_factor,
+                                             adnl_address,
+                                             query_id),
+            sendMode: SendMode.PAY_GAS_SEPARATELY
+        });
+    }
+
+	  static recoverStakeMessage(query_id: bigint | number = 0) {
+	      return beginCell().storeUint(0x47657424, 32).storeUint(query_id, 64).endCell();
+	  }
+
+	  async sendRecoverStake(provider: ContractProvider, via: Sender, value:bigint = toNano('1'), query_id: bigint | number = 0) {
+	      await provider.internal(via, {
+	          body: Controller.recoverStakeMessage(query_id),
+	          sendMode: SendMode.PAY_GAS_SEPARATELY,
+	          value
+        });
+	  }
 }
