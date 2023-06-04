@@ -1,10 +1,10 @@
-;;[lenders_dict, round_id, active_lenders, lended, expected, returned, profit]
+;;[borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit]
 (slice, ([cell, int, int, int, int, int, int])) ~load_round_data(slice s) {
     slice ds = s~load_ref().begin_parse();
-    var data = [ds~load_dict(),             ;; lenders
+    var data = [ds~load_dict(),             ;; borrowers
                 ds~load_uint(32),           ;; round_id
-                ds~load_uint(32),           ;; active_lenders
-                ds~load_coins(),            ;; lended
+                ds~load_uint(32),           ;; active_borrowers
+                ds~load_coins(),            ;; borrowed
                 ds~load_coins(),            ;; expected
                 ds~load_coins(),            ;; returned
                 ds~load_signed_coins()];    ;; profit
@@ -12,12 +12,12 @@
 }
 
 builder store_round_data(builder b, [cell, int, int, int, int, int, int] round_data) {
-  var [lenders_dict, round_id, active_lenders, lended, expected, returned, profit] = round_data;
+  var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = round_data;
   cell serialized = begin_cell()
-                     .store_dict(lenders_dict)
+                     .store_dict(borrowers_dict)
                      .store_uint(round_id, 32)
-                     .store_uint(active_lenders, 32)
-                     .store_coins(lended)
+                     .store_uint(active_borrowers, 32)
+                     .store_coins(borrowed)
                      .store_coins(expected)
                      .store_coins(returned)
                      .store_signed_coins(profit)
@@ -164,10 +164,11 @@ builder save_codes(builder pb) {
     total_balance = ds~load_coins();
     interest_rate = ds~load_uint(16);
     optimistic_deposit_withdrawals = ds~load_int(1);
+    deposits_open? = ds~load_int(1);
     saved_validator_set_hash = ds~load_uint(256);
     slice round_data = ds~load_ref().begin_parse();
-        current_round_lenders = round_data~load_round_data();
-        prev_round_lenders = round_data~load_round_data();
+        current_round_borrowers = round_data~load_round_data();
+        prev_round_borrowers = round_data~load_round_data();
     min_loan_per_validator = ds~load_coins();
     max_loan_per_validator = ds~load_coins();
     governance_fee = ds~load_uint(8);
@@ -182,11 +183,12 @@ builder save_codes(builder pb) {
         .store_coins(total_balance)
         .store_uint(interest_rate, 16)
         .store_int(optimistic_deposit_withdrawals, 1)
+        .store_int(deposits_open?, 1)
         .store_uint(saved_validator_set_hash, 256)
         .store_ref(
           begin_cell()
-          .store_round_data(current_round_lenders)
-          .store_round_data(prev_round_lenders)
+          .store_round_data(current_round_borrowers)
+          .store_round_data(prev_round_borrowers)
           .end_cell()
         )
         .store_coins(min_loan_per_validator)

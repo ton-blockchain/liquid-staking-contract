@@ -69,14 +69,14 @@ Each role may be performed by a wallet, multisignature wallet or DAO. It is expe
 
 ## Components
 ### Сontroller
-Сontroller accounts funds of validator and funds lended from Validation Pool. It can process deposits from Validator and from Validation Pool (later Pool).
+Сontroller accounts funds of validator and funds borrowed from Validation Pool. It can process deposits from Validator and from Validation Pool (later Pool).
 Upon request from validator it can send stake from it's balance to Elector. Upon request from Validator OR Pool, it can requests withdrawal from Elector, but only after at least three updated of validator sets ([here](https://github.com/ton-blockchain/nominator-pool/blob/main/func/pool.fc#L566) is why it is necessary for correct stake account). Thus Controller need ability to "count" validator sets updates, for that purpose anybody can send "check if changed" request. This logic may change in the future if elector will be upgraded.
 
 Ability of Validation Pool to request withdrawal from Elector protects against non-responding validator. 
 
 Validator-controler specify maximal interest rate, minimal and maximal TON credit size in borrow request. Validator can only request such parameters that it has interest plus recommended fine on it's balance. It can only request funds if is approved by governance.
 
-Upon receiving stake from Elector, Сontroller sends lended assets plus interest to the Validation pool.
+Upon receiving stake from Elector, Сontroller sends borrowed assets plus interest to the Validation pool.
 
 Handlers of incoming messages
 - deposit (only from Pool)
