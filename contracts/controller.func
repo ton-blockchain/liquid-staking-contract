@@ -128,7 +128,7 @@ int check_new_stake_msg(slice cs);
 
             if (op == elector::recover_stake_ok) {
                 state = state::REST;
-                if(balance > MIN_TONS_FOR_STORAGE + borrowed_amount) {
+                if(balance >= MIN_TONS_FOR_STORAGE + borrowed_amount) {
                   send_msg(pool,
                            borrowed_amount, ;; TODO add fee???
                            begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),
@@ -212,7 +212,7 @@ int check_new_stake_msg(slice cs);
                 if( (time_since_unfreeze < GRACE_PERIOD) | (~ borrowed_amount)) {
                   assert_sender!(sender_address, validator);
                 } else {
-                  if(balance - msg_value - STAKE_RECOVER_FINE > MIN_TONS_FOR_STORAGE) {
+                  if(balance - msg_value - STAKE_RECOVER_FINE >= MIN_TONS_FOR_STORAGE) {
                     send_msg(sender_address, STAKE_RECOVER_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
                   }
                 }
@@ -232,7 +232,7 @@ int check_new_stake_msg(slice cs);
                   assert_sender!(sender_address, validator);
                   send_excesses(sender_address);
                 } else {
-                  if(balance - HASH_UPDATE_FINE > MIN_TONS_FOR_STORAGE) {
+                  if(balance - HASH_UPDATE_FINE >= MIN_TONS_FOR_STORAGE) {
                     send_msg(sender_address, HASH_UPDATE_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
                   }
                 }
@@ -272,7 +272,7 @@ int check_new_stake_msg(slice cs);
 
                 int overdue_fine = (HASH_UPDATE_FINE * 3) - STAKE_RECOVER_FINE;
 
-                throw_unless(error::incorrect_new_stake::value_too_high, balance - value >=  MIN_TONS_FOR_STORAGE - overdue_fine);
+                throw_unless(error::incorrect_new_stake::value_too_high, balance - value >=  MIN_TONS_FOR_STORAGE + overdue_fine);
                 (_, stake_held_for, int elections_end_before) = get_validator_config();
                 (int utime_since, int utime_until, cell vset) = get_current_validator_set();
                 if (borrowed_amount) {
@@ -326,7 +326,7 @@ int check_new_stake_msg(slice cs);
               int overdue_fine = (HASH_UPDATE_FINE * 3) - STAKE_RECOVER_FINE;
               int interest_payment = muldiv(max_loan, max_interest, 65535);
               int validator_amount = balance - borrowed_amount;
-              throw_unless(error::too_high_loan_request_amount, validator_amount > (MIN_TONS_FOR_STORAGE + overdue_fine) + elector_fine + interest_payment);
+              throw_unless(error::too_high_loan_request_amount, validator_amount >= (MIN_TONS_FOR_STORAGE + overdue_fine) + elector_fine + interest_payment);
 
               cell payload = begin_cell()
                                          .store_body_header(pool::request_loan, query_id)
@@ -345,7 +345,7 @@ int check_new_stake_msg(slice cs);
                 (int utime_since, int utime_until, cell vset) = get_current_validator_set();
                 throw_unless(error::too_early_loan_return, utime_since > borrowing_time); ;; load was requested in previous round
                 int overdue = now() - utime_since;
-                if(balance > MIN_TONS_FOR_STORAGE + borrowed_amount) {
+                if(balance >= MIN_TONS_FOR_STORAGE + borrowed_amount) {
                   send_msg(pool,
                            borrowed_amount, ;; TODO add fee???
                            begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),

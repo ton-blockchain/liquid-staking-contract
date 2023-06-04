@@ -27,8 +27,8 @@ export function poolConfigToCell(config: PoolConfig): Cell {
     let emptyRoundData = beginCell()
                              .storeUint(0, 1) // empty dict
                              .storeUint(0, 32) // round_id
-                             .storeUint(0, 32) // active lenders
-                             .storeCoins(0) // lended
+                             .storeUint(0, 32) // active borrowers
+                             .storeCoins(0) // borrowed
                              .storeCoins(0) // expected
                              .storeCoins(0) // returned
                              .storeUint(0, 1) // profit sign
@@ -70,6 +70,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeCoins(0) // total_balance
               .storeUint(100, 16) // interest_rate
               .storeInt(config.optimistic_deposit_withdrawals, 1) // optimistic_deposit_withdrawals
+              .storeInt(-1n, 1) // deposits_open?
               .storeUint(0, 256) // saved_validator_set_hash
               .storeRef(
                 beginCell()

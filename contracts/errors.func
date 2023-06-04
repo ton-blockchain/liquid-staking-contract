@@ -11,6 +11,7 @@ const int error::not_enough_funds_for_loan = 0xf102;
 const int error::total_credit_too_high = 0xf103;
 
 const int error::deposit_amount_too_low = 0xf200;
+const int error::deposits_are_closed = 0xf201;
 
 const int error::not_enough_TON_to_process = 0xf300;
 
@@ -46,3 +47,4 @@ const int error::too_high_loan_request_amount = 0xfa04;
 
 const int error::no_credit = 0xfb00;
 const int error::too_early_loan_return = 0xfb01;
+
