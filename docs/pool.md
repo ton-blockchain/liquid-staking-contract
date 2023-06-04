@@ -6,20 +6,22 @@
 - `state`
 - `total_balance` - amount of TONs accounted when deposit, withdraw and profit
 - `interest_rate` - surplus of credit that should be returned with credit body. Set as integer equal share of credit volume times 65536
-- `current_round_lenders` - Current _round\_data_
-  * `lenders` - dict of lenders: `controller_address -> lended_amount`
+- `current_round_borrowers` - Current _round\_data_
+  * `borrowers` - dict of borrowers: `controller_address -> borrowed_amount`
   * `round_id`
-  * `active_lenders` - number of lenders that didn't return loan yet
-  * `lended` - amount of lended TON
-  * `returned` - amount of returned TON
-  * `profit` - currently obtained profit (at the end of the round should be equal to `returned`-`lended`)
-- `prev_round_lenders` - Previous _round\_data_
-  * `lenders` - dict of lenders: `controller_address -> lended_amount`
+  * `active_borrowers` - number of borrowers that didn't return loan yet
+  * `borrowed` - amount of borrowed TON (no interest)
+  * `expected` - amount of TON expected to be returned (`borrowed + interest`)
+  * `returned` - amount of already returned TON
+  * `profit` - currently obtained profit (at the end of the round should be equal to `returned-borrowed` and `expected-borrowed`)
+- `prev_round_borrowers` - Previous _round\_data_
+  * `borrowers` - dict of borrowers: `controller_address -> borrowed_amount`
   * `round_id`
-  * `active_lenders` - number of lenders that didn't return loan yet
-  * `lended` - amount of lended TON
-  * `returned` - amount of returned TON
-  * `profit` - currently obtained profit (at the end of the round should be equal to `returned`-`lended`)
+  * `active_borrowers` - number of borrowers that didn't return loan yet
+  * `borrowed` - amount of borrowed TON (no interest)
+  * `expected` - amount of TON expected to be returned (`borrowed + interest`)
+  * `returned` - amount of already returned TON
+  * `profit` - currently obtained profit (at the end of the round should be equal to `returned-borrowed` and `expected-borrowed`)
 - `min_loan_per_validator` - minimal loan volume per validator
 - `max_loan_per_validator` - maximal loan volume per validator
 - `governance_fee` - share of profit sent to governance

@@ -20,9 +20,9 @@ global int optimistic_deposit_withdrawals;
 global int deposits_open?;
 global int saved_validator_set_hash;
 
-;; [lenders_dict, round_id, active_lenders, lended, expected, returned, profit]
-global [cell, int, int, int, int, int, int] current_round_lenders;
-global [cell, int, int, int, int, int, int] prev_round_lenders;
+;; [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit]
+global [cell, int, int, int, int, int, int] current_round_borrowers;
+global [cell, int, int, int, int, int, int] prev_round_borrowers;
 
 global int min_loan_per_validator;
 global int max_loan_per_validator;
@@ -84,12 +84,12 @@ const int JETTONS_WORKCHAIN = 0;
 () log_round_completion (int, int, int, int) impure;
 () log_round_rotation (int) impure;
 
-([cell, int, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int, int] lenders_data)  impure; ;; called from close_loan
+([cell, int, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int, int] borrowers_data)  impure; ;; called from close_loan
 () finalize_deposit_withdrawal_round (int round_id)  impure; ;; called from finalize_lending_round
 
 
-([cell, int, int, int, int, int, int], (int)) ~add_loan([cell, int, int, int, int, int, int] lenders_data, slice borrower, int loan_body, int interest);
-([cell, int, int, int, int, int, int], (int, int)) ~close_loan([cell, int, int, int, int, int, int] lenders_data, slice borrower, int amount);
+([cell, int, int, int, int, int, int], (int)) ~add_loan([cell, int, int, int, int, int, int] borrowers_data, slice borrower, int loan_body, int interest);
+([cell, int, int, int, int, int, int], (int, int)) ~close_loan([cell, int, int, int, int, int, int] borrowers_data, slice borrower, int amount);
 
 slice _get_controller_address (int controller_id, slice validator) method_id;
 (slice, cell) build_controller_address(int controller_id, slice validator);
@@ -173,7 +173,7 @@ int current_round_index();
           send_raw_message(msg.end_cell(), sendmode::REGULAR);
 
           log_loan(sender_address, actual_loan);
-          int total_loan = current_round_lenders~add_loan(sender_address, actual_loan, interest);
+          int total_loan = current_round_borrowers~add_loan(sender_address, actual_loan, interest);
           throw_unless(error::total_credit_too_high, total_loan <= max_loan + interest);
           send_msg_builder(interest_manager, SERVICE_NOTIFICATION_AMOUNT,
                     begin_cell()
@@ -189,10 +189,10 @@ int current_round_index();
         assert_1of2_state!(state::NORMAL, state::REPAYMENT_ONLY);
         ;; we expect loans from previous round only
         ;; note, close_loan finalize round if last loan is closed
-        (int closed, int last_one) = prev_round_lenders~close_loan(sender_address, msg_value);
+        (int closed, int last_one) = prev_round_borrowers~close_loan(sender_address, msg_value);
         ifnot (closed) {
           ;; lets check other side
-          (int closed, last_one) = current_round_lenders~close_loan(sender_address, msg_value);
+          (int closed, last_one) = current_round_borrowers~close_loan(sender_address, msg_value);
           if(closed) {
               ;; we got return in unexpected round
               ;; it is possible that round mixed up, stop crediting
@@ -328,64 +328,64 @@ int current_round_index();
     return (controller_address, init_state);
 }
 
-([cell, int, int, int, int, int, int], (int)) ~add_loan([cell, int, int, int, int, int, int] lenders_data, slice borrower, int loan_body, int interest) {
-    var [lenders_dict, round_id, active_lenders, lended, expected, returned, profit] = lenders_data;
+([cell, int, int, int, int, int, int], (int)) ~add_loan([cell, int, int, int, int, int, int] borrowers_data, slice borrower, int loan_body, int interest) {
+    var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = borrowers_data;
 
     (int wc, int addr_hash) = parse_std_addr(borrower);
     throw_unless(error::controller_in_wrong_workchain, wc == CONTROLLER_WORKCHAIN);
 
-    int already_lended = 0;
+    int already_borrowed = 0;
     int accounted_interest = 0;
-    (slice prev_data, int found?) = lenders_dict.udict_get?(ADDR_SIZE, addr_hash);
+    (slice prev_data, int found?) = borrowers_dict.udict_get?(ADDR_SIZE, addr_hash);
     if(found?) {
-        already_lended = prev_data~load_coins();
+        already_borrowed = prev_data~load_coins();
         accounted_interest = prev_data~load_coins();
     } else {
-      active_lenders += 1;
+      active_borrowers += 1;
     }
-    already_lended += loan_body;
+    already_borrowed += loan_body;
     accounted_interest += interest;
-    lended += loan_body;
+    borrowed += loan_body;
     expected +=  loan_body + interest;
     
-    lenders_dict~udict_set_builder(ADDR_SIZE, addr_hash, begin_cell().store_coins(already_lended).store_coins(accounted_interest));
+    borrowers_dict~udict_set_builder(ADDR_SIZE, addr_hash, begin_cell().store_coins(already_borrowed).store_coins(accounted_interest));
     
-    throw_unless(error::credit_book_too_deep, cell_depth(lenders_dict) < MAX_LOAN_DICT_DEPTH);
+    throw_unless(error::credit_book_too_deep, cell_depth(borrowers_dict) < MAX_LOAN_DICT_DEPTH);
     
-    return ([lenders_dict, round_id, active_lenders, expected, lended, returned, profit], already_lended);
+    return ([borrowers_dict, round_id, active_borrowers, expected, borrowed, returned, profit], already_borrowed);
 }
 
-([cell, int, int, int, int, int, int], (int, int)) ~close_loan([cell, int, int, int, int, int, int] lenders_data, slice borrower, int amount) {
-    var [lenders_dict, round_id, active_lenders, lended, expected, returned, profit] = lenders_data;
+([cell, int, int, int, int, int, int], (int, int)) ~close_loan([cell, int, int, int, int, int, int] borrowers_data, slice borrower, int amount) {
+    var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = borrowers_data;
 
     (int wc, int addr_hash) = parse_std_addr(borrower);
     throw_unless(error::controller_in_wrong_workchain, wc == CONTROLLER_WORKCHAIN);
 
-    (slice prev_data, int found?) = lenders_dict~udict_delete_get?(ADDR_SIZE, addr_hash);
+    (slice prev_data, int found?) = borrowers_dict~udict_delete_get?(ADDR_SIZE, addr_hash);
     ifnot (found?) {
-      return (lenders_data, (false, false));
+      return (borrowers_data, (false, false));
     }
 
-    int was_lended = prev_data~load_coins();
+    int was_borrowed = prev_data~load_coins();
 
-    profit += amount - was_lended;
+    profit += amount - was_borrowed;
     
     returned += amount;
     
-    active_lenders -= 1;
+    active_borrowers -= 1;
 
-    log_repayment(borrower, was_lended, amount - was_lended);
+    log_repayment(borrower, was_borrowed, amount - was_borrowed);
 
-    lenders_data = [lenders_dict, round_id, active_lenders, lended, expected, returned, profit];
-    int last_one = active_lenders;
+    borrowers_data = [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit];
+    int last_one = active_borrowers;
     
-    return (lenders_data, (true, last_one));
+    return (borrowers_data, (true, last_one));
 }
 
-([cell, int, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int, int] lenders_data) impure {
-    var [lenders_dict, round_id, active_lenders, lended, expected, returned, profit] = lenders_data;
-    throw_unless(error::finalizing_active_credit_round, lenders_dict.null?());
-    throw_unless(error::finalizing_active_credit_round, active_lenders == 0); ;; TODO - halt here?
+([cell, int, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int, int] borrowers_data) impure {
+    var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = borrowers_data;
+    throw_unless(error::finalizing_active_credit_round, borrowers_dict.null?());
+    throw_unless(error::finalizing_active_credit_round, active_borrowers == 0); ;; TODO - halt here?
     var b = [profit, total_balance];
     profit -= FINALIZE_ROUND_FEE;
     int fee = max(muldiv(governance_fee, profit, 256), 0);
@@ -403,11 +403,11 @@ int current_round_index();
     send_msg_builder(interest_manager, SERVICE_NOTIFICATION_AMOUNT,
              begin_cell()
                .store_body_header(interest_manager::stats, cur_lt())
-               .store_coins(lended)
+               .store_coins(borrowed)
                .store_coins(returned)
                .store_signed_coins(profit), ;; duplication at this point?
              msgflag::NON_BOUNCEABLE, sendmode::PAY_FEES_SEPARETELY);
-    log_round_completion(round_id, lended, returned, profit);
+    log_round_completion(round_id, borrowed, returned, profit);
     finalize_deposit_withdrawal_round(round_id);
     ;; do we need to nulify data here ???
     return ([null(), round_id, 0, 0, 0, 0, 0], ());
@@ -424,9 +424,9 @@ int current_round_index();
                             .store_signed_coins(profit));
 }
 
-() log_round_completion (int round_id, int lended, int returned, int profit) impure {
+() log_round_completion (int round_id, int borrowed, int returned, int profit) impure {
     emit_log(3, begin_cell().store_uint(round_id, 32)
-                            .store_coins(lended)
+                            .store_coins(borrowed)
                             .store_coins(returned)
                             .store_signed_coins(profit));
 }
@@ -439,21 +439,21 @@ int current_round_index();
     (int utime_since, int utime_until, cell vset) = get_current_validator_set();
     int current_hash = cell_hash(vset);
     if (saved_validator_set_hash != current_hash) {
-      var [lenders_dict, round_id, active_lenders, lended, expected, returned, profit] = prev_round_lenders;
+      var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = prev_round_borrowers;
       
-      if((~ lenders_dict.null?()) | (active_lenders > 0)) {
-        ;; not all lenders of previous round returned loans
+      if((~ borrowers_dict.null?()) | (active_borrowers > 0)) {
+        ;; not all borrowers of previous round returned loans
         ;; do not rotate round
         ;; state = state::REPAYMENT_ONLY;
         return ();
       } else {
-        prev_round_lenders~finalize_lending_round();
+        prev_round_borrowers~finalize_lending_round();
       }
       
       saved_validator_set_hash = current_hash;
       int round_index = current_round_index() + 1;
       log_round_rotation(round_index);
-      (prev_round_lenders, current_round_lenders) = (current_round_lenders, [null(), round_index, 0, 0, 0, 0, 0]);
+      (prev_round_borrowers, current_round_borrowers) = (current_round_borrowers, [null(), round_index, 0, 0, 0, 0, 0]);
     }
 }
 
@@ -581,7 +581,7 @@ int current_round_index();
 
 int current_round_index() {
     ;;TODO optimize
-    var [lenders_dict, round_id, active_lenders, lended, expected, returned, profit] = current_round_lenders;
+    var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = current_round_borrowers;
     return round_id;
 }
 slice get_current_round_deposit_minter() method_id {
@@ -609,8 +609,8 @@ slice get_current_round_withdrawal_minter() method_id {
 }
 
 (int, int) _get_projected_conversion_ratio () inline {
-    var [lenders_dict, round_id, active_lenders, lended, expected, returned, profit] = prev_round_lenders;
-    return (expected - lended + total_balance, supply);
+    var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = prev_round_borrowers;
+    return (expected - borrowed + total_balance, supply);
 }
 
 
