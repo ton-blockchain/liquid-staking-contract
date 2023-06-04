@@ -425,7 +425,9 @@ describe('Controller & Pool', () => {
     it('controller should return money to pool', async () => {
 
         const confDict = loadConfig(blockchain.config);
-        confDict.set(34, beginCell().storeUint(0x12, 8).storeUint(Math.floor(Date.now() / 1000)+ 12000, 32).storeUint(Math.floor(Date.now() / 1000)+ 20000, 32).endCell());
+        confDict.set(34, beginCell().storeUint(0x12, 8)
+                     .storeUint(200000, 32)
+                     .storeUint(300000, 32).endCell());
         blockchain.setConfig(beginCell().storeDictDirect(confDict).endCell());
 
         //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
