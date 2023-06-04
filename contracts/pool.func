@@ -17,6 +17,7 @@ global int state;
 global int total_balance;
 global int interest_rate;
 global int optimistic_deposit_withdrawals;
+global int deposits_open?;
 global int saved_validator_set_hash;
 
 ;; [lenders_dict, round_id, active_lenders, lended, expected, returned, profit]
@@ -218,6 +219,7 @@ int current_round_index();
     }
     if (op == pool::deposit) {
         assert_state!(state::NORMAL);
+        throw_unless(error::deposits_are_closed, deposits_open?);
         int deposit_amount = msg_value - DEPOSIT_FEE;
         throw_unless(error::deposit_amount_too_low, deposit_amount > 0);
         if(optimistic_deposit_withdrawals) {
@@ -293,6 +295,11 @@ int current_round_index();
       if(in_msg_body~load_int(1)) {
         consigliere = in_msg_body~load_msg_addr();
       }
+    }
+    if(op == governor::set_deposit_settings) {
+        assert_sender!(sender_address, governor);
+        optimistic_deposit_withdrawals = in_msg_body~load_int(1);
+        deposits_open?  = in_msg_body~load_int(1);
     }
     if (op == interest_manager::set_interest) {
         assert_state!(state::NORMAL);
