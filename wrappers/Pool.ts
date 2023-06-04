@@ -118,7 +118,7 @@ export class Pool implements Contract {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0xdf108122, 32) // op
+                     .storeUint(0xdf108122, 32) // op = pool::deploy_controller
                      .storeUint(0, 64) // query id
                      .storeUint(controllerId, 32) // controller_id
                   .endCell(),
@@ -130,7 +130,7 @@ export class Pool implements Contract {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0x47d54391, 32) // op
+                     .storeUint(0x47d54391, 32) // op = pool::deposit
                      .storeUint(1, 64) // query id
                   .endCell(),
         });
