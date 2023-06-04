@@ -376,19 +376,26 @@ int current_round_index();
 }
 
 ([cell, int, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int, int] lenders_data) impure {
+    ;; Does all the necessary value checks, sends logs
+    ;; and governor fees, nulifies variables.
     var [lenders_dict, round_id, active_lenders, lended, expected, returned, profit] = lenders_data;
     throw_unless(error::finalizing_active_credit_round, lenders_dict.null?());
     throw_unless(error::finalizing_active_credit_round, active_lenders == 0); ;; TODO - halt here?
-    var b = [profit, total_balance];
+    var b = [profit, total_balance]; ;; backup????
+
     profit -= FINALIZE_ROUND_FEE;
+
+    ;; governance_fee / 256 <= 1 ratio, share to send to governance
     int fee = max(muldiv(governance_fee, profit, 256), 0);
     profit -= fee;
-    profit = max( - total_balance, profit); ;; loss (== -profit) can consume no more than total_balance
+
+    ;; if there is negative profit (loss), then it can take maximum all the balance
+    profit = max(profit, - total_balance);
     total_balance += profit;
-    ;;total_balance = max(total_balance, 0);
+
     ;;int effective_supply = supply + requested_for_withdrawal;
 
-    if (fee > SERVICE_NOTIFICATION_AMOUNT) { ;; otherwise it is less than fee
+    if (fee > SERVICE_NOTIFICATION_AMOUNT) { ;; otherwise it is less than msg value
       send_msg_builder(governor, fee,
                begin_cell().store_body_header(governor::operation_fee, cur_lt()),
                msgflag::NON_BOUNCEABLE, sendmode::REGULAR);
@@ -400,8 +407,10 @@ int current_round_index();
                .store_coins(returned)
                .store_signed_coins(profit), ;; duplication at this point?
              msgflag::NON_BOUNCEABLE, sendmode::PAY_FEES_SEPARETELY);
+
     log_round_completion(round_id, lended, returned, profit);
     finalize_deposit_withdrawal_round(round_id);
+
     ;; do we need to nulify data here ???
     return ([null(), round_id, 0, 0, 0, 0, 0], ());
 }
@@ -442,7 +451,7 @@ int current_round_index();
       } else {
         prev_round_lenders~finalize_lending_round();
       }
-      
+
       saved_validator_set_hash = current_hash;
       int round_index = current_round_index() + 1;
       log_round_rotation(round_index);
@@ -531,6 +540,8 @@ int current_round_index();
 }
 
 () initiate_distribution_of_tons(round_id) impure {
+    ;; Sends tons for distribution, in proportion to
+    ;; the number requested before the start of the round.
     ifnot(requested_for_withdrawal) {
         return ();
     }
@@ -557,6 +568,8 @@ int current_round_index();
 }
 
 () initiate_distribution_of_pool_jettons(round_id) impure {
+    ;; Distributes pool tokens among those who received
+    ;; deposit tokens before the start of the round.
     ifnot(requested_for_deposit) {
         return ();
     }

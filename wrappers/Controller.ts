@@ -83,7 +83,7 @@ export class Controller implements Contract {
             value: toNano('0.5'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0x452f7112, 32) // op
+                     .storeUint(0x452f7112, 32) // op = controller::send_request_loan
                      .storeUint(1, 64) // query id
                      .storeCoins(minLoan)
                      .storeCoins(maxLoan)
