@@ -216,7 +216,6 @@ int check_new_stake_msg(slice cs);
                     send_msg(sender_address, STAKE_RECOVER_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
                   }
                 }
-
             } elseif (op == controller::update_validator_hash) {
                 assert_state!(state::FUNDS_STAKEN);
                 in_msg_body.end_parse();
@@ -317,8 +316,8 @@ int check_new_stake_msg(slice cs);
 
               (int elections_start_before, _, int elections_end_before) = get_validator_config();
               (int utime_since, int utime_until, cell vset) = get_current_validator_set();
-              throw_unless(error::too_early_loan_request, now() > utime_until - elections_start_before); ;; elections started
-              throw_unless(error::too_late_loan_request, now() < utime_until - elections_end_before);   ;; elections not yet closed
+              throw_unless(error::too_early_loan_request, now() > utime_until - elections_start_before); ;; elections should be started
+              throw_unless(error::too_late_loan_request, now() < utime_until - elections_end_before);   ;; elections should be not closed yet
 
 
               ;; lets check whether we can afford it
@@ -326,18 +325,24 @@ int check_new_stake_msg(slice cs);
               int overdue_fine = (HASH_UPDATE_FINE * 3) - STAKE_RECOVER_FINE;
               int interest_payment = muldiv(max_loan, max_interest, 65535);
               int validator_amount = balance - borrowed_amount;
-              throw_unless(error::too_high_loan_request_amount, validator_amount >= (MIN_TONS_FOR_STORAGE + overdue_fine) + elector_fine + interest_payment);
+
+              throw_unless(error::too_high_loan_request_amount,
+                           validator_amount >= MIN_TONS_FOR_STORAGE
+                                                 + overdue_fine
+                                                 + elector_fine
+                                                 + interest_payment);
 
               cell payload = begin_cell()
-                                         .store_body_header(pool::request_loan, query_id)
-                                         .store_slice(request)
-                                         .store_slice(static_data)
+                               .store_body_header(pool::request_loan, query_id)
+                               .store_slice(request)
+                               .store_slice(static_data)
                              .end_cell();
               send_msg(pool,
                        0,
                        payload,
                        msgflag::BOUNCEABLE,
                        sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);
+
               state = state::SENT_BORROWING_REQUEST;
             } elseif (op == controller::return_unused_loan) {
                 assert_state!(state::REST);

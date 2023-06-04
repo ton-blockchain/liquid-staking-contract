@@ -1,5 +1,5 @@
-import { Blockchain, SandboxContract, TreasuryContract } from '@ton-community/sandbox';
-import { Cell, toNano, Dictionary, beginCell } from 'ton-core';
+import { Blockchain, SandboxContract, TreasuryContract, BlockchainSnapshot } from '@ton-community/sandbox';
+import { Cell, toNano, fromNano, Dictionary, beginCell, internal, Message } from 'ton-core';
 import { Pool } from '../wrappers/Pool';
 import { Controller } from '../wrappers/Controller';
 import { DAOJettonMinter, jettonContentToCell } from '../wrappers/DAOJettonMinter';
@@ -14,7 +14,10 @@ const loadConfig = (config:Cell) => {
         };
 
 const errors = {
-     WRONG_SENDER: 0x9283
+    WRONG_SENDER: 0x9283,
+    TOO_EARLY_LOAN_REQUEST: 0xfa02,
+    TOO_LATE_LOAN_REQUEST: 0xfa03,
+    TOO_HIGH_LOAN_REQUEST_AMOUNT: 0xfa04,
 };
 
 
@@ -48,6 +51,7 @@ describe('Controller & Pool', () => {
         dao_voting_code = await compile('DAOVoting');
 
         blockchain = await Blockchain.create();
+        blockchain.now = 100
 
         deployer = await blockchain.treasury('deployer', {balance: toNano("1000000000")});
         notDeployer = await blockchain.treasury('notDeployer', {balance: toNano("1000000000")});
@@ -184,15 +188,20 @@ describe('Controller & Pool', () => {
         //await blockchain.setVerbosityForAddress(prevAwaitedJettonMinter.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
 
         const confDict = loadConfig(blockchain.config);
+        /*
+        validators_ext#12 utime_since:uint32 utime_until:uint32 
+          total:(## 16) main:(## 16) { main <= total } { main >= 1 } 
+          total_weight:uint64 list:(HashmapE 16 ValidatorDescr) = ValidatorSet;
+        */
         confDict.set(34, beginCell().storeUint(0x12, 8).storeUint(0, 32).storeUint(0xffffffff, 32).endCell());
         blockchain.setConfig(beginCell().storeDictDirect(confDict).endCell());
-
 
         // action handles round rotation
         const depositResult = await pool.sendDeposit(deployer.getSender(), toNano('3.05'));
 
         let awaitedJettonMinter = blockchain.openContract(await pool.getDepositMinter());
         let myDepositWallet = await awaitedJettonMinter.getWalletAddress(deployer.address);
+
         expect(depositResult.transactions).toHaveTransaction({
             on: prevAwaitedJettonMinter.address,
             success: true,
@@ -235,14 +244,12 @@ describe('Controller & Pool', () => {
         let myPoolJettonWalletAddress = await poolJetton.getWalletAddress(deployer.address);
         let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
 
-
         expect(burnResult.transactions).toHaveTransaction({
             from: myPoolJettonWallet.address,
             on: deployer.address,
             op: 0xd53276db, // excesses
             success: true,
         });
-
     });
 
     it('should withdraw', async () => {
@@ -262,7 +269,6 @@ describe('Controller & Pool', () => {
             op: 0x7362d09c, // excesses
             success: true,
         });
-
     });
 
     it('should pay out tons', async () => {
@@ -296,38 +302,124 @@ describe('Controller & Pool', () => {
             op: 0xdb3b8abd, // distribution
             success: true,
         });
-
     });
 
-    it('should lend money', async () => {
+    let hadDepositState: BlockchainSnapshot;
+
+    it('should rotate and deposit again', async () => {
         // rotate round another time
         const confDict = loadConfig(blockchain.config);
-        confDict.set(34, beginCell().storeUint(0x12, 8).storeUint(0, 32).storeUint(Math.floor(Date.now() / 1000)+ 10000, 32).endCell());
+        const timeSince = 100000;
+        const timeUntil = 200000;
+
+        confDict.set(34, beginCell().storeUint(0x12, 8).storeUint(timeSince, 32)
+                     .storeUint(timeUntil, 32).endCell());
+        let ds = confDict.get(15)?.beginParse();
+
+        console.log("elected for", ds?.loadUint(32));
+        console.log("start before", ds?.loadUint(32));
+        console.log("end before", ds?.loadUint(32));
+        console.log("stake held", ds?.loadUint(32));
+
         blockchain.setConfig(beginCell().storeDictDirect(confDict).endCell());
-        // touch pool to trigger rotate
-        // await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
-        const secondDeposit = await pool.sendDeposit(deployer.getSender(), toNano('1000000'));
 
-        const controllerDeployResult = await controller.sendLoanRequest(deployer.getSender(), toNano('1000'), toNano('10000'), 1000n);
-        expect(controllerDeployResult.transactions).toHaveTransaction({
-                         from: deployer.address,
-                         to: controller.address,
-                         success: true,
-        });
-        expect(controllerDeployResult.transactions).toHaveTransaction({
-                         from: controller.address,
-                         to: pool.address,
-                         success: true,
-        });
-        expect(controllerDeployResult.transactions).toHaveTransaction({
-                         from: pool.address,
-                         to: controller.address,
-                         success: true,
-                         op:0x1690c604
-        });
+        await pool.sendDeposit(deployer.getSender(), toNano('1000000')); // megaton
+        hadDepositState = blockchain.snapshot();
+    });
+    function buildMessage (body: Cell): Message {
+        return {
+                info: {
+                type: 'internal',
+                bounce: true,
+                ihrDisabled: true,
+                bounced: false,
+                src: deployer.address,
+                dest: controller.address,
+                value: { coins: toNano('1') },
+                ihrFee: 0n,
+                forwardFee: 0n,
+                createdAt: 0,
+                createdLt: 0n
+            },
+            body: body
+        };
+    }
 
+    it('controller should not borrow early', async () => {
+        blockchain.now = 150000;
+        const earlyRequest = await blockchain.sendMessage(
+            buildMessage(Controller.loanRequestBody(
+                toNano('1000'),
+                toNano('10000'),
+                1000n
+            )));
+        expect(earlyRequest.transactions).toHaveTransaction({
+            from: deployer.address,
+            on: controller.address,
+            aborted: true,
+            exitCode: errors.TOO_EARLY_LOAN_REQUEST,
+        });
     });
 
+    it('controller should not borrow late', async () => {
+        blockchain.now = 199999;
+        const earlyRequest = await blockchain.sendMessage(
+            buildMessage(Controller.loanRequestBody(
+                toNano('1000'),
+                toNano('10000'),
+                1000n
+            )));
+        expect(earlyRequest.transactions).toHaveTransaction({
+            from: deployer.address,
+            on: controller.address,
+            aborted: true,
+            exitCode: errors.TOO_LATE_LOAN_REQUEST,
+        });
+    });
+
+    it('controller should not be able to borrow much', async () => {
+        await blockchain.loadFrom(hadDepositState);
+        blockchain.now = 170000;
+        const receiveRequestMessageResult = await blockchain.sendMessage(
+            buildMessage(Controller.loanRequestBody(
+                    toNano('90000000'),
+                    toNano('100000000'),
+                    1000n
+            )));
+        expect(receiveRequestMessageResult.transactions).toHaveTransaction({
+            from: deployer.address,
+            on: controller.address,
+            aborted: true,
+            exitCode: errors.TOO_HIGH_LOAN_REQUEST_AMOUNT,
+        });
+    });
+    it ('controller should borrow successfully', async () => {
+        await blockchain.loadFrom(hadDepositState);
+        blockchain.now = 170000;
+
+        const sendLoanRequestResult = await controller.sendLoanRequest(deployer.getSender(),
+            toNano('1000'), // minLoan 1 kiloton
+            toNano('10000'), // maxLoan 10 kiloton
+            1000); // maxinterest 1000 / 65536 = 1.52587890625%
+
+        expect(sendLoanRequestResult.transactions).toHaveTransaction({
+             from: deployer.address,
+             to: controller.address,
+             success: true,
+        });
+        expect(sendLoanRequestResult.transactions).toHaveTransaction({
+             from: controller.address,
+             to: pool.address,
+             success: true,
+        });
+        expect(sendLoanRequestResult.transactions).toHaveTransaction({
+             from: pool.address,
+             to: controller.address,
+             success: true,
+             op: 0x1690c604, // op = controller::credit
+             value: (x) => {console.log(fromNano(x!)); return true},
+        });
+    });
 
 
     it('controller should return money to pool', async () => {

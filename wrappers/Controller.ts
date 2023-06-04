@@ -78,19 +78,24 @@ export class Controller implements Contract {
         });
     }
 
-    async sendLoanRequest(provider: ContractProvider, via: Sender, minLoan: bigint, maxLoan: bigint, maxInterest: bigint) {
+    static loanRequestBody(minLoan: bigint, maxLoan: bigint, maxInterest: number | bigint) {
+        return beginCell()
+            .storeUint(0x452f7112, 32) // op = controller::send_request_loan
+            .storeUint(1, 64) // query id
+            .storeCoins(minLoan)
+            .storeCoins(maxLoan)
+            .storeUint(maxInterest, 16)
+            .endCell();
+    }
+
+    async sendLoanRequest(provider: ContractProvider, via: Sender, minLoan: bigint, maxLoan: bigint, maxInterest: number | bigint) {
         await provider.internal(via, {
             value: toNano('0.5'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: beginCell()
-                     .storeUint(0x452f7112, 32) // op = controller::send_request_loan
-                     .storeUint(1, 64) // query id
-                     .storeCoins(minLoan)
-                     .storeCoins(maxLoan)
-                     .storeUint(maxInterest, 16)
-                  .endCell(),
+            body: Controller.loanRequestBody(minLoan, maxLoan, maxInterest),
         });
     }
+
     async sendReturnUnusedLoan(provider: ContractProvider, via: Sender) {
         await provider.internal(via, {
             value: toNano('0.5'),
