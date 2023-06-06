@@ -272,7 +272,6 @@ describe('Cotroller mock', () => {
         const curSet = getVset(bc.config, 34);
         // Too early
         bc.now = curSet.utime_since;
-        await controller.sendDeploy(deployer.getSender());
         await controller.sendCredit(bc.sender(poolAddress), toNano('200000'), toNano('201000'));
         await testNewStake(Errors.newStake.wrongly_used_credit,
                            validator.wallet.getSender(),
