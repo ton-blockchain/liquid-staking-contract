@@ -101,6 +101,23 @@ export class Controller implements Contract {
         });
     }
 
+    static updateHashMessage(query_id: bigint | number = 0) {
+        return beginCell().storeUint(Op.controller.update_validator_hash, 32)
+                          .storeUint(query_id, 64)
+               .endCell();
+    }
+
+    async sendUpdateHash(provider: ContractProvider,
+                         via: Sender,
+                         value: bigint = toNano('1'),
+                         query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: Controller.updateHashMessage()
+        });
+    }
+
     async sendLoanRequest(provider: ContractProvider, via: Sender, minLoan: bigint, maxLoan: bigint, maxInterest: bigint) {
         await provider.internal(via, {
             value: toNano('0.5'),
@@ -123,6 +140,12 @@ export class Controller implements Contract {
                      .storeUint(1, 64) // query id
                   .endCell(),
         });
+    }
+    static validatorWithdrawMessage(amount: bigint, query_id: bigint | number = 0) {
+        return beginCell().storeUint(Op.controller.withdraw_validator, 32)
+                          .storeUint(query_id, 64)
+                          .storeCoins(amount)
+               .endCell();
     }
 
     static newStakeMessage(stake_val: bigint,
