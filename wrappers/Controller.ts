@@ -1,7 +1,7 @@
 import { Address, toNano, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from 'ton-core';
 import { buff2bigint } from '../utils';
 import { signData } from "./ValidatorUtils";
-import { Conf } from "../PoolConstants";
+import { Conf, Op } from "../PoolConstants";
 
 
 export type ControllerConfig = {
@@ -64,18 +64,36 @@ export class Controller implements Contract {
             value: value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0xd372158c, 32) // op = top up
+                     .storeUint(Op.controller.top_up, 32) // op = top up
                      .storeUint(0, 64) // query id
                   .endCell(),
         });
     }
 
+    static creditMessage(credit:bigint, query_id:number | bigint = 0) {
+        return beginCell().storeUint(Op.controller.credit, 32)
+                          .storeUint(query_id, 64)
+                          .storeCoins(credit)
+               .endCell();
+    }
+
+    async sendCredit(provider: ContractProvider,
+                     via: Sender,
+                     credit:bigint,
+                     value:bigint = toNano('0.1'),
+                     query_id?: number | bigint) {
+        await provider.internal(via, {
+            value: value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: Controller.creditMessage(credit, query_id)
+        });
+    }
     async sendApprove(provider: ContractProvider, via: Sender) {
         await provider.internal(via, {
             value: toNano('0.1'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0x7b4b42e6, 32) // op
+                     .storeUint(Op.controller.approve, 32) // op
                      .storeUint(1, 64) // query id
                   .endCell(),
         });
@@ -86,7 +104,7 @@ export class Controller implements Contract {
             value: toNano('0.5'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0x452f7112, 32) // op
+                     .storeUint(Op.controller.send_request_loan, 32) // op
                      .storeUint(1, 64) // query id
                      .storeCoins(minLoan)
                      .storeCoins(maxLoan)
@@ -170,4 +188,42 @@ export class Controller implements Contract {
 	          value
         });
 	  }
+
+    // Get methods
+    async getControllerData(provider: ContractProvider) {
+        const {stack} = await provider.get('get_validator_controller_data', []);
+        return {
+            state: stack.readNumber(),
+            approved: stack.readBoolean(),
+            stakeSent: stack.readBigNumber(),
+            stakeAt: stack.readNumber(),
+            validatorSetHash: stack.readBigNumber(),
+            validatorSetChangeCount: stack.readNumber(),
+            validatorSetChangeTime: stack.readNumber(),
+            stakeHeldFor: stack.readNumber(),
+            borrowedAmount: stack.readBigNumber(),
+            borrowingTime: stack.readNumber(),
+            validator: stack.readAddress(),
+            pool: stack.readAddress(),
+            sudoer: stack.readAddressOpt()
+        };
+    }
+    async getValidatorAmount(provider: ContractProvider) {
+        const res = await this.getControllerData(provider);
+        const state = await provider.getState();
+        return state.balance - res.borrowedAmount;
+    }
+
+    async getMaxPunishment(provider: ContractProvider, stake:bigint) {
+        const {stack} = await provider.get('get_max_punishment', [{type:"int", value:stake}]);
+        return stack.readBigNumber();
+    }
+
+    async getBalanceForLoan(provider: ContractProvider, credit:bigint, interest:bigint) {
+        const {stack} = await provider.get('required_balance_for_loan', [
+            {type: "int", value: credit},
+            {type: "int", value: interest}
+        ]);
+        return stack.readBigNumber();
+    }
 }
