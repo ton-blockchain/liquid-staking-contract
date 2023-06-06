@@ -6,10 +6,21 @@ export abstract class Conf {
     static readonly depositFee     = toNano('0.25');
     static readonly withdrawlFee   = toNano('0.25');
     static readonly minStake       = toNano('50000');
+    static readonly hashUpdateFine = toNano('10');
+    static readonly stakeRecoverFine = toNano('10');
 };
 
 export abstract class Op {
     static readonly controller = {
+        top_up : 0xd372158c,
+        update_validator_hash : 0xf0fd2250,
+        approve : 0x7b4b42e6,
+        disapprove : 0xe8a0abfe,
+        recover_stake : 0xeb373a05,
+        credit : 0x1690c604,
+        withdraw_validator : 0xcefaaefd,
+        return_unused_loan : 0xed7378a6,
+        send_request_loan: 0x452f7112,
         newStake: 0x4e73744b
     }
     static readonly elector = {
@@ -17,7 +28,14 @@ export abstract class Op {
     }
 }
 
-export abstract class Error {
+export abstract class ControllerState {
+    static readonly REST = 0;
+    static readonly SENT_BORROWING_REQUEST = 1;
+    static readonly SENT_STAKE_REQUEST = 2;
+    static readonly FUNDS_STAKEN = 3;
+    static readonly HALTED = 0xff;
+}
+export abstract class Errors {
  static readonly unknown_op = 0xffff;
 
  static readonly wrong_sender = 0x9283;
