@@ -7,7 +7,7 @@ import { compile } from '@ton-community/blueprint';
 import { randomAddress } from "@ton-community/test-utils";
 import { getElectionsConf, getValidatorsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
 import { buff2bigint, differentAddress, getRandomTon } from "../utils";
-import { Conf, ControllerState, Errors } from "../PoolConstants";
+import { Conf, ControllerState, Errors, Op } from "../PoolConstants";
 
 type Validator = {
   wallet: SandboxContract<TreasuryContract>,
@@ -302,6 +302,39 @@ describe('Cotroller mock', () => {
         expect(stateAfter.validatorSetChangeTime).toEqual(getVset(confDict, 34).utime_since);
         expect(stateAfter.stakeAt).toEqual(12345);
         expect(stateAfter.stakeHeldFor).toEqual(eConf.stake_held_for);
+        snapStates.set('stake_sent', bc.snapshot());
+      });
+      it('New stake bounce should only be allowed from elector', async () => {
+        await loadSnapshot('stake_sent');
+        const stateBefore   = await getContractData(controller.address);
+        const notElector    = differentAddress(electorAddress);
+        const controllerSmc = await bc.getContract(controller.address);
+        await controllerSmc.receiveMessage(internal({
+          from: notElector,
+          to: controller.address,
+          body: beginCell().storeUint(0xFFFFFFFF, 32)
+                           .storeUint(Op.elector.new_stake, 32)
+                .endCell(),
+          value: toNano('1'),
+          bounced: true
+        }), {now: bc.now ?? Math.floor(Date.now() / 1000)});
+        expect(await getContractData(controller.address)).toEqualCell(stateBefore);
+      });
+      it('New stake bounce handling', async () => {
+        await loadSnapshot('stake_sent');
+        const controllerSmc = await bc.getContract(controller.address);
+
+        await controllerSmc.receiveMessage(internal({
+          from: electorAddress,
+          to: controller.address,
+          body: beginCell().storeUint(0xFFFFFFFF, 32)
+                           .storeUint(Op.elector.new_stake, 32)
+                .endCell(),
+          value: toNano('1'),
+          bounced: true
+        }), {now: bc.now ?? Math.floor(Date.now() / 1000)});
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.state).toEqual(ControllerState.REST);
       });
     });
 });
