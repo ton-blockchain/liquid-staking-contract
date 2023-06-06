@@ -1,4 +1,4 @@
-import { Blockchain,BlockchainSnapshot,SandboxContract,TreasuryContract } from "@ton-community/sandbox";
+import { Blockchain,BlockchainSnapshot,internal,SandboxContract,TreasuryContract } from "@ton-community/sandbox";
 import { Controller, controllerConfigToCell } from '../wrappers/Controller';
 import { Address, Sender, Cell, toNano, Dictionary, beginCell } from 'ton-core';
 import { keyPairFromSeed, getSecureRandomBytes, getSecureRandomWords, KeyPair } from 'ton-crypto';
@@ -6,7 +6,7 @@ import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
 import { randomAddress } from "@ton-community/test-utils";
 import { getElectionsConf, getValidatorsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
-import { differentAddress, getRandomTon } from "../utils";
+import { buff2bigint, differentAddress, getRandomTon } from "../utils";
 import { Conf, ControllerState, Errors } from "../PoolConstants";
 
 type Validator = {
