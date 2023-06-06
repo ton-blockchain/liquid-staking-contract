@@ -24,7 +24,12 @@ export abstract class Op {
         newStake: 0x4e73744b
     }
     static readonly elector = {
-        newStake: 0x4e73744b
+        new_stake: 0x4e73744b,
+        new_stake_ok: 0xf374484c,
+        new_stake_error: 0xee6f454c,
+        recover_stake: 0x47657424,
+        recover_stake_ok: 0xf96f7324,
+        recover_stake_error:0xfffffffe
     }
 }
 
