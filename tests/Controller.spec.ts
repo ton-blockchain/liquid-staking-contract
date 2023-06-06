@@ -77,6 +77,7 @@ describe('Cotroller mock', () => {
             bc.now = Math.floor(Date.now() / 1000);
           vset.utime_since = bc.now
           vset.utime_unitl = vset.utime_since + eConf.elected_for;
+          bc.now += 100;
           confDict.set(34, packValidatorsSet(vset));
           bc.setConfig(beginCell().storeDictDirect(confDict).endCell());
         }
@@ -145,8 +146,6 @@ describe('Cotroller mock', () => {
       const borrowAmount = getRandomTon(100000, 200000)
       // 2000 TON interest
       const msgVal       = borrowAmount + toNano('2000');
-      expect(borrowAmount).toBeGreaterThanOrEqual(toNano('100000'));
-      expect(borrowAmount).toBeLessThanOrEqual(toNano('200000'));
       let res = await controller.sendCredit(bc.sender(notPool), borrowAmount, msgVal);
       expect(res.transactions).toHaveTransaction({
         from: notPool,
@@ -171,8 +170,7 @@ describe('Cotroller mock', () => {
       const msgVal       = borrowAmount + interest;
       const stateBefore  = await controller.getControllerData();
 
-      const borrowTime = Math.floor(Date.now() / 1000);
-      bc.now = borrowTime;
+      const borrowTime = bc.now ?? Math.floor(Date.now() / 1000);
       const res = await controller.sendCredit(bc.sender(poolAddress), borrowAmount, msgVal);
       const stateAfter = await controller.getControllerData();
       expect(stateAfter.borrowedAmount).toEqual(stateBefore.borrowedAmount + borrowAmount);
@@ -182,7 +180,7 @@ describe('Cotroller mock', () => {
     });
 
     describe('New stake', () => {
-      beforeEach(async () => await loadSnapshot('borrowed'));
+      beforeEach(async () => loadSnapshot('borrowed'));
       it('Not validator should not be able to deposit to elector', async() => {
         const deposit    = toNano('100000');
         const randWallet = differentAddress(validator.wallet.address);
@@ -192,7 +190,6 @@ describe('Cotroller mock', () => {
       it('Pool should only accept new elector stake with confirmation', async() =>{
         const deposit    = toNano('100000');
         // 0 query id means no confirmation
-        await testNewStake(Errors.newStake.query_id, validator.wallet.getSender(), deposit, 0);
         await testNewStake(Errors.newStake.query_id, validator.wallet.getSender(), deposit, 0);
       });
 
