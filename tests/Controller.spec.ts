@@ -1,4 +1,4 @@
-import { Blockchain,BlockchainSnapshot,internal,SandboxContract,TreasuryContract } from "@ton-community/sandbox";
+import { Blockchain,BlockchainSnapshot,internal,SandboxContract,SendMessageResult,TreasuryContract } from "@ton-community/sandbox";
 import { Controller, controllerConfigToCell } from '../wrappers/Controller';
 import { Address, Sender, Cell, toNano, Dictionary, beginCell } from 'ton-core';
 import { keyPairFromSeed, getSecureRandomBytes, getSecureRandomWords, KeyPair } from 'ton-crypto';
@@ -30,6 +30,7 @@ describe('Cotroller mock', () => {
     let snapStates:Map<string,BlockchainSnapshot>
     let loadSnapshot:(snap:string) => Promise<void>;
     let getContractData:(smc:Address) => Promise<Cell>;
+    let testApprove:(exp_code:number, via:Sender, approve:boolean) => Promise<SendMessageResult>;
     let testNewStake:(exp_code:number,
                       via:Sender,
                       stake_val:bigint,
@@ -88,6 +89,27 @@ describe('Cotroller mock', () => {
             throw(Error(`Can't find state ${name}\nCheck tests execution order`));
           await bc.loadFrom(state);
         }
+
+        testApprove  = async (exp_code:number, via: Sender, approve:boolean) => {
+          const stateBefore = await getContractData(controller.address);
+          const approveBefore = (await controller.getControllerData()).approved;
+          expect(approveBefore).not.toEqual(approve);
+          const res = await controller.sendApprove(via, approve);
+          expect(res.transactions).toHaveTransaction({
+            from: via.address!,
+            to: controller.address,
+            success: exp_code == 0,
+            exitCode: exp_code
+          });
+
+          if(exp_code != 0) {
+            expect(await getContractData(controller.address)).toEqualCell(stateBefore);
+          }
+          else {
+            expect((await controller.getControllerData()).approved).toEqual(approve);
+          }
+          return res;
+        };
 
         testNewStake = async (exp_code: number,
                               via:Sender,
@@ -178,7 +200,25 @@ describe('Cotroller mock', () => {
       expect(stateAfter.state).toEqual(ControllerState.REST);
       snapStates.set('borrowed', bc.snapshot());
     });
+    it('Approve should only be accepted from approver address', async () => {
+      const notApprover  = differentAddress(deployer.address);
+      await testApprove(Errors.wrong_sender, bc.sender(notApprover), true);
+    });
 
+    it('Approve from approver address should set approve flag', async () => {
+      await testApprove(0, deployer.getSender(), true);
+      snapStates.set('approved', bc.snapshot());
+    });
+    it('Disapprove should only be accepted from approver address', async () => {
+      await loadSnapshot('approved');
+      const notApprover  = differentAddress(deployer.address);
+      await testApprove(Errors.wrong_sender, bc.sender(notApprover), false);
+    });
+    it('Disapprove from approver address should unset approve flag', async () => {
+      await loadSnapshot('approved');
+      await testApprove(0, deployer.getSender(), false)
+    });
+ 
     describe('New stake', () => {
       beforeEach(async () => loadSnapshot('borrowed'));
       it('Not validator should not be able to deposit to elector', async() => {
