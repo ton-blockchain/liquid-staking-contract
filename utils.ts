@@ -1,6 +1,7 @@
 import { Address, Tuple, TupleItem, TupleItemInt, TupleReader, toNano } from "ton";
 import { Cell, Slice, Sender, SenderArguments, ContractProvider, Message, beginCell, Dictionary, MessageRelaxed, Transaction } from "ton-core";
 import { Blockchain } from "@ton-community/sandbox";
+import { computeMessageForwardFees, MsgPrices } from "./fees";
 
 
 const randomAddress = (wc: number = 0) => {
@@ -63,6 +64,11 @@ export const computedGeneric = (trans:Transaction) => {
         throw("Compute phase expected")
     return trans.description.computePhase;
 };
+
+export const getMsgExcess = (trans:Transaction, msg:Message, value:bigint, msgConf:MsgPrices) => {
+  const fwdFees = computeMessageForwardFees(msgConf, msg);
+  return value - computedGeneric(trans).gasFees - fwdFees.remaining - fwdFees.fees;
+}
 
 
 export {
