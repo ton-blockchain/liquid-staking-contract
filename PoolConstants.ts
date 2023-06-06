@@ -8,6 +8,7 @@ export abstract class Conf {
     static readonly minStake       = toNano('50000');
     static readonly hashUpdateFine = toNano('10');
     static readonly stakeRecoverFine = toNano('10');
+    static readonly gracePeriod    = 600;
 };
 
 export abstract class Op {
