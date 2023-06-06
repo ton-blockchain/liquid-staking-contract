@@ -421,4 +421,49 @@ describe('Cotroller mock', () => {
         expect(dataAfter.state).toEqual(ControllerState.REST);
       });
     });
+    describe('Hash update', () => {
+      beforeEach(async () => await loadSnapshot('staken'));
+
+      it('Hash update should only be possible in "staken" state', async () => {
+        await bc.loadFrom(InitialState);
+        const expErr = {
+          from: validator.wallet.address,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.wrong_state
+        };
+        expect((await controller.getControllerData()).state).toEqual(ControllerState.REST);
+        const vSender = validator.wallet.getSender();
+        // Initial state REST
+        let res = await controller.sendUpdateHash(vSender);
+        expect(res.transactions).toHaveTransaction(expErr);
+
+        await loadSnapshot('stake_sent');
+        expect((await controller.getControllerData()).state).toEqual(ControllerState.SENT_STAKE_REQUEST);
+        res = await controller.sendUpdateHash(vSender);
+        expect(res.transactions).toHaveTransaction(expErr);
+        // TODO for other states
+        //
+        await loadSnapshot('staken');
+        res = await controller.sendUpdateHash(vSender);
+        expect(res.transactions).toHaveTransaction({
+          from: vSender.address!,
+          to: controller.address,
+          success: true
+        });
+      });
+      it('Hash update should not trigger if vset hash didn\'t change', async () => {
+        const stateBefore = await getContractData(controller.address);
+        const confDict = loadConfig(bc.config);
+        const curHash  = buff2bigint(confDict.get(34)!.hash());
+        expect((await controller.getControllerData()).validatorSetHash).toEqual(curHash);
+        await controller.sendUpdateHash(validator.wallet.getSender());
+        expect(await getContractData(controller.address)).toEqualCell(stateBefore);
+
+        randVset();
+        // Now it will trigger
+        await controller.sendUpdateHash(validator.wallet.getSender());
+        expect(await getContractData(controller.address)).not.toEqualCell(stateBefore);
+      });
+    });
 });
