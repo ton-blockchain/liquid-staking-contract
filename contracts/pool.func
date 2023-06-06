@@ -388,7 +388,6 @@ int current_round_index();
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = borrowers_data;
     throw_unless(error::finalizing_active_credit_round, borrowers_dict.null?());
     throw_unless(error::finalizing_active_credit_round, active_borrowers == 0); ;; TODO - halt here?
-    var b = [profit, total_balance]; ;; backup????
     
     profit -= FINALIZE_ROUND_FEE;
 
