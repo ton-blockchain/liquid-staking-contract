@@ -88,12 +88,14 @@ export class Controller implements Contract {
             body: Controller.creditMessage(credit, query_id)
         });
     }
-    async sendApprove(provider: ContractProvider, via: Sender) {
+    async sendApprove(provider: ContractProvider, via: Sender, approve: boolean = true) {
+        // dissaprove support
+        const op = approve ? Op.controller.approve : Op.controller.disapprove;
         await provider.internal(via, {
             value: toNano('0.1'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(Op.controller.approve, 32) // op
+                     .storeUint(op, 32) // op
                      .storeUint(1, 64) // query id
                   .endCell(),
         });
