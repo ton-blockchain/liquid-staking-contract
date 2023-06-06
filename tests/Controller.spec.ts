@@ -344,6 +344,50 @@ describe('Cotroller mock', () => {
         expect(stateAfter.stakeHeldFor).toEqual(eConf.stake_held_for);
         snapStates.set('stake_sent', bc.snapshot());
       });
+      it('New stake ok message should only be accepted from elector', async () => {
+        await loadSnapshot('stake_sent');
+        const stateBefore = await getContractData(controller.address);
+        await bc.sendMessage(internal({
+          from: differentAddress(electorAddress),
+          to: controller.address,
+          body: beginCell().storeUint(Op.elector.new_stake_ok, 32).storeUint(1, 64).endCell(),
+          value: toNano('1')
+        }));
+        expect(await getContractData(controller.address)).toEqualCell(stateBefore);
+      });
+      it('New stake error message should only be accepted from elector', async () => {
+          await loadSnapshot('stake_sent');
+          const stateBefore = await getContractData(controller.address);
+          await bc.sendMessage(internal({
+            from: differentAddress(electorAddress),
+            to: controller.address,
+            body: beginCell().storeUint(Op.elector.new_stake_error, 32).storeUint(1, 64).endCell(),
+            value: toNano('1')
+          }));
+          expect(await getContractData(controller.address)).toEqualCell(stateBefore);
+      })
+      it('New stake ok message from elector should set state to staken', async () => {
+        await loadSnapshot('stake_sent');
+        await bc.sendMessage(internal({
+          from: electorAddress,
+          to: controller.address,
+          body: beginCell().storeUint(Op.elector.new_stake_ok, 32).storeUint(1, 64).endCell(),
+          value: toNano('1')
+        }));
+        expect((await controller.getControllerData()).state).toEqual(ControllerState.FUNDS_STAKEN);
+        snapStates.set('staken', bc.snapshot());
+      });
+      it('New stake error message from elector should set state to rest', async () => {
+        await loadSnapshot('stake_sent');
+        await bc.sendMessage(internal({
+          from: electorAddress,
+          to: controller.address,
+          body: beginCell().storeUint(Op.elector.new_stake_error, 32).storeUint(1, 64).endCell(),
+          value: toNano('1')
+        }));
+        expect((await controller.getControllerData()).state).toEqual(ControllerState.REST);
+      });
+
       it('New stake bounce should only be allowed from elector', async () => {
         await loadSnapshot('stake_sent');
         const stateBefore   = await getContractData(controller.address);
