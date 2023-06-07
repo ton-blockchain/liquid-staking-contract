@@ -213,7 +213,9 @@ int check_new_stake_msg(slice cs);
                   assert_sender!(sender_address, validator);
                 } else {
                   if(balance - msg_value - STAKE_RECOVER_FINE >= MIN_TONS_FOR_STORAGE) {
-                    send_msg(sender_address, STAKE_RECOVER_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
+                    ifnot( equal_slice_bits(sender_address, validator)) {
+                      send_msg(sender_address, STAKE_RECOVER_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
+                    }
                   }
                 }
 
@@ -234,7 +236,9 @@ int check_new_stake_msg(slice cs);
                   send_excesses(sender_address);
                 } else {
                   if(balance - HASH_UPDATE_FINE >= MIN_TONS_FOR_STORAGE) {
-                    send_msg(sender_address, HASH_UPDATE_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
+                    ifnot( equal_slice_bits(sender_address, validator)) {
+                      send_msg(sender_address, HASH_UPDATE_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
+                    }
                   }
                 }
             } elseif (op == controller::withdraw_validator) { ;; withdraw validator (after recover_stake and before new_stake)
@@ -359,7 +363,9 @@ int check_new_stake_msg(slice cs);
                     send_excesses(sender_address);
                   } else {
                     if(balance >=  MIN_TONS_FOR_STORAGE + borrowed_amount + STAKE_RECOVER_FINE) {
-                      send_msg(sender_address, STAKE_RECOVER_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
+                      ifnot( equal_slice_bits(sender_address, validator)) {
+                        send_msg(sender_address, STAKE_RECOVER_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
+                      }
                     }
                   }
                 } else {
