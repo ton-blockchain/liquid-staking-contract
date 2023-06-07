@@ -2,10 +2,11 @@ import { Blockchain, SandboxContract, TreasuryContract } from '@ton-community/sa
 import { Cell, toNano, Dictionary, beginCell } from 'ton-core';
 import { Pool } from '../wrappers/Pool';
 import { Controller } from '../wrappers/Controller';
-import { DAOJettonMinter, jettonContentToCell } from '../wrappers/DAOJettonMinter';
-import {JettonWallet as PoolJettonWallet } from '../contracts/jetton_dao/wrappers/JettonWallet';
-import {JettonWallet as DepositWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
-import {JettonWallet as WithdrawalWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
+import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
+import { JettonWallet as PoolJettonWallet } from '../contracts/jetton_dao/wrappers/JettonWallet';
+import { JettonWallet as DepositWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
+import { JettonWallet as WithdrawalWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
+import { setConsigliere } from '../wrappers/PayoutMinter.compile';
 import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
 
@@ -31,27 +32,30 @@ describe('Pool', () => {
     let deployer: SandboxContract<TreasuryContract>;
 
     beforeAll(async () => {
-        pool_code = await compile('Pool');
-        controller_code = await compile('Controller');
+        blockchain = await Blockchain.create();
+        deployer = await blockchain.treasury('deployer', {balance: toNano("1000000000")});
+
+
+
+        await setConsigliere(deployer.address);
         payout_minter_code = await compile('PayoutMinter');
         payout_wallet_code = await compile('PayoutWallet');
+
+        pool_code = await compile('Pool');
+        controller_code = await compile('Controller');
 
         dao_minter_code = await compile('DAOJettonMinter');
         dao_wallet_code = await compile('DAOJettonWallet');
         dao_vote_keeper_code = await compile('DAOVoteKeeper');
         dao_voting_code = await compile('DAOVoting');
 
-        blockchain = await Blockchain.create();
 
-        deployer = await blockchain.treasury('deployer', {balance: toNano("1000000000")});
 
         const content = jettonContentToCell({type:1,uri:"https://example.com/1.json"});
         poolJetton  = blockchain.openContract(DAOJettonMinter.createFromConfig({
                                                   admin:deployer.address,
                                                   content,
-                                                  wallet_code:dao_wallet_code,
-                                                  voting_code:dao_voting_code,
-                                                  vote_keeper_code:dao_vote_keeper_code},
+                                                  voting_code:dao_voting_code},
                                                   dao_minter_code));
         let poolConfig = {
               pool_jetton : poolJetton.address,
@@ -82,6 +86,11 @@ describe('Pool', () => {
           halter: deployer.address,
         };
         controller = blockchain.openContract(Controller.createFromConfig(controllerConfig, controller_code));
+
+    });
+
+    it('should exist', async () => {
+
     });
 
 

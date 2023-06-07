@@ -1,6 +1,6 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from 'ton-core';
-import { DAOJettonMinter } from './DAOJettonMinter';
-import {JettonMinter as AwaitedJettonMinter} from '../contracts/awaited_minter/wrappers/JettonMinter';
+import { JettonMinter as DAOJettonMinter } from '../contracts/jetton_dao/wrappers/JettonMinter';
+import { JettonMinter as AwaitedJettonMinter} from '../contracts/awaited_minter/wrappers/JettonMinter';
 
 
 export type PoolConfig = {
@@ -49,21 +49,14 @@ export function poolConfigToCell(config: PoolConfig): Cell {
                    .storeRef(
                        beginCell()
                          .storeAddress(config.halter)
-                         .storeAddress(config.consigliere)
                          .storeAddress(config.approver)
                        .endCell()
                    )
                 .endCell();
     let codes = beginCell()
                     .storeRef(config.controller_code)
-                    .storeRef(config.payout_wallet_code)
                     .storeRef(config.pool_jetton_wallet_code)
-                    .storeRef(
-                      beginCell()
-                        .storeRef(config.payout_minter_code)
-                        .storeRef(config.vote_keeper_code)
-                      .endCell()
-                    )
+                    .storeRef(config.payout_minter_code)
                 .endCell();
     return beginCell()
               .storeUint(0, 8) // state NORMAL
