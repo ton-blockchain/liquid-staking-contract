@@ -2,11 +2,10 @@ import { Blockchain, SandboxContract, TreasuryContract } from '@ton-community/sa
 import { Cell, toNano, Dictionary, beginCell } from 'ton-core';
 import { Pool } from '../wrappers/Pool';
 import { Controller } from '../wrappers/Controller';
-import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
-import { JettonWallet as PoolJettonWallet } from '../contracts/jetton_dao/wrappers/JettonWallet';
-import { JettonWallet as DepositWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
-import { JettonWallet as WithdrawalWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
-import { setConsigliere } from '../wrappers/PayoutMinter.compile';
+import { DAOJettonMinter, jettonContentToCell } from '../wrappers/DAOJettonMinter';
+import {JettonWallet as PoolJettonWallet } from '../contracts/jetton_dao/wrappers/JettonWallet';
+import {JettonWallet as DepositWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
+import {JettonWallet as WithdrawalWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
 import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
 
@@ -14,7 +13,12 @@ const loadConfig = (config:Cell) => {
           return config.beginParse().loadDictDirect(Dictionary.Keys.Int(32), Dictionary.Values.Cell());
         };
 
-describe('Pool', () => {
+const errors = {
+     WRONG_SENDER: 0x9283
+};
+
+
+describe('Controller & Pool', () => {
     let pool_code: Cell;
     let controller_code: Cell;
     let payout_minter_code: Cell;
@@ -30,32 +34,31 @@ describe('Pool', () => {
     let controller: SandboxContract<Controller>;
     let poolJetton: SandboxContract<DAOJettonMinter>;
     let deployer: SandboxContract<TreasuryContract>;
+    let notDeployer: SandboxContract<TreasuryContract>;
 
     beforeAll(async () => {
-        blockchain = await Blockchain.create();
-        deployer = await blockchain.treasury('deployer', {balance: toNano("1000000000")});
-
-
-
-        await setConsigliere(deployer.address);
-        payout_minter_code = await compile('PayoutMinter');
-        payout_wallet_code = await compile('PayoutWallet');
-
         pool_code = await compile('Pool');
         controller_code = await compile('Controller');
+        payout_minter_code = await compile('PayoutMinter');
+        payout_wallet_code = await compile('PayoutWallet');
 
         dao_minter_code = await compile('DAOJettonMinter');
         dao_wallet_code = await compile('DAOJettonWallet');
         dao_vote_keeper_code = await compile('DAOVoteKeeper');
         dao_voting_code = await compile('DAOVoting');
 
+        blockchain = await Blockchain.create();
 
+        deployer = await blockchain.treasury('deployer', {balance: toNano("1000000000")});
+        notDeployer = await blockchain.treasury('notDeployer', {balance: toNano("1000000000")});
 
         const content = jettonContentToCell({type:1,uri:"https://example.com/1.json"});
         poolJetton  = blockchain.openContract(DAOJettonMinter.createFromConfig({
                                                   admin:deployer.address,
                                                   content,
-                                                  voting_code:dao_voting_code},
+                                                  wallet_code:dao_wallet_code,
+                                                  voting_code:dao_voting_code,
+                                                  vote_keeper_code:dao_vote_keeper_code},
                                                   dao_minter_code));
         let poolConfig = {
               pool_jetton : poolJetton.address,
@@ -86,20 +89,10 @@ describe('Pool', () => {
           halter: deployer.address,
         };
         controller = blockchain.openContract(Controller.createFromConfig(controllerConfig, controller_code));
-
-    });
-
-    it('should exist', async () => {
-
-    });
-
-
-    beforeEach(async () => {
     });
 
     it('should deploy', async () => {
-
-        //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
+        // await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
         const poolDeployResult = await pool.sendDeploy(deployer.getSender(), toNano('11'));
         expect(poolDeployResult.transactions).toHaveTransaction({
             from: deployer.address,
@@ -114,33 +107,46 @@ describe('Pool', () => {
                          deploy: true,
                          success: true,
         });
+        // change admin because we need to know jetton address before minting pool:
         const adminTransferResult = await poolJetton.sendChangeAdmin(deployer.getSender(), pool.address);
         expect(adminTransferResult.transactions).toHaveTransaction({
                          on: poolJetton.address,
                          success: true,
         });
+    });
+
+    it('should deploy controller', async () => {
         const controllerDeployResult = await pool.sendRequestControllerDeploy(deployer.getSender(), toNano('100000'), 0);
         expect(controllerDeployResult.transactions).toHaveTransaction({
-                         from: pool.address,
-                         to: controller.address,
-                         deploy: true,
-                         success: true,
-        });
-        const approveResult = await controller.sendApprove(deployer.getSender());
-        expect(approveResult.transactions).toHaveTransaction({
-                         from: deployer.address,
-                         to: controller.address,
-                         success: true,
+            from: pool.address,
+            to: controller.address,
+            deploy: true,
+            success: true,
         });
     });
 
-    let prevWallet: SandboxContract<DepositWallet>;
+    it('should process approve correctly', async () => {
+        const foreignApproveResult = await controller.sendApprove(notDeployer.getSender());
+        expect(foreignApproveResult.transactions).toHaveTransaction({
+            from: notDeployer.address,
+            to: controller.address,
+            aborted: true,
+            exitCode: errors.WRONG_SENDER
+        });
+        const approveResult = await controller.sendApprove(deployer.getSender());
+        expect(approveResult.transactions).toHaveTransaction({
+            from: deployer.address,
+            to: controller.address,
+            success: true,
+        });
+    });
+
+    let prevDepositWallet: SandboxContract<DepositWallet>;
     it('should deposit', async () => {
         //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
         const depositResult = await pool.sendDeposit(deployer.getSender(), toNano('10'));
         let awaitedJettonMinter = blockchain.openContract(await pool.getDepositMinter());
         let myDepositWallet = await awaitedJettonMinter.getWalletAddress(deployer.address);
-        prevWallet = blockchain.openContract(DepositWallet.createFromAddress(myDepositWallet));
         expect(depositResult.transactions).toHaveTransaction({
             from: deployer.address,
             on: pool.address,
@@ -170,10 +176,10 @@ describe('Pool', () => {
             op: 0x7362d09c, // transfer notification
             success: true,
         });
+        prevDepositWallet = blockchain.openContract(DepositWallet.createFromAddress(myDepositWallet));
     });
 
     it('should rotate round', async () => {
-
         let prevAwaitedJettonMinter = blockchain.openContract(await pool.getDepositMinter());
         //await blockchain.setVerbosityForAddress(prevAwaitedJettonMinter.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
 
@@ -182,6 +188,7 @@ describe('Pool', () => {
         blockchain.setConfig(beginCell().storeDictDirect(confDict).endCell());
 
 
+        // action handles round rotation
         const depositResult = await pool.sendDeposit(deployer.getSender(), toNano('3.05'));
 
         let awaitedJettonMinter = blockchain.openContract(await pool.getDepositMinter());
@@ -223,8 +230,8 @@ describe('Pool', () => {
 
     it('should pay out jettons', async () => {
         //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
-        const awJettonAmount = await prevWallet.getJettonBalance();
-        const burnResult = await prevWallet.sendBurn(deployer.getSender(), toNano('1.0'), awJettonAmount, deployer.address, null);
+        const awJettonAmount = await prevDepositWallet.getJettonBalance();
+        const burnResult = await prevDepositWallet.sendBurn(deployer.getSender(), toNano('1.0'), awJettonAmount, deployer.address, null);
         let myPoolJettonWalletAddress = await poolJetton.getWalletAddress(deployer.address);
         let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
 
@@ -297,8 +304,8 @@ describe('Pool', () => {
         const confDict = loadConfig(blockchain.config);
         confDict.set(34, beginCell().storeUint(0x12, 8).storeUint(0, 32).storeUint(Math.floor(Date.now() / 1000)+ 10000, 32).endCell());
         blockchain.setConfig(beginCell().storeDictDirect(confDict).endCell());
-        //touch pool to trigger rotate
-        //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
+        // touch pool to trigger rotate
+        // await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
         const secondDeposit = await pool.sendDeposit(deployer.getSender(), toNano('1000000'));
 
         const controllerDeployResult = await controller.sendLoanRequest(deployer.getSender(), toNano('1000'), toNano('10000'), 1000n);
