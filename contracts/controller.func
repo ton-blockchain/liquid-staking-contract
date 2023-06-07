@@ -228,7 +228,8 @@ int check_new_stake_msg(slice cs);
                     validator_set_changes_count += 1;
                     validator_set_change_time = now();
                 }
-                if( (utime_since - now() < GRACE_PERIOD) | (~ borrowed_amount) ) {
+                int overdue = now() - utime_since;
+                if( (overdue < GRACE_PERIOD) | (borrowed_amount == 0) ) {
                   assert_sender!(sender_address, validator);
                   send_excesses(sender_address);
                 } else {
