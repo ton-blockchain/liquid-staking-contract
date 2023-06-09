@@ -1,4 +1,4 @@
-import { Blockchain,BlockchainSnapshot,internal,SandboxContract,SendMessageResult,TreasuryContract } from "@ton-community/sandbox";
+import { Blockchain,BlockchainSnapshot,createShardAccount,internal,SandboxContract,SendMessageResult,TreasuryContract } from "@ton-community/sandbox";
 import { Controller, controllerConfigToCell } from '../wrappers/Controller';
 import { Address, Sender, Cell, toNano, Dictionary, beginCell } from 'ton-core';
 import { keyPairFromSeed, getSecureRandomBytes, getSecureRandomWords, KeyPair } from 'ton-crypto';
@@ -6,8 +6,9 @@ import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
 import { randomAddress } from "@ton-community/test-utils";
 import { getElectionsConf, getValidatorsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
-import { buff2bigint, differentAddress, getRandomTon } from "../utils";
+import { buff2bigint, differentAddress, getMsgExcess, getRandomTon } from "../utils";
 import { Conf, ControllerState, Errors, Op } from "../PoolConstants";
+import { computeMessageForwardFees, getMsgPrices } from "../fees";
 
 type Validator = {
   wallet: SandboxContract<TreasuryContract>,
@@ -26,10 +27,15 @@ describe('Cotroller mock', () => {
     let InitialState:BlockchainSnapshot;
     // let vConf : ReturnType<typeof getValidatorsConf>;
     let eConf : ReturnType<typeof getElectionsConf>;
-    let randVset:() => void;
+    let msgConfMc:ReturnType<typeof getMsgPrices>;
+    let msgConfBc:ReturnType<typeof getMsgPrices>;
+    let randVset:() => Cell;
     let snapStates:Map<string,BlockchainSnapshot>
     let loadSnapshot:(snap:string) => Promise<void>;
     let getContractData:(smc:Address) => Promise<Cell>;
+    let getControllerState:() => Promise<Cell>;
+    let getCurTime:() => number;
+    let assertHashUpdate:(exp_hash: Buffer | bigint, exp_time:number, exp_count:number) => Promise<void>;
     let testApprove:(exp_code:number, via:Sender, approve:boolean) => Promise<SendMessageResult>;
     let testNewStake:(exp_code:number,
                       via:Sender,
@@ -59,6 +65,10 @@ describe('Cotroller mock', () => {
         };
 
         eConf      = getElectionsConf(bc.config);
+        // Basechain message config
+        msgConfBc  = getMsgPrices(bc.config, 0);
+        // Masterchain message config
+        msgConfMc  = getMsgPrices(bc.config, -1);
         controller = bc.openContract(Controller.createFromConfig(controllerConfig, controller_code));
         getContractData = async (address: Address) => {
           const smc = await bc.getContract(address);
@@ -71,6 +81,18 @@ describe('Cotroller mock', () => {
           return smc.account.account.storage.state.state.data
         }
 
+        getControllerState = async () => await getContractData(controller.address);
+
+        getCurTime = () => bc.now ?? Math.floor(Date.now() / 1000);
+
+        assertHashUpdate = async (exp_hash:Buffer | bigint, exp_time:number, exp_count:number) => {
+          const curData  = await controller.getControllerData();
+          const testHash = exp_hash instanceof Buffer ? buff2bigint(exp_hash) : exp_hash; 
+          expect(curData.validatorSetHash).toEqual(testHash);
+          expect(curData.validatorSetChangeTime).toEqual(exp_time);
+          expect(curData.validatorSetChangeCount).toEqual(exp_count);
+        };
+
         randVset = () => {
           const confDict = loadConfig(bc.config);
           const vset = getVset(confDict, 34);
@@ -78,9 +100,11 @@ describe('Cotroller mock', () => {
             bc.now = Math.floor(Date.now() / 1000);
           vset.utime_since = bc.now
           vset.utime_unitl = vset.utime_since + eConf.elected_for;
+          const newSet = packValidatorsSet(vset);
           bc.now += 100;
-          confDict.set(34, packValidatorsSet(vset));
+          confDict.set(34, newSet);
           bc.setConfig(beginCell().storeDictDirect(confDict).endCell());
+          return newSet;
         }
 
         loadSnapshot = async (name:string) => {
@@ -421,6 +445,8 @@ describe('Cotroller mock', () => {
       });
     });
     describe('Hash update', () => {
+
+      let threeSetState:BlockchainSnapshot;
       beforeEach(async () => await loadSnapshot('staken'));
 
       it('Hash update should only be possible in "staken" state', async () => {
