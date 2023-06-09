@@ -37,6 +37,11 @@ describe('Cotroller mock', () => {
     let getCurTime:() => number;
     let assertHashUpdate:(exp_hash: Buffer | bigint, exp_time:number, exp_count:number) => Promise<void>;
     let testApprove:(exp_code:number, via:Sender, approve:boolean) => Promise<SendMessageResult>;
+    let testRequestLoan:(exp_code: number,
+                         via: Sender,
+                         min_loan: bigint,
+                         max_loan:bigint,
+                         interest: number) => Promise<SendMessageResult>;
     let testNewStake:(exp_code:number,
                       via:Sender,
                       stake_val:bigint,
@@ -134,6 +139,27 @@ describe('Cotroller mock', () => {
           }
           return res;
         };
+
+        testRequestLoan = async (exp_code: number,
+                                 via: Sender,
+                                 min_loan: bigint,
+                                 max_loan: bigint,
+                                 interest: number) => {
+
+          const stateBefore = await getControllerState();
+
+          const res = await controller.sendRequestLoan(via, min_loan, max_loan, interest);
+          expect(res.transactions).toHaveTransaction({
+            from: via.address!,
+            to: controller.address,
+            success: exp_code == 0,
+            exitCode: exp_code
+          });
+          if(exp_code != 0)
+            expect(await getControllerState()).toEqualCell(stateBefore);
+          return res;
+        }
+
 
         testNewStake = async (exp_code: number,
                               via:Sender,
@@ -243,6 +269,202 @@ describe('Cotroller mock', () => {
       await testApprove(0, deployer.getSender(), false)
     });
  
+    describe('Request loan', () => {
+      const interest = Math.floor(0.05 * 65535);
+      let approved : BlockchainSnapshot;
+      let reqReady : BlockchainSnapshot;
+
+      it('Successfull loan request', async () => {
+        const dataBefore = await controller.getControllerData();
+        const curVset  = getVset(bc.config, 34);
+        const electStarted = curVset.utime_unitl - eConf.begin_before + 1;
+        const minLoan      = toNano('100000');
+        const maxLoan      = minLoan * 2n;
+        if(getCurTime() < electStarted)
+          bc.now = curVset.utime_unitl - eConf.begin_before + 1;
+        if(!dataBefore.approved)
+          await controller.sendApprove(deployer.getSender(), true);
+
+        reqReady = bc.snapshot();
+
+        const controllerSmc = await bc.getContract(controller.address);
+        const reqBalance    = await controller.getBalanceForLoan(maxLoan, interest);
+        if(controllerSmc.balance < reqBalance)
+          await controller.sendDeploy(deployer.getSender(),
+                                      reqBalance - controllerSmc.balance + toNano('1'));
+
+
+        const res = controllerSmc.receiveMessage(internal({
+          from: validator.wallet.address,
+          to: controller.address,
+          body: Controller.requestLoanMessage(minLoan, maxLoan, interest),
+          value: toNano('1')
+        }),{now: bc.now});
+        /*
+        await testRequestLoan(0,
+                              validator.wallet.getSender(),
+                              minLoan,
+                              maxLoan,
+                              interest);
+
+        */
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.state).toEqual(ControllerState.SENT_BORROWING_REQUEST);
+        snapStates.set('borrowing_req', bc.snapshot());
+      });
+      it('Only validator can request loan', async () => {
+        const interest = Math.floor(0.05 * 65535);
+        await testRequestLoan(Errors.wrong_sender,
+                              deployer.getSender(),
+                              toNano('100000'),
+                              toNano('200000'),
+                              interest);
+
+      });
+      it('Controller should not be able to borrow, unless approved', async () => {
+        const dataBefore  = await controller.getControllerData();
+        const stateBefore = await getControllerState();
+        expect(dataBefore.approved).toEqual(false);
+
+        const interest = Math.floor((1 << 16) * 0.05);
+        let res = await controller.sendRequestLoan(validator.wallet.getSender(),
+                                                   toNano('100000'),
+                                                   toNano('200000'),
+                                                   interest);
+        expect(res.transactions).toHaveTransaction({
+          from: validator.wallet.address,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.controller_not_approved
+        });
+
+        expect(await getControllerState()).toEqualCell(stateBefore);
+
+        await controller.sendApprove(deployer.getSender(), true);
+        approved = bc.snapshot();
+
+        res = await controller.sendRequestLoan(validator.wallet.getSender(),
+                                               toNano('100000'),
+                                               toNano('200000'),
+                                               interest);
+        expect(res.transactions).not.toHaveTransaction({
+          from: validator.wallet.address,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.controller_not_approved
+        });
+      });
+      it('Loan should be requested after elections start', async () => {
+        await bc.loadFrom(approved);
+
+        const stateBefore = await getControllerState();
+        const interest = Math.floor((1 << 16) * 0.05);
+        const curVset  = getVset(bc.config, 34);
+        bc.now = curVset.utime_unitl - eConf.begin_before;
+
+        const res = await controller.sendRequestLoan(validator.wallet.getSender(),
+                                                     toNano('100000'),
+                                                     toNano('200000'),
+                                                     interest);
+        expect(res.transactions).toHaveTransaction({
+          from: validator.wallet.address,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.too_early_loan_request
+        });
+        expect(await getControllerState()).toEqualCell(stateBefore);
+      });
+      it('Loan should not be requested after elections end', async () => {
+        await bc.loadFrom(approved);
+
+        const stateBefore = await getControllerState();
+        const interest = Math.floor((1 << 16) * 0.05);
+        const curVset  = getVset(bc.config, 34);
+        bc.now = curVset.utime_unitl - eConf.end_before;
+
+        const res = await controller.sendRequestLoan(validator.wallet.getSender(),
+                                                     toNano('100000'),
+                                                     toNano('200000'),
+                                                     interest);
+        expect(res.transactions).toHaveTransaction({
+          from: validator.wallet.address,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.too_late_loan_request
+        });
+        expect(await getControllerState()).toEqualCell(stateBefore);
+      });
+      it('Should not be able to request loan if previous loan is not returned yet', async () => {
+        await loadSnapshot('borrowed');
+
+        const dataBefore  = await controller.getControllerData();
+        if(!dataBefore.approved)
+          await controller.sendApprove(deployer.getSender(), true);
+
+        await testRequestLoan(Errors.multiple_loans_are_prohibited,
+                              validator.wallet.getSender(),
+                              toNano('100000'),
+                              toNano('200000'),
+                              interest);
+      });
+      it('Controller should have enough balance to apply for loan', async () => {
+        await bc.loadFrom(reqReady);
+
+        const maxLoan = toNano('200000');
+
+        const controllerSmc  = await bc.getContract(controller.address);
+        const balanceForLoan = await controller.getBalanceForLoan(maxLoan, BigInt(interest));
+        expect(controllerSmc.balance).toBeLessThan(balanceForLoan);
+
+        await testRequestLoan(Errors.too_high_loan_request_amount,
+                              validator.wallet.getSender(),
+                              toNano('100000'),
+                              maxLoan,
+                              interest);
+        const delta = balanceForLoan - controllerSmc.balance;
+        await controller.sendDeploy(deployer.getSender(), delta + toNano('1'));
+
+        await testRequestLoan(0,
+                              validator.wallet.getSender(),
+                              toNano('100000'),
+                              maxLoan,
+                              interest);
+
+      });
+      it('Request loan bounce should only be accepted from pool address', async () => {
+        await loadSnapshot('borrowing_req');
+        const dataBefore = await controller.getControllerData();
+
+        const res = await bc.sendMessage(internal({
+          from: differentAddress(poolAddress),
+          to: controller.address,
+          body: beginCell().storeUint(0xFFFFFFFF, 32)
+                           .storeUint(Op.pool.request_loan, 32)
+                           .storeUint(0, 64)
+                .endCell(),
+          value: toNano('1'),
+          bounced: true
+        }));
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.state).toEqual(dataBefore.state);
+      });
+      it('Request loan bounce handling', async () => {
+        await loadSnapshot('borrowing_req');
+        const res = await bc.sendMessage(internal({
+          from: poolAddress,
+          to: controller.address,
+          body: beginCell().storeUint(0xFFFFFFFF, 32)
+                           .storeUint(Op.pool.request_loan, 32)
+                           .storeUint(0, 64)
+                .endCell(),
+          value: toNano('1'),
+          bounced: true
+        }));
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.state).toEqual(ControllerState.REST);
+      });
+    });
+
     describe('New stake', () => {
       beforeEach(async () => loadSnapshot('borrowed'));
       it('Not validator should not be able to deposit to elector', async() => {
