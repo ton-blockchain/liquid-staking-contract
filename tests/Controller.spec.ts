@@ -464,5 +464,126 @@ describe('Cotroller mock', () => {
         await controller.sendUpdateHash(validator.wallet.getSender());
         expect(await getContractData(controller.address)).not.toEqualCell(stateBefore);
       });
+      it('Validator should update validator set hash correctly', async () => {
+        expect((await controller.getControllerData()).validatorSetChangeCount).toEqual(0);
+        const curTime = getCurTime();
+        const curVset = getVset(bc.config, 34);
+        expect(curTime - curVset.utime_since).toBeLessThanOrEqual(Conf.gracePeriod);
+ 
+        const vSender = validator.wallet.getSender();
+
+        for(let i = 1; i < 4; i++) {
+          const newSetCell = randVset();
+          const msgVal     = getRandomTon(1, 10);
+          const changeTime = getCurTime();
+          const res = await controller.sendUpdateHash(vSender, msgVal);
+          const dataAfter = await controller.getControllerData();
+          await assertHashUpdate(newSetCell.hash(), changeTime, i);
+          /*
+          expect(dataAfter.validatorSetHash).toEqual(buff2bigint(newSetCell.hash()));
+          expect(dataAfter.validatorSetChangeCount).toEqual(i);
+          expect(dataAfter.validatorSetChangeTime).toEqual(changeTime);
+          */
+          const excessTrans = res.transactions[1];
+          expect(excessTrans.outMessagesCount).toEqual(1);
+          const excessMsg   = excessTrans.outMessages.get(0)!;
+          expect(res.transactions).toHaveTransaction({
+            from: controller.address,
+            to: validator.wallet.address,
+            value: getMsgExcess(excessTrans, excessMsg, msgVal, msgConfMc)
+          });
+        }
+        // Saving for later
+        threeSetState =  bc.snapshot();
+      });
+      it('Only validator should be able to update validators set hash till loan grace period expires', async () => {
+        const curTime = getCurTime();
+        const curVset = getVset(bc.config, 34);
+        expect(curTime - curVset.utime_since).toBeLessThanOrEqual(Conf.gracePeriod);
+        const res = await controller.sendUpdateHash(deployer.getSender());
+        expect(res.transactions).toHaveTransaction({
+          from: deployer.address,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.wrong_sender
+        });
+      });
+      it('After grace period anyone should be able to update validaotrs set and get rewarded(except validator)', async() => {
+        for(let i = 1; i < 3; i++) {
+          const newSetCell = randVset();
+          const curVset = getVset(bc.config, 34);
+          const changeTime = curVset.utime_since + Conf.gracePeriod + 1;
+          bc.now = changeTime;
+
+          const res        = await controller.sendUpdateHash(deployer.getSender());
+          const dataAfter  = await controller.getControllerData();
+
+          await assertHashUpdate(newSetCell.hash(), changeTime, i);
+
+          const updTrans = res.transactions[1];
+          expect(updTrans.outMessagesCount).toEqual(1);
+          const rewardMsg = updTrans.outMessages.get(0)!;
+          const fwdFees = computeMessageForwardFees(msgConfMc, rewardMsg);
+          expect(res.transactions).toHaveTransaction({
+            from: controller.address,
+            to: deployer.address,
+            value: Conf.hashUpdateFine - fwdFees.fees - fwdFees.remaining
+          });
+        }
+        // But only if there is > min storage + hash update fine on balance
+        const minReq = Conf.minStorage + Conf.hashUpdateFine;
+        const msgVal = toNano('1');
+
+        // Setting balance
+        await bc.setShardAccount(controller.address, createShardAccount({
+          address: controller.address,
+          code: controller_code,
+          data: await getControllerState(),
+          balance: minReq - msgVal - 1n // account for balance at message processit time
+        }));
+        // Meh
+        const newSetCell = randVset();
+        const curVset = getVset(bc.config, 34);
+        const changeTime = curVset.utime_since + Conf.gracePeriod + 1;
+        bc.now = changeTime;
+
+        const res        = await controller.sendUpdateHash(deployer.getSender());
+        const dataAfter  = await controller.getControllerData();
+
+        await assertHashUpdate(newSetCell.hash(), changeTime, 3);
+
+        expect(res.transactions).not.toHaveTransaction({
+          from: controller.address,
+          to: deployer.address
+        });
+      });
+      it('Validator should not get rewarded after grace period', async () => {
+        const stateBefore = await controller.getControllerData();
+        const newSetCell = randVset();
+        const curVset = getVset(bc.config, 34);
+        const changeTime = curVset.utime_since + Conf.gracePeriod + 1;
+        bc.now = changeTime;
+
+        const res = await controller.sendUpdateHash(validator.wallet.getSender());
+        expect(res.transactions).not.toHaveTransaction({
+          from: controller.address,
+          to: validator.wallet.address
+        });
+        await assertHashUpdate(newSetCell.hash(), changeTime, stateBefore.validatorSetChangeCount + 1);
+      });
+      it('Validators hash update should only be allowed 3 times till new deposit', async () => {
+        await bc.loadFrom(threeSetState);
+        // Just in case
+        expect((await controller.getControllerData()).validatorSetChangeCount).toEqual(3);
+        const stateBefore = await getControllerState();
+        const res = await controller.sendUpdateHash(validator.wallet.getSender());
+        expect(res.transactions).toHaveTransaction({
+          from: validator.wallet.address,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.too_much_validator_set_counts
+        });
+        expect(await getControllerState()).toEqualCell(stateBefore);
+      });
     });
 });
