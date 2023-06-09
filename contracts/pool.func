@@ -43,15 +43,12 @@ global int sudoer_set_at;
 global slice governor;          ;; set roles, unhalt and get reward
 global slice interest_manager;  ;; get round stats and update interest
 global slice halter;            ;; halts operation
-global slice consigliere;       ;; helps awaitedX->X swaps
 global slice approver;          ;; approves controllers to ask for credit
 
 ;; CHILD CONTRACT CODES
 global cell controller_code;
-global cell payout_wallet_code;
 global cell pool_jetton_wallet_code;
 global cell payout_minter_code;
-global cell vote_keeper_code;
 
 
 const int state::NORMAL = 0;
@@ -292,9 +289,6 @@ int current_round_index();
       if(in_msg_body~load_int(1)) {
         halter = in_msg_body~load_msg_addr();
       }
-      if(in_msg_body~load_int(1)) {
-        consigliere = in_msg_body~load_msg_addr();
-      }
     }
     if(op == governor::set_deposit_settings) {
         assert_sender!(sender_address, governor);
@@ -388,7 +382,6 @@ int current_round_index();
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = borrowers_data;
     throw_unless(error::finalizing_active_credit_round, borrowers_dict.null?());
     throw_unless(error::finalizing_active_credit_round, active_borrowers == 0); ;; TODO - halt here?
-    var b = [profit, total_balance]; ;; backup????
     
     profit -= FINALIZE_ROUND_FEE;
 
@@ -501,7 +494,7 @@ int current_round_index();
         slice to_address = calc_address(JETTONS_WORKCHAIN, state_init);
         deposit_payout = to_address;
         slice deposit_minter_jetton_wallet = calc_address(JETTONS_WORKCHAIN,
-          calculate_jetton_wallet_state_init(to_address, jetton_minter, pool_jetton_wallet_code, vote_keeper_code)
+          calculate_jetton_wallet_state_init(to_address, jetton_minter, pool_jetton_wallet_code)
         );
         builder msg = begin_cell()
                       .store_msg_flags(msgflag::BOUNCEABLE)

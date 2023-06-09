@@ -2,7 +2,7 @@ import { Blockchain, SandboxContract, TreasuryContract, BlockchainSnapshot } fro
 import { Cell, toNano, fromNano, Dictionary, beginCell, internal, Message } from 'ton-core';
 import { Pool } from '../wrappers/Pool';
 import { Controller } from '../wrappers/Controller';
-import { DAOJettonMinter, jettonContentToCell } from '../wrappers/DAOJettonMinter';
+import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
 import {JettonWallet as PoolJettonWallet } from '../contracts/jetton_dao/wrappers/JettonWallet';
 import {JettonWallet as DepositWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
 import {JettonWallet as WithdrawalWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
@@ -60,9 +60,8 @@ describe('Controller & Pool', () => {
         poolJetton  = blockchain.openContract(DAOJettonMinter.createFromConfig({
                                                   admin:deployer.address,
                                                   content,
-                                                  wallet_code:dao_wallet_code,
                                                   voting_code:dao_voting_code,
-                                                  vote_keeper_code:dao_vote_keeper_code},
+                                                  },
                                                   dao_minter_code));
         let poolConfig = {
               pool_jetton : poolJetton.address,
