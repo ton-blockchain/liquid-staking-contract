@@ -16,6 +16,9 @@ Selected interest rate should be greater or eqal to pool's interest
 
 Then pool should correctly add the loan to it's list. 
 
+#### Marks
+- 'Request loan bounce should only be accepted from pool address' is
+already [done](https://github.com/EmelyanenkoK/jetton_pool/blob/controller_tests/tests/Controller.spec.ts#L434)
 
 ## Loan repayment 
 

@@ -106,4 +106,12 @@ export class Controller implements Contract {
                   .endCell(),
         });
     }
+
+    async getRequestWindow(provider: ContractProvider) {
+        const { stack } = await provider.get("request_window_time", [])
+        return {
+            since: stack.readNumber(),
+            until: stack.readNumber()
+        };
+    }
 }
