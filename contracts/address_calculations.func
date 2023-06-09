@@ -1,8 +1,6 @@
 #include "metadata_utils.func";
 
 global cell controller_code;
-global cell payout_wallet_code;
-global cell pool_jetton_wallet_code;
 global cell payout_minter_code;
 
 slice addr_none() asm "b{00} PUSHSLICE";
@@ -64,10 +62,8 @@ cell calculate_payout_state_init(slice pool_address, int round_id, int distribut
   cell data =  begin_cell()
             .store_coins(0)                   ;; total_supply
             .store_slice(my_address())        ;; admin_address
-            .store_slice(consigliere)         ;; stake_amount_sent
             .store_maybe_ref(null())          ;; Distribution
             .store_ref(onchain_content)       ;; Content
-            .store_ref(payout_wallet_code)
            .end_cell();
   return begin_cell()
             .store_uint(0, 1 + 1) ;; split_depth (Maybe = 0) and special (Maybe = 0)

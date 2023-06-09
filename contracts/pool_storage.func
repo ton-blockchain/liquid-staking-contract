@@ -104,7 +104,6 @@ builder save_minters_data(builder pb) {
     interest_manager = ds~load_msg_addr();
     ds = ds~load_ref().begin_parse();
     halter = ds~load_msg_addr();
-    consigliere = ds~load_msg_addr();
     approver = ds~load_msg_addr();
     return (s, ());
 }
@@ -118,7 +117,6 @@ builder save_roles(builder pb) {
                  .store_ref(
                    begin_cell()
                    .store_slice(halter)
-                   .store_slice(consigliere)
                    .store_slice(approver)
                    .end_cell()
                   )
@@ -129,25 +127,16 @@ builder save_roles(builder pb) {
 (slice, ()) ~load_codes(slice s) impure inline {
     slice ds = s~load_ref().begin_parse();
     controller_code = ds~load_ref();
-    payout_wallet_code = ds~load_ref();
     pool_jetton_wallet_code = ds~load_ref();
-    ds = ds~load_ref().begin_parse();
     payout_minter_code = ds~load_ref();
-    vote_keeper_code = ds~load_ref();
     return (s, ());
 }
 
 builder save_codes(builder pb) {
     cell codes = begin_cell()
                  .store_ref(controller_code)
-                 .store_ref(payout_wallet_code)
                  .store_ref(pool_jetton_wallet_code)
-                 .store_ref(
-                     begin_cell()
-                     .store_ref(payout_minter_code)
-                     .store_ref(vote_keeper_code)
-                     .end_cell()
-                 )
+                 .store_ref(payout_minter_code)
                  .end_cell();
    return pb.store_ref(codes);
 }
