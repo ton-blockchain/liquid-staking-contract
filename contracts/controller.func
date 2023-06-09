@@ -209,7 +209,7 @@ int check_new_stake_msg(slice cs);
                          payload,
                          msgflag::BOUNCEABLE,
                          sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE); ;; remaining inbound message amount, fee deducted from amount, revert on errors
-                if( (time_since_unfreeze < GRACE_PERIOD) | (~ borrowed_amount)) {
+                if( (time_since_unfreeze < GRACE_PERIOD) | (borrowed_amount == 0) ) {
                   assert_sender!(sender_address, validator);
                 } else {
                   if(balance - msg_value - STAKE_RECOVER_FINE >= MIN_TONS_FOR_STORAGE) {
