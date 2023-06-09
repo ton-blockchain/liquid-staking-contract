@@ -88,6 +88,32 @@ export class Controller implements Contract {
             body: Controller.creditMessage(credit, query_id)
         });
     }
+
+    static requestLoanMessage(min_loan: bigint,
+                              max_loan: bigint,
+                              max_interest: number,
+                              query_id: bigint | number = 0) {
+
+        return beginCell().storeUint(Op.controller.send_request_loan, 32)
+                          .storeUint(query_id, 64)
+                          .storeCoins(min_loan)
+                          .storeCoins(max_loan)
+                          .storeUint(max_interest, 16)
+               .endCell();
+    }
+    async sendRequestLoan(provider: ContractProvider,
+                          via: Sender,
+                          min_loan: bigint,
+                          max_loan: bigint,
+                          max_interest: number,
+                          value: bigint = toNano('1'),
+                          query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: Controller.requestLoanMessage(min_loan, max_loan, max_interest, query_id)
+        });
+    }
     async sendApprove(provider: ContractProvider, via: Sender, approve: boolean = true) {
         // dissaprove support
         const op = approve ? Op.controller.approve : Op.controller.disapprove;
@@ -203,10 +229,10 @@ export class Controller implements Contract {
     }
 
 	  static recoverStakeMessage(query_id: bigint | number = 0) {
-	      return beginCell().storeUint(0x47657424, 32).storeUint(query_id, 64).endCell();
+	      return beginCell().storeUint(Op.controller.recover_stake, 32).storeUint(query_id, 64).endCell();
 	  }
 
-	  async sendRecoverStake(provider: ContractProvider, via: Sender, value:bigint = toNano('1'), query_id: bigint | number = 0) {
+	  async sendRecoverStake(provider: ContractProvider, via: Sender, value:bigint = Conf.electorOpValue, query_id: bigint | number = 0) {
 	      await provider.internal(via, {
 	          body: Controller.recoverStakeMessage(query_id),
 	          sendMode: SendMode.PAY_GAS_SEPARATELY,
@@ -244,10 +270,10 @@ export class Controller implements Contract {
         return stack.readBigNumber();
     }
 
-    async getBalanceForLoan(provider: ContractProvider, credit:bigint, interest:bigint) {
+    async getBalanceForLoan(provider: ContractProvider, credit:bigint, interest:bigint | number) {
         const {stack} = await provider.get('required_balance_for_loan', [
             {type: "int", value: credit},
-            {type: "int", value: interest}
+            {type: "int", value: BigInt(interest)}
         ]);
         return stack.readBigNumber();
     }
