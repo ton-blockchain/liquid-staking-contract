@@ -666,6 +666,288 @@ describe('Cotroller mock', () => {
         expect(dataAfter.state).toEqual(ControllerState.REST);
       });
     });
+
+    describe('Recover stake', () => {
+      let recoverReady: BlockchainSnapshot;
+      let recoverStakeOk: Cell;
+      beforeAll(() => {
+        recoverStakeOk = beginCell().storeUint(Op.elector.recover_stake_ok, 32)
+                                    .storeUint(1, 64)
+                         .endCell();
+      });
+      it('At least 2 validators set changes and stake_held_for time is required to trigger recover stake', async () => {
+        await loadSnapshot('staken');
+        let curState = await controller.getControllerData();
+        expect(curState.validatorSetChangeCount).toEqual(0);
+        const vSender  = validator.wallet.getSender();
+        const recTrans = {
+          from: controller.address,
+          to: electorAddress,
+          op: Op.elector.recover_stake
+        };
+        for(let i = 1; i < 3; i++) {
+          let res = await controller.sendRecoverStake(vSender);
+          expect(res.transactions).toHaveTransaction({
+            from: validator.wallet.address,
+            to: controller.address,
+            success: false,
+            exitCode: Errors.too_early_stake_recover_attempt_count
+          });
+          expect(res.transactions).not.toHaveTransaction(recTrans);
+          randVset();
+          await controller.sendUpdateHash(vSender);
+        }
+        let stateAfter = await controller.getControllerData();
+        expect(stateAfter.validatorSetChangeCount).toEqual(2);
+        // No unfreeze yet
+        expect(getCurTime() - stateAfter.validatorSetChangeTime - eConf.stake_held_for).toBeLessThan(60);
+        const twoUpdates = bc.snapshot();
+        let res = await controller.sendRecoverStake(vSender);
+        expect(res.transactions).toHaveTransaction({
+          from: validator.wallet.address,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.too_early_stake_recover_attempt_time
+        });
+        expect(res.transactions).not.toHaveTransaction(recTrans);
+        // > 60 sec after unfreeze
+        bc.now = stateAfter.validatorSetChangeTime + eConf.stake_held_for + 61;
+        res = await controller.sendRecoverStake(vSender);
+        expect(res.transactions).toHaveTransaction({
+          from: validator.wallet.address,
+          to: controller.address,
+          success: true
+        });
+        expect(res.transactions).toHaveTransaction(recTrans);
+        recoverReady = bc.snapshot();
+
+        await bc.loadFrom(twoUpdates);
+        randVset();
+        await controller.sendUpdateHash(vSender);
+        expect((await controller.getControllerData()).validatorSetChangeCount).toEqual(3);
+
+        res = await controller.sendRecoverStake(vSender);
+        expect(res.transactions).toHaveTransaction({
+          from: validator.wallet.address,
+          to: controller.address,
+          success: true
+        });
+        expect(res.transactions).toHaveTransaction(recTrans);
+      });
+      it('Stake recovery only allowed in "staken" state', async () => {
+        const vSender = validator.wallet.getSender();
+        const testState = async (wrong_state:boolean) => {
+          const stateBefore = await getControllerState();
+          const res = await controller.sendRecoverStake(vSender);
+          const failTrans = {
+              from: validator.wallet.address,
+              to: controller.address,
+              success: false,
+              exitCode: Errors.wrong_state
+          };
+          if (wrong_state) {
+            expect(res.transactions).toHaveTransaction(failTrans);
+            expect(await getControllerState()).toEqualCell(stateBefore);
+          }
+          else {
+            expect(res.transactions).not.toHaveTransaction(failTrans);
+          }
+        }
+        await bc.loadFrom(InitialState);
+        await testState(true);
+
+        await loadSnapshot('stake_sent');
+        await testState(true);
+        // TODO other states
+        await loadSnapshot('staken');
+        await testState(false);
+      });
+      it('Recover stake message value should be >= elector expected value', async () => {
+        await bc.loadFrom(recoverReady);
+
+        const expTrans = {
+          from: validator.wallet.address,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.too_low_recover_stake_value
+        };
+        const vSender = validator.wallet.getSender();
+
+        const stateBefore = await getControllerState();
+        let res = await controller.sendRecoverStake(vSender, Conf.electorOpValue - 1n); 
+        expect(res.transactions).toHaveTransaction(expTrans);
+        expect(await getControllerState()).toEqualCell(stateBefore);
+
+        res = await controller.sendRecoverStake(vSender, Conf.electorOpValue)
+        expect(res.transactions).not.toHaveTransaction(expTrans);
+      });
+      it('Only validator should be able to trigger stake recovery till grace period expire', async () => {
+       await bc.loadFrom(recoverReady);
+       const stateBefore = await controller.getControllerData();
+       // Meh
+       const dataBefore  = await getControllerState();
+       const sinceUnfreeze = getCurTime() - stateBefore.validatorSetChangeTime - eConf.stake_held_for;
+       expect(sinceUnfreeze).toBeLessThan(Conf.gracePeriod);
+
+       let res = await controller.sendRecoverStake(deployer.getSender());
+
+       expect(res.transactions).toHaveTransaction({
+         from: deployer.address,
+         to: controller.address,
+         success: false,
+         exitCode: Errors.wrong_sender
+       });
+       expect(res.transactions).not.toHaveTransaction({
+         from: controller.address,
+         to: electorAddress,
+         op: Op.elector.recover_stake
+       });
+
+       expect(await getControllerState()).toEqualCell(dataBefore);
+
+       res = await controller.sendRecoverStake(validator.wallet.getSender());
+       expect(res.transactions).not.toHaveTransaction({
+         from: validator.wallet.address,
+         to: controller.address,
+         success: false,
+         exitCode: Errors.wrong_sender
+       });
+      });
+
+      it('If stake is not recovered till grace period expire, anyone could trigger recovery and get reward', async () => {
+       await bc.loadFrom(recoverReady);
+       const stateBefore = await controller.getControllerData();
+       bc.now = stateBefore.validatorSetChangeTime + eConf.stake_held_for + Conf.gracePeriod;
+       const res = await controller.sendRecoverStake(deployer.getSender());
+
+       // Successfull recovery op sends recovery msg to elector
+       expect(res.transactions).toHaveTransaction({
+         from: controller.address,
+         to: electorAddress,
+         op: Op.elector.recover_stake
+       });
+
+       const trans = res.transactions[1];
+       expect(trans.outMessagesCount).toEqual(2);
+       const rewardMsg = trans.outMessages.get(1)!;
+       const fwdFees   = computeMessageForwardFees(msgConfMc, rewardMsg);
+
+       expect(res.transactions).toHaveTransaction({
+         from: controller.address,
+         to: deployer.address,
+         value: Conf.stakeRecoverFine - fwdFees.fees - fwdFees.remaining
+       });
+      });
+      it('Reward should not be sent if less than minimal storage is left after', async () => {
+       await bc.loadFrom(recoverReady);
+       const stateBefore = await controller.getControllerData();
+       bc.now = stateBefore.validatorSetChangeTime + eConf.stake_held_for + Conf.gracePeriod;
+       const minReq = Conf.stakeRecoverFine + Conf.minStorage;
+       // Setting balance
+       await bc.setShardAccount(controller.address, createShardAccount({
+         address: controller.address,
+         code: controller_code,
+         data: await getControllerState(),
+         balance: minReq - 1n // account for balance at message processit time
+       }));
+
+       const res = await controller.sendRecoverStake(deployer.getSender());
+       // Should still send message to elector
+       expect(res.transactions).toHaveTransaction({
+         from: controller.address,
+         to: electorAddress,
+         op: Op.elector.recover_stake
+       });
+       // But no reward
+       expect(res.transactions).not.toHaveTransaction({
+         from: controller.address,
+         to: deployer.address
+       });
+      });
+      it('Validator should not be rewarded for not recovering stake in time', async () => {
+       await bc.loadFrom(recoverReady);
+       const stateBefore = await controller.getControllerData();
+       bc.now = stateBefore.validatorSetChangeTime + eConf.stake_held_for + Conf.gracePeriod;
+
+       const res = await controller.sendRecoverStake(validator.wallet.getSender());
+
+       // Should still send message to elector
+       expect(res.transactions).toHaveTransaction({
+         from: controller.address,
+         to: electorAddress,
+         op: Op.elector.recover_stake
+       });
+       // But no reward
+       expect(res.transactions).not.toHaveTransaction({
+         from: controller.address,
+         to: validator.wallet.address
+       });
+      });
+      it('Recover stake ok message should only be accepted from elector', async () => {
+        await bc.loadFrom(recoverReady);
+
+        const notElector  = differentAddress(electorAddress);
+        const borrowed    = (await controller.getControllerData()).borrowedAmount;
+        const stateBefore = await getControllerState();
+        const res = await bc.sendMessage(internal({
+          from: notElector,
+          to: controller.address,
+          body: recoverStakeOk,
+          value: borrowed + toNano('10000')
+        }));
+        expect(await getControllerState()).toEqualCell(stateBefore);
+      });
+      it('Successfull stake recovery  should trigger debt repay', async () => {
+        await bc.loadFrom(recoverReady);
+        const stateBefore = await controller.getControllerData();
+        // We don't want to trigger loan repayment bounce, so have to use receiveMessage
+        const controllerSmc = await bc.getContract(controller.address);
+        const res = await controllerSmc.receiveMessage(internal({
+          from: electorAddress,
+          to: controller.address,
+          body: recoverStakeOk,
+          value: stateBefore.borrowedAmount + toNano('10000')
+        }), {now: bc.now});
+        expect(res.outMessagesCount).toEqual(1);
+        const repayMsg = res.outMessages.get(0)!;
+        // TS type check
+        if( repayMsg.info.type !== "internal" )
+          throw Error("Can't be!");
+
+        expect(repayMsg.info.dest).toEqualAddress(poolAddress);
+        expect(repayMsg.info.value.coins).toEqual(stateBefore.borrowedAmount);
+        expect(repayMsg.body.beginParse().preloadUint(32)).toEqual(Op.pool.loan_repayment);
+
+        // Should revert to rest state
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.state).toEqual(ControllerState.REST);
+        expect(dataAfter.borrowedAmount).toEqual(0n);
+        expect(dataAfter.borrowingTime).toEqual(0);
+      });
+      it('Controller should halt If not enough balance to repay debt on recovery', async () => {
+        await bc.loadFrom(recoverReady);
+        const dataBefore = await controller.getControllerData();
+        // We don't want to trigger loan repayment bounce, so have to use receiveMessage
+        const controllerSmc = await bc.getContract(controller.address);
+        const minBalance    = Conf.minStorage + dataBefore.borrowedAmount;
+        expect(controllerSmc.balance).toBeLessThan(minBalance);
+        const offByOne = minBalance - controllerSmc.balance - 1n;
+        const res = await controllerSmc.receiveMessage(internal({
+          from: electorAddress,
+          to: controller.address,
+          body: recoverStakeOk,
+          value: offByOne
+        }), {now: bc.now});
+        expect(res.outMessagesCount).toEqual(0);
+
+        const dataAfter = await controller.getControllerData();
+        // State get's halted
+        expect(dataAfter.state).toEqual(ControllerState.HALTED);
+        // Should not change borrow related info just in case
+        expect(dataAfter.borrowedAmount).toEqual(dataBefore.borrowedAmount);
+        expect(dataAfter.borrowingTime).toEqual(dataBefore.borrowingTime);
+      });
+    });
     describe('Hash update', () => {
 
       let threeSetState:BlockchainSnapshot;
