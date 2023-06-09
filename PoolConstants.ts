@@ -32,6 +32,14 @@ export abstract class Op {
         recover_stake_ok: 0xf96f7324,
         recover_stake_error:0xfffffffe
     }
+    static readonly pool = {
+        request_loan   : 0x7ccd46e9,
+        loan_repayment : 0xdfdca27b,
+        deposit        : 0x47d54391,
+        withdraw       : 0x319b0cdc, //TODO
+        withdrawal     : 0x31777cdc, //TODO
+        deploy_controller : 0xdf108122
+    }
 }
 
 export abstract class ControllerState {
