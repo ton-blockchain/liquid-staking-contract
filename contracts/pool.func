@@ -127,9 +127,9 @@ int current_round_index();
     } else {    
         update_round();
     }
-    {- ========== Pool operations ========== -}
-    if (op == pool::request_loan) {
 
+    {- =========== Controller operations =========== -}
+    if (op == pool::request_loan) {
           assert_state!(state::NORMAL);
 
           int min_loan = in_msg_body~load_coins();
@@ -181,8 +181,7 @@ int current_round_index();
                     msgflag::NON_BOUNCEABLE, sendmode::PAY_FEES_SEPARETELY);
           
     }
-    if (op == pool::loan_repayment) {
-    
+    if (op == pool::repay_loan) {
         assert_1of2_state!(state::NORMAL, state::REPAYMENT_ONLY);
         ;; we expect loans from previous round only
         ;; note, close_loan finalize round if last loan is closed
@@ -202,10 +201,12 @@ int current_round_index();
             update_round();
         }
     }
+
+    {- ========== Validator operations ========== -}
     if (op == pool::deploy_controller) {
         assert_state!(state::NORMAL);
         int controller_id = in_msg_body~load_uint(32);
-        (slice controller_address, cell init_state ) = build_controller_address(controller_id, sender_address);
+        (slice controller_address, cell init_state) = build_controller_address(controller_id, sender_address);
         builder msg = begin_cell()
                       .store_msg_flags(msgflag::BOUNCEABLE)
                       .store_slice(controller_address)
@@ -214,6 +215,8 @@ int current_round_index();
                       .store_body_header(controller::top_up, cur_lt());
         send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);
     }
+
+    {- ========== Nominator operations ========== -}
     if (op == pool::deposit) {
         assert_state!(state::NORMAL);
         throw_unless(error::deposits_are_closed, deposits_open?);
@@ -261,8 +264,8 @@ int current_round_index();
           ;; TODO send response to response_address
         }
     }
-    {- ========== General operations ========== -}
 
+    {- ========== Governance operations ========== -}
     if (op == sudo::send_message) {
                 process_sudo_request(sender_address, in_msg_body);
     }
