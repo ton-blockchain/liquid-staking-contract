@@ -358,13 +358,29 @@ describe('Cotroller mock', () => {
       const msgVal       = borrowAmount + interest;
       const stateBefore  = await controller.getControllerData();
 
-      const borrowTime = bc.now ?? Math.floor(Date.now() / 1000);
+      const borrowTime = getCurTime();
       const res = await controller.sendCredit(bc.sender(poolAddress), borrowAmount, msgVal);
       const stateAfter = await controller.getControllerData();
       expect(stateAfter.borrowedAmount).toEqual(stateBefore.borrowedAmount + borrowAmount);
       expect(stateAfter.borrowingTime).toEqual(borrowTime);
       expect(stateAfter.state).toEqual(ControllerState.REST);
       snapStates.set('borrowed', bc.snapshot());
+    });
+    it('Borrow time should not update if already not 0', async () => {
+      await loadSnapshot('borrowed');
+      const dataBefore   = await controller.getControllerData();
+      const borrowAmount = getRandomTon(100000, 200000);
+      const interest     = getRandomTon(1000, 2000);
+      const msgVal       = borrowAmount + interest;
+      // Some time passed
+      bc.now = getCurTime() + 1234;
+      const res = await controller.sendCredit(bc.sender(poolAddress), borrowAmount, msgVal);
+      const dataAfter = await controller.getControllerData();
+      // Should stil sum up
+      expect(dataAfter.borrowedAmount).toEqual(dataBefore.borrowedAmount + borrowAmount);
+      // Should not change
+      expect(dataAfter.borrowingTime).toEqual(dataBefore.borrowingTime);
+      expect(dataAfter.state).toEqual(ControllerState.REST);
     });
     it('Approve should only be accepted from approver address', async () => {
       const notApprover  = differentAddress(deployer.address);
