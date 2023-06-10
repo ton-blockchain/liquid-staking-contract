@@ -1,0 +1,24 @@
+const int error::unauthorized = 401;
+const int error::no_forward_payload = 708;
+const int error::not_enough_tons = 402;
+const int error::unauthorized_init = 0xffff;
+const int error::unknown_opcode = 406;
+const int error::wrong_chain = 333;
+
+
+const int error::burn_before_distribution = 66;
+const int error::need_init = 67;
+const int error::distribution_already_started = 68;
+const int error::cannot_distribute_jettons = 69;
+const int error::cannot_distribute_tons = 70;
+const int error::unknown_jetton_wallet = 71;
+const int error::mint_after_distribution_start = 72;
+const int error::unauthorized_mint_request = 73;
+const int error::unauthorized_burn_notification = 74;
+const int error::discovery_fee_not_matched = 75;
+const int error::unauthorized_change_admin_request = 76;
+const int error::unauthorized_change_content_request = 77;
+const int error::unauthorized_change_distibutor_request = 78;
+const int error::unauthorized_transfer_source = 79;
+const int error::unauthorized_start_request = 80;
+const int error::wallet_balance_below_min = 81;

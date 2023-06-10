@@ -16,7 +16,7 @@ export type PoolConfig = {
   approver: Address;
   
   controller_code: Cell;
-  payout_wallet_code: Cell;
+  payout_wallet_code?: Cell;
   pool_jetton_wallet_code: Cell;
   payout_minter_code: Cell;
   vote_keeper_code: Cell;
@@ -137,15 +137,21 @@ export class Pool implements Contract {
 
 
 
+    async getDepositPayout(provider: ContractProvider) {
+        let res = await provider.get('get_current_round_deposit_payout', []);
+        let minter = res.stack.readAddress();
+        return AwaitedJettonMinter.createFromAddress(minter);
+    }
     async getDepositMinter(provider: ContractProvider) {
-        let res = await provider.get('get_current_round_deposit_minter', []);
+        return this.getDepositPayout(provider);
+    }
+    async getWithdrawalPayout(provider: ContractProvider) {
+        let res = await provider.get('get_current_round_withdrawal_payout', []);
         let minter = res.stack.readAddress();
         return AwaitedJettonMinter.createFromAddress(minter);
     }
     async getWithdrawalMinter(provider: ContractProvider) {
-        let res = await provider.get('get_current_round_withdrawal_minter', []);
-        let minter = res.stack.readAddress();
-        return AwaitedJettonMinter.createFromAddress(minter);
+        return this.getWithdrawalPayout(provider);
     }
     async getFinanceData(provider: ContractProvider) {
         let res = await provider.get('get_finance_data', []);
