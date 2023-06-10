@@ -15,7 +15,7 @@
 
 global int state;
 global int total_balance;
-global int interest_rate;
+global int interest_rate; ;; times 2**16
 global int optimistic_deposit_withdrawals;
 global int deposits_open?;
 global int saved_validator_set_hash;
@@ -26,7 +26,7 @@ global [cell, int, int, int, int, int, int] prev_round_borrowers;
 
 global int min_loan_per_validator;
 global int max_loan_per_validator;
-global int governance_fee; ;; base256
+global int governance_fee; ;; times 2**16
 
 ;; Basic jetton that represents share of the pool
 global slice jetton_minter;
@@ -385,8 +385,8 @@ int current_round_index();
     
     profit -= FINALIZE_ROUND_FEE;
 
-    ;; governance_fee / 256 <= 1 ratio, share to send to governance
-    int fee = max(muldiv(governance_fee, profit, 256), 0);
+    ;; governance_fee / 65536 < 1 ratio, share to send to governance
+    int fee = max(muldiv(governance_fee, profit, 65536), 0);
     profit -= fee;
 
     ;; if there is negative profit (loss), then it can take maximum all the balance
@@ -632,4 +632,11 @@ slice get_current_round_withdrawal_payout() method_id {
            .store_uint(4, 3).store_int(wc, 8).store_uint(addr_hash, ADDR_SIZE)
       .end_cell().begin_parse());
     return parse_std_addr(controller_address);
+}
+
+(int, int, int, int, slice) get_pool_credit_params() method_id {
+    load_data();
+    return (min_loan_per_validator, max_loan_per_validator,
+            interest_rate, governance_fee,
+            interest_manager);
 }

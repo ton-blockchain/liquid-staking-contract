@@ -73,7 +73,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               )
               .storeCoins(100 * 1000000000)
               .storeCoins(1000000 * 1000000000)
-              .storeUint(3, 8)
+              .storeUint(655, 16) // governance fee
               .storeRef(mintersData)
               .storeRef(roles)
               .storeRef(codes)

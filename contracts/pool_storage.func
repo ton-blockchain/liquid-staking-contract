@@ -182,7 +182,7 @@ builder save_codes(builder pb) {
         )
         .store_coins(min_loan_per_validator)
         .store_coins(max_loan_per_validator)
-        .store_uint(governance_fee, 8)
+        .store_uint(governance_fee, 16)
         .save_minters_data()
         .save_roles()
         .save_codes()
