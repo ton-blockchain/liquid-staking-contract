@@ -1,0 +1,36 @@
+const int op::nft_transfer = 0x5fcc3d14;
+const int op::jetton_transfer = 0xf8a7ea5;
+const int op::ownership_assigned = 0x05138d91;
+const int op::excesses = 0xd53276db;
+const int op::get_static_data = 0x2fcb26a2;
+const int op::report_static_data = 0x8b771735;
+const int op::get_royalty_params = 0x693d3950;
+const int op::report_royalty_params = 0xa8cb00ad;
+
+const int op::burn = 0x8a8a8a8a;
+const int op::burn_notification = 0x7a8a8a8a;
+const int op::init_nft = 0x1145;
+const int op::init_collection = 0xf5aa8943;
+
+
+
+const int op::distributed_asset = 0xdb3b8abd;
+const int op::start_distribution = 0x1140a64f;
+const int op::transfer_notification = 0x7362d09c;
+
+const int op::mint_nft = 0x1674b0a0;
+
+(slice, (int)) ~load_op(slice s) inline { return s.load_uint(32); }
+(slice, (int)) ~load_query_id(slice s) inline { return s.load_uint(64); }
+(slice, (int, int)) ~load_body_header(slice s) inline {
+  int op = s~load_uint(32);
+  int query_id = s~load_uint(64);
+  return (s, (op, query_id));
+}
+
+builder store_op(builder b, int op) inline { return b.store_uint(op, 32); }
+builder store_query_id(builder b, int query_id) inline { return b.store_uint(query_id, 64); }
+builder store_body_header(builder b, int op, int query_id) inline {
+  return b.store_uint(op, 32)
+          .store_uint(query_id, 64);
+}

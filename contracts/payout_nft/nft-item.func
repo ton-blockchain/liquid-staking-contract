@@ -1,0 +1,229 @@
+#include "stdlib.func";
+#include "op-codes.func";
+#include "errors.func";
+#include "params.func";
+#include "messages.func";
+;;
+;;  TON NFT Item Smart Contract
+;;
+
+{-
+    NOTE that this tokens can be transferred within the same workchain.
+-}
+
+
+const int ONE_COIN = 1000000000;
+const int min_tons_for_storage = 9 * ONE_COIN / 100; ;; 0.05 TON
+const int burn_notification_amount = ONE_COIN / 100; ;; 0.01 TON
+
+;;
+;;  Storage
+;;
+;;  Bool inited?
+;;  MsgAddressInt owner
+;;  MsgAddressInt collection
+;;  uint64 index
+;;  coins amount
+;;  slice prev
+;;  ^slice next
+;;
+
+global slice static_data;
+global slice collection;
+
+;; inited?, owner
+(int, slice) load_volatile_data() impure {
+    slice ds = get_data().begin_parse();
+    int inited? = ds~load_int(1);
+    if (inited?) {
+      slice owner = ds~load_msg_addr();
+      static_data = ds;
+      return (inited?, owner);
+    } else {
+      static_data = ds;
+      collection = ds~load_msg_addr();
+    }
+    return (inited?, null());
+}
+
+
+(slice, int, int, slice, slice) load_static_data() {
+    slice ds = static_data;
+    slice _collection = ds~load_msg_addr();
+    int index = ds~load_uint(64);
+    int amount = ds~load_coins();
+    slice prev = ds~load_msg_addr();
+    ds = ds.preload_ref().begin_parse();
+    slice next = ds~load_msg_addr();
+    return (_collection, index, amount, prev, next);
+}
+
+{-
+    ;; inited?, owner, content, index, collection, code
+    (int, slice, cell, int,  slice, cell) load_data() {
+        slice ds = get_data().begin_parse();
+        int inited? = ds~load_int(1);
+        if(inited?) {
+          slice owner = ds~load_msg_addr();
+          cell content = ds~load_ref();
+          static_data = ds;
+          (int index, slice collection, cell code) = (ds~load_uint(64), ds~load_msg_addr(), ds~load_ref());
+          return (inited?, owner, content, index, collection, code);
+        } else {
+          (slice owner, cell content) = (null(), null());
+          static_data = ds;
+          (int index, slice collection, cell code) = (ds~load_uint(64), ds~load_msg_addr(), ds~load_ref());
+          return (inited?, owner, content, index, collection, code);
+        }
+    }
+-}
+() store_data(slice owner) impure {
+    set_data(
+        begin_cell()
+            .store_int(true, 1)
+            .store_slice(owner)
+            .store_slice(static_data)
+            .end_cell()
+    );
+}
+
+() store_data_full(slice owner, int amount, slice next, slice prev) impure {
+    set_data(
+        begin_cell()
+            .store_int(true, 1)
+            .store_slice(owner)
+            .store_slice(static_data)
+            .store_coins(amount)
+            .store_slice(next)
+            .store_ref(begin_cell().store_slice(next).end_cell())
+        .end_cell()
+    );
+}
+
+() send_msg(slice to, int amount, int op, int query_id, builder payload, int send_mode) impure inline {
+  var msg = begin_cell()
+    .store_msg_flags(msgflag::NON_BOUNCEABLE)
+    .store_slice(to)
+    .store_coins(amount)
+    .store_msgbody_prefix_slice()
+    .store_body_header(op, query_id);
+  if (~ null?(payload)) {
+    msg = msg.store_builder(payload);
+  }
+  send_raw_message(msg.end_cell(), send_mode);
+}
+
+() transfer_ownership(int my_balance, slice owner, slice sender, int query_id, slice in_msg_body, int fwd_fees) impure inline {
+    throw_unless(error::unauthorized, equal_slice_bits(sender, owner));
+
+    slice new_owner = in_msg_body~load_msg_addr();
+    force_chain(new_owner);
+    slice response_destination = in_msg_body~load_msg_addr();
+    in_msg_body~load_int(1); ;; this nft don't use custom_payload
+    int forward_amount = in_msg_body~load_coins();
+    throw_unless(error::no_forward_payload, slice_bits(in_msg_body) >= 1);
+
+    int rest_amount = my_balance - min_tons_for_storage;
+    if (forward_amount) {
+      rest_amount -= (forward_amount + fwd_fees);
+    }
+    int need_response = response_destination.preload_uint(2) != 0; ;; if NOT addr_none: 00
+    if (need_response) {
+      rest_amount -= fwd_fees;
+    }
+
+    throw_unless(error::not_enough_tons, rest_amount >= 0); ;; base nft spends fixed amount of gas, will not check for response
+
+    if (forward_amount) {
+      send_msg(new_owner, forward_amount, op::ownership_assigned, query_id, begin_cell().store_slice(owner).store_slice(in_msg_body), sendmode::PAY_FEES_SEPARETELY);  ;; paying fees, revert on errors
+    }
+    if (need_response) {
+      force_chain(response_destination);
+      send_msg(response_destination, rest_amount, op::excesses, query_id, null(), sendmode::PAY_FEES_SEPARETELY); ;; paying fees, revert on errors
+    }
+
+    store_data(new_owner);
+}
+
+() burn (slice owner, slice sender, int query_id) impure inline {
+    var (_collection, index, amount, prev, next) = load_static_data();
+    throw_unless(error::unauthorized, equal_slice_bits(sender, prev) | equal_slice_bits(sender, _collection));
+
+    if(next.preload_uint(2) != 0) { ;; addr_none
+      send_msg(next, burn_notification_amount, op::burn, query_id, null(), sendmode::PAY_FEES_SEPARETELY);
+    }
+    send_msg(_collection, 0, op::burn_notification, query_id,
+             begin_cell().store_coins(amount).store_slice(owner).store_uint(index, 64),
+             sendmode::CARRY_ALL_BALANCE | sendmode::DESTROY);  ;; paying fees, revert on errors
+}
+
+() recv_internal(int my_balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) { ;; ignore empty messages
+        return ();
+    }
+
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+
+    if (flags & 1) { ;; ignore all bounced messages
+        return ();
+    }
+    slice sender = cs~load_msg_addr();
+
+    cs~load_msg_addr(); ;; skip dst
+    cs~load_coins(); ;; skip value
+    cs~skip_bits(1); ;; skip extracurrency collection
+    cs~load_coins(); ;; skip ihr_fee
+    int fwd_fee = muldiv(cs~load_coins(), 3, 2); ;; we use message fwd_fee for estimation of forward_payload costs
+
+    int op = in_msg_body~load_uint(32);
+    int query_id = in_msg_body~load_uint(64);
+
+    (int init?, slice owner) = load_volatile_data();
+    if (~ init?) {
+      throw_unless(error::unauthorized_init, equal_slice_bits(collection, sender));
+
+      owner = in_msg_body~load_msg_addr();
+      int amount = in_msg_body~load_coins();
+      slice prev = in_msg_body~load_msg_addr();
+      slice next = in_msg_body~load_msg_addr();
+      store_data_full(owner, amount, prev, next);
+
+      raw_reserve(min_tons_for_storage, 2);
+      send_msg(owner, 0, op::ownership_assigned, query_id,
+                 begin_cell()
+                   .store_uint(0, 2) ;; prev_owner:MsgAddress - addr_none
+                   .store_int(false, 1), ;; forward_payload:(Either Cell ^Cell) - empty
+                 sendmode::CARRY_ALL_BALANCE | sendmode::IGNORE_ERRORS);  ;; all except min_tons_for_storage
+      return ();
+    }
+
+    if (op == op::nft_transfer) {
+      transfer_ownership(my_balance, owner, sender, query_id, in_msg_body, fwd_fee);
+      return ();
+    }
+    if (op == op::burn) {
+      burn(owner, sender, query_id);
+      return ();
+    }
+    if (op == op::get_static_data) {
+      var (_collection, index, amount, prev, next) = load_static_data();
+      send_msg(sender, 0, op::report_static_data, query_id, 
+               begin_cell()
+                 .store_uint(index, 256)
+                 .store_slice(_collection),
+               sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);  ;; carry all the remaining value of the inbound message
+      return ();
+    }
+    throw(error::unknown_opcode);
+}
+
+;;
+;;  GET Methods
+;;
+
+(int, int, slice, slice, cell) get_nft_data() method_id {
+  (int init?, slice owner) = load_volatile_data();
+  var (_collection, index, amount, prev, next) = load_static_data();
+  return (init?, index, _collection, owner, begin_cell().store_coins(amount).end_cell());
+}

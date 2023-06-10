@@ -51,9 +51,12 @@ cell calculate_payout_state_init(slice pool_address, int round_id, int distribut
   ;; TODO optimize
   slice name = concat(distributing_jettons? ? "Deposit " : "Withdrawal ", concat("Payout#", encode_number_to_text(round_id, 10)));
   content_dict~udict_set_ref(256, "name"H, pack_metadata_value(name));
-  content_dict~udict_set_ref(256, "description"H, pack_metadata_value("Utility jetton: do not use directly"));
-  slice symbol = distributing_jettons? ? "⏲️J" : "⏲️💎";
-  content_dict~udict_set_ref(256, "symbol"H, pack_metadata_value(symbol));
+  if (distributing_jettons?) {
+    content_dict~udict_set_ref(256, "description"H, pack_metadata_value("Converts deposited TON to Pool Jettons"));
+  } else {
+    content_dict~udict_set_ref(256, "description"H, pack_metadata_value("Converts burned Pool Jettons to TON"));
+  }
+  content_dict~udict_set_ref(256, "symbol"H, pack_metadata_value("⏲️"));
   content_dict~udict_set_ref(256, "uri"H, pack_metadata_value("my-custom-stake-address.ton"));
   content_dict~udict_set_ref(256, "image"H, pack_metadata_value("my-custom-stake-address.ton/icon.img"));
   cell onchain_content = begin_cell().store_uint(0, 8).store_dict(content_dict).end_cell();
