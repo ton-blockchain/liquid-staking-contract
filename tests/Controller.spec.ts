@@ -507,7 +507,176 @@ describe('Cotroller mock', () => {
         expect(dataAfter.state).toEqual(ControllerState.REST);
       });
     });
+    describe('Return unused loan', () => {
+      let nextRound: BlockchainSnapshot;
+      let testReturnLoan: (exp_code: number, via: Sender, value?:bigint) => Promise<SendMessageResult>;
+      beforeAll(() => {
+        testReturnLoan = async (exp_code:number, via: Sender, value?:bigint) => {
+          const stateBefore = await getControllerState();
+          const res = await controller.sendReturnUnusedLoan(via, value);
+          expect(res.transactions).toHaveTransaction({
+            from: via.address!,
+            to: controller.address,
+            success: exp_code == 0,
+            exitCode: exp_code
+          });
+          if(exp_code != 0)
+            expect(await getControllerState()).toEqualCell(stateBefore);
+          return res;
+        };
+      });
+      it('Credit is required to return loan', async () => {
+        const dataBefore  = await controller.getControllerData();
+        const stateBefore = await getControllerState();
+        expect(dataBefore.borrowedAmount).toEqual(0n);
+        await testReturnLoan(Errors.no_credit, validator.wallet.getSender());
+      });
+      it('Only funds from previous rounds should be returned', async () => {
+        await loadSnapshot('borrowed');
+        const curData = await controller.getControllerData();
+        const curVset = getVset(bc.config, 34);
+        expect(curData.borrowingTime).toBeGreaterThan(curVset.utime_since);
+        await testReturnLoan(Errors.too_early_loan_return, validator.wallet.getSender());
+        // Meh
+        // Let's pretend we got next round set
+        bc.now = getCurTime() + 100;
+        randVset();
+        nextRound = bc.snapshot();
+        const res = await controller.sendReturnUnusedLoan(validator.wallet.getSender());
+        expect(res.transactions).not.toHaveTransaction({
+          from: validator.wallet.address,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.too_early_loan_return
+        });
+      });
+      it('If loan overdue < grace period, only validator should be able to trigger return', async () => {
+        await bc.loadFrom(nextRound);
+        const dataBefore = await controller.getControllerData();
+        const curVset    = getVset(bc.config, 34);
+        const overdue    = getCurTime() - curVset.utime_since;
+        expect(overdue).toBeLessThan(Conf.gracePeriod);
+        const msgVal = toNano('0.5');
+        await testReturnLoan(Errors.wrong_sender, deployer.getSender(), msgVal);
 
+        const res = await testReturnLoan(0, validator.wallet.getSender(), msgVal);
+        // In case of validator, excess is sent back
+        const trans  = res.transactions[1];
+        expect(res.transactions[1].outMessagesCount).toEqual(2);
+        const retLoan = trans.outMessages.get(0)!;
+        const excess  = trans.outMessages.get(1)!;
+        expect(res.transactions).toHaveTransaction({
+          from: controller.address,
+          to: poolAddress,
+          op: Op.pool.loan_repayment,
+          value: dataBefore.borrowedAmount /*- fwdFees.fees - fwdFees.remaining*/
+        });
+        expect(res.transactions).toHaveTransaction({
+          from: controller.address,
+          to: validator.wallet.address,
+          value: getMsgExcess(trans, excess, msgVal, msgConfMc)
+        });
+
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.borrowedAmount).toEqual(0n);
+        expect(dataAfter.borrowingTime).toEqual(0);
+
+      });
+      it('When overdue exceeds grace period, everyone should be able to trigger return and get rewarded', async () => {
+        await bc.loadFrom(nextRound);
+        const dataBefore = await controller.getControllerData();
+        const curVset    = getVset(bc.config, 34);
+        const overdue    = getCurTime() - curVset.utime_since;
+
+        if(overdue < Conf.gracePeriod)
+          bc.now = curVset.utime_since + Conf.gracePeriod + 1;
+
+        const res = await testReturnLoan(Errors.success, deployer.getSender());
+
+        const trans = res.transactions[1];
+        expect(trans.outMessagesCount).toEqual(2);
+
+        const reward = trans.outMessages.get(1)!;
+        const fwdFees = computeMessageForwardFees(msgConfMc, reward);
+        expect(res.transactions).toHaveTransaction({
+          from: controller.address,
+          to: poolAddress,
+          op: Op.pool.loan_repayment,
+          value: dataBefore.borrowedAmount
+        });
+
+        expect(res.transactions).toHaveTransaction({
+          from: controller.address,
+          to: deployer.address,
+          value: Conf.stakeRecoverFine - fwdFees.fees - fwdFees.remaining
+        });
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.borrowedAmount).toEqual(0n);
+        expect(dataAfter.borrowingTime).toEqual(0);
+      });
+      it('Validator shouldn\'t get rewarded for slacking loan return', async () => {
+        await bc.loadFrom(nextRound);
+        const dataBefore = await controller.getControllerData();
+        const curVset    = getVset(bc.config, 34);
+        const overdue    = getCurTime() - curVset.utime_since;
+
+        if(overdue < Conf.gracePeriod)
+          bc.now = curVset.utime_since + Conf.gracePeriod + 1;
+
+        const res = await testReturnLoan(Errors.success, validator.wallet.getSender());
+        expect(res.transactions).toHaveTransaction({
+          from: controller.address,
+          to: poolAddress,
+          op: Op.pool.loan_repayment,
+          value: dataBefore.borrowedAmount
+        });
+        // No reward message
+        expect(res.transactions).not.toHaveTransaction({
+          from: controller.address,
+          to: validator.wallet.address
+        });
+
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.borrowedAmount).toEqual(0n);
+        expect(dataAfter.borrowingTime).toEqual(0);
+      });
+      it('Loan repayment bounce only accepted from pool', async () => {
+        const controllerSmc = await bc.getContract(controller.address);
+        const notPool = differentAddress(poolAddress);
+        const repay   = getRandomTon(100000, 200000);
+        const stateBefore = await getControllerState();
+        const res = controllerSmc.receiveMessage(internal({
+          from: notPool,
+          to: controller.address,
+          value: repay,
+          bounced: true,
+          body: beginCell().storeUint(0xFFFFFFFF, 32)
+                           .storeUint(Op.pool.loan_repayment, 32)
+                           .storeUint(1, 64).endCell()
+        }),{now: bc.now});
+
+        expect(await getControllerState()).toEqualCell(stateBefore);
+      });
+      it('Loan repayment bounce from pool should trigger borrow amount recovery', async () => {
+        const controllerSmc = await bc.getContract(controller.address);
+        const notPool = differentAddress(poolAddress);
+        const repay   = getRandomTon(100000, 200000);
+        const bounceTime = getCurTime();
+        const res = controllerSmc.receiveMessage(internal({
+          from: poolAddress,
+          to: controller.address,
+          value: repay,
+          bounced: true,
+          body: beginCell().storeUint(0xFFFFFFFF, 32)
+                           .storeUint(Op.pool.loan_repayment, 32)
+                           .storeUint(1, 64).endCell()
+        }),{now: bc.now});
+
+        const dataAfter  = await controller.getControllerData();
+        expect(dataAfter.borrowedAmount).toEqual(repay);
+        expect(dataAfter.borrowingTime).toEqual(bounceTime);
+      });
+    });
     describe('New stake', () => {
       beforeEach(async () => loadSnapshot('borrowed'));
       it('Not validator should not be able to deposit to elector', async() => {
