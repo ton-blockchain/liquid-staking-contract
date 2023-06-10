@@ -1060,34 +1060,6 @@ describe('Cotroller mock', () => {
         });
         expect(res.transactions).toHaveTransaction(recTrans);
       });
-      it('Stake recovery only allowed in "staken" state', async () => {
-        const vSender = validator.wallet.getSender();
-        const testState = async (wrong_state:boolean) => {
-          const stateBefore = await getControllerState();
-          const res = await controller.sendRecoverStake(vSender);
-          const failTrans = {
-              from: validator.wallet.address,
-              to: controller.address,
-              success: false,
-              exitCode: Errors.wrong_state
-          };
-          if (wrong_state) {
-            expect(res.transactions).toHaveTransaction(failTrans);
-            expect(await getControllerState()).toEqualCell(stateBefore);
-          }
-          else {
-            expect(res.transactions).not.toHaveTransaction(failTrans);
-          }
-        }
-        await bc.loadFrom(InitialState);
-        await testState(true);
-
-        await loadSnapshot('stake_sent');
-        await testState(true);
-        // TODO other states
-        await loadSnapshot('staken');
-        await testState(false);
-      });
       it('Recover stake message value should be >= elector expected value', async () => {
         await bc.loadFrom(recoverReady);
 
@@ -1279,34 +1251,6 @@ describe('Cotroller mock', () => {
       let threeSetState:BlockchainSnapshot;
       beforeEach(async () => await loadSnapshot('staken'));
 
-      it('Hash update should only be possible in "staken" state', async () => {
-        await bc.loadFrom(InitialState);
-        const expErr = {
-          from: validator.wallet.address,
-          to: controller.address,
-          success: false,
-          exitCode: Errors.wrong_state
-        };
-        expect((await controller.getControllerData()).state).toEqual(ControllerState.REST);
-        const vSender = validator.wallet.getSender();
-        // Initial state REST
-        let res = await controller.sendUpdateHash(vSender);
-        expect(res.transactions).toHaveTransaction(expErr);
-
-        await loadSnapshot('stake_sent');
-        expect((await controller.getControllerData()).state).toEqual(ControllerState.SENT_STAKE_REQUEST);
-        res = await controller.sendUpdateHash(vSender);
-        expect(res.transactions).toHaveTransaction(expErr);
-        // TODO for other states
-        //
-        await loadSnapshot('staken');
-        res = await controller.sendUpdateHash(vSender);
-        expect(res.transactions).toHaveTransaction({
-          from: vSender.address!,
-          to: controller.address,
-          success: true
-        });
-      });
       it('Hash update should not trigger if vset hash didn\'t change', async () => {
         const stateBefore = await getContractData(controller.address);
         const confDict = loadConfig(bc.config);
@@ -1482,6 +1426,82 @@ describe('Cotroller mock', () => {
           to: validator.wallet.address,
           value: availableFunds - fwdFees.fees - fwdFees.remaining
         });
+      });
+    });
+    // Goes last to have all states available
+    describe('State checks', () => {
+      type testCb = () => Promise<SendMessageResult>;
+      let testStates: (states: (BlockchainSnapshot | string) [] , wrong: boolean, cb: testCb) => Promise<void>;
+      let testState: (wrong_state: boolean, cb: testCb) => Promise<void>;
+      beforeAll(() => {
+        testState = async (wrong_state: boolean, cb: () => Promise<SendMessageResult>) => {
+          const stateBefore = await getControllerState();
+          const res = await cb();
+          if(wrong_state)
+            expect(res.transactions).toHaveTransaction({
+              success: false,
+              exitCode: Errors.wrong_state
+            });
+            expect(await getControllerState()).toEqualCell(stateBefore);
+        };
+        testStates = async (states: (BlockchainSnapshot | string)[], wrong:boolean, cb: testCb) => {
+          for (let state of states) {
+            if(typeof state == "string") {
+              await loadSnapshot(state);
+            }
+            else {
+              await bc.loadFrom(state);
+            }
+            await testState(wrong, cb);
+          }
+        }; 
+      });
+      it('Update validator hash only allowed in "staken" state', async () => {
+        const vSender = validator.wallet.getSender();
+        const testCb = async () => await controller.sendUpdateHash(vSender);
+        await testStates([InitialState, 'stake_sent', 'halted', 'borrowing_req'], true, testCb);
+        await loadSnapshot('staken');
+        await testState(false, testCb);
+      });
+      it('Stake recovery only allowed in "staken" state', async () => {
+        const vSender = validator.wallet.getSender();
+        const testCb  = async () => await controller.sendRecoverStake(vSender);
+        await testStates([InitialState, 'stake_sent', 'halted', 'borrowing_req'], true, testCb);
+        await loadSnapshot('staken');
+        await testState(false, testCb);
+      });
+      it('Withdraw validator is only allowed in REST state', async () => {
+        const testCb = async () => await controller.sendValidatorWithdraw(validator.wallet.getSender(), 1n);
+        await testStates(['borrowing_req', 'stake_sent', 'staken', 'halted'], true, testCb);
+        await bc.loadFrom(InitialState);
+        await testState(false, testCb);
+      });
+      it('New stake is only allowed in REST state', async () => {
+        const testCb = async () => {
+          return await controller.sendNewStake(validator.wallet.getSender(),
+                                               toNano('100000'),
+                                               validator.keys.publicKey,
+                                               validator.keys.secretKey,
+                                               12345);
+        };
+        await testStates(['borrowing_req', 'stake_sent', 'staken', 'halted'], true, testCb);
+        await bc.loadFrom(InitialState);
+        await testState(false, testCb);
+      });
+      it('Request loan is only allowed in REST state', async () => {
+        const minLoan = toNano('100000');
+        const maxLoan = toNano('200000');
+        const interest = Math.floor(0.1 * 65535);
+        const testCb = async () => controller.sendRequestLoan(validator.wallet.getSender(), minLoan, maxLoan, interest);
+        await testStates(['borrowing_req', 'stake_sent', 'staken', 'halted'], true, testCb);
+        await bc.loadFrom(InitialState);
+        await testState(false, testCb);
+      });
+      it('Return unused loan is only allowed in REST state', async () => {
+        const testCb = async () => controller.sendReturnUnusedLoan(validator.wallet.getSender());
+        await testStates(['borrowing_req', 'stake_sent', 'staken', 'halted'], true, testCb);
+        await bc.loadFrom(InitialState);
+        await testState(false, testCb);
       });
     });
 });
