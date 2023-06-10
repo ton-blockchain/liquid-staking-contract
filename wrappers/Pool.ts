@@ -154,13 +154,20 @@ export class Pool implements Contract {
         return this.getWithdrawalPayout(provider);
     }
     async getFinanceData(provider: ContractProvider) {
-        let res = await provider.get('get_finance_data', []);
-        let totalBalance = res.stack.readBigNumber();
-        let supply = res.stack.readBigNumber();
-        let requestedForDeposit = res.stack.readBigNumber();
-        let requestedForWithdrawal = res.stack.readBigNumber();
-        res.stack.readCell();
-        let interestRate = res.stack.readNumber();
+        let { stack } = await provider.get('get_finance_data', []);
+        let totalBalance = stack.readBigNumber();
+        let supply = stack.readBigNumber();
+        let requestedForDeposit = stack.readBigNumber();
+        let requestedForWithdrawal = stack.readBigNumber();
+        stack.readCell();
+        let interestRate = stack.readNumber();
         return {totalBalance, supply, requestedForDeposit, requestedForWithdrawal, interestRate};
+    }
+
+    async getMinMaxLoanPerValidator(provider: ContractProvider) {
+        let { stack } = await provider.get('get_min_max_loan_per_validator', []);
+        let min = stack.readBigNumber();
+        let max = stack.readBigNumber();
+        return {min, max};
     }
 }

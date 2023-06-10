@@ -150,6 +150,7 @@ int current_round_index();
           ;;TODO
           int available_funds = creditable_funds; ;;min( creditable_funds, muldiv(256 + disbalance_tolerance, total_balance, 512) );
           
+          ;; cut it to limits
           min_loan = max(min_loan, min_loan_per_validator);
           max_loan = min(max_loan, max_loan_per_validator);
           
@@ -635,4 +636,23 @@ slice get_current_round_withdrawal_payout() method_id {
            .store_uint(4, 3).store_int(wc, 8).store_uint(addr_hash, ADDR_SIZE)
       .end_cell().begin_parse());
     return parse_std_addr(controller_address);
+}
+
+(int, int) get_loan(int controller_id, slice validator_address) method_id {
+    load_data();
+    var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = current_round_borrowers;
+    (slice controller_address, _) = build_controller_address(controller_id, validator_address);
+    (int wc, int addr_hash) = parse_std_addr(controller_address);
+    (slice loan_data, int found?) = borrowers_dict.udict_get?(ADDR_SIZE, addr_hash);
+    ifnot (found?) {
+        return (0, 0);
+    }
+    int borrowed_amount = loan_data~load_coins();
+    int accounted_interest = loan_data~load_coins();
+    return (borrowed_amount, accounted_interest);
+}
+
+(int, int) get_min_max_loan_per_validator() method_id {
+    load_data();
+    return (min_loan_per_validator, max_loan_per_validator);
 }
