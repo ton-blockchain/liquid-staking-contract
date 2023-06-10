@@ -214,6 +214,120 @@ describe('Cotroller mock', () => {
         await bc.loadFrom(InitialState);
     });
 
+    describe('Sudo', () => {
+      let sudoSet: BlockchainSnapshot;
+      let sudoerTime: number;
+      it('Only governor can set sudoer', async () => {
+        const stateBefore = await getControllerState();
+        const notGovernor = differentAddress(deployer.address);
+        const res = await controller.sendSetSudoer(bc.sender(notGovernor), notGovernor);
+        expect(res.transactions).toHaveTransaction({
+          from: notGovernor,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.wrong_sender
+        });
+        expect(await getControllerState()).toEqualCell(stateBefore);
+      });
+      it('Governor should be able to set sudoer', async() => {
+        const dataBefore = await controller.getControllerData();
+        expect(dataBefore.sudoer).toBe(null);
+        sudoerTime = getCurTime();
+        const res = await controller.sendSetSudoer(deployer.getSender(), deployer.address);
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.sudoer).toEqualAddress(deployer.address);
+        sudoSet = bc.snapshot();
+      });
+      it('Fresh sudoer should be quarantined', async () => {
+        await bc.loadFrom(sudoSet);
+        const rndAddr = randomAddress();
+        const sudoMsg = internal({
+          from: controller.address,
+          to: rndAddr,
+          value: toNano('0.1'),
+          body: beginCell().storeUint(0x1337, 32).storeUint(0, 64).endCell()
+        });
+
+        const stateBefore = await getControllerState();
+        const res = await controller.sendSudoMsg(deployer.getSender(), 0, sudoMsg);
+        expect(res.transactions).toHaveTransaction({
+          from: deployer.address,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.sudoer.quarantine
+        });
+        expect(await getControllerState()).toEqualCell(stateBefore);
+      });
+      it('Only sudoer can perform sudo request when quarantine is over', async () => {
+        await bc.loadFrom(sudoSet);
+        bc.now = sudoerTime + Conf.sudoQuarantine + 1;
+        const testAddr = randomAddress();
+        const sudoMsg = internal({
+          from: controller.address,
+          to: testAddr,
+          value: toNano('0.1'),
+          body: beginCell().storeUint(0x1337, 32).storeUint(0, 64).endCell()
+        });
+        const stateBefore = await getControllerState();
+        const notSudoer = differentAddress(deployer.address);
+        const res = await controller.sendSudoMsg(bc.sender(notSudoer), 0, sudoMsg);
+        expect(res.transactions).toHaveTransaction({
+          from: notSudoer,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.wrong_sender
+        });
+        expect(res.transactions).not.toHaveTransaction({
+          from: controller.address,
+          to: testAddr,
+          op: 0x1337
+        });
+        expect(await getControllerState()).toEqualCell(stateBefore);
+      });
+      it('Sudoer should be able to send message via sudo', async() => {
+        await bc.loadFrom(sudoSet);
+        bc.now = sudoerTime + Conf.sudoQuarantine + 1;
+        const testAddr = randomAddress();
+        const sudoMsg  = internal({
+          from: controller.address,
+          to: testAddr,
+          value: toNano('0.1'),
+          body: beginCell().storeUint(0x1337, 32).storeUint(0, 64).endCell()
+        });
+
+        const res = await controller.sendSudoMsg(deployer.getSender(), 0, sudoMsg);
+        expect(res.transactions).toHaveTransaction({
+          from: controller.address,
+          to: testAddr,
+          op: 0x1337
+        });
+      });
+    });
+    describe('Halter', () => {
+      it('Not halter should not be able to halt controller', async () => {
+        const stateBefore = await getControllerState();
+        const notHalter = differentAddress(deployer.address);
+        const res = await controller.sendHaltMessage(bc.sender(notHalter));
+
+        expect(res.transactions).toHaveTransaction({
+          from: notHalter,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.wrong_sender
+        });
+        expect(await getControllerState()).toEqualCell(stateBefore);
+      });
+      it('Halter should be able to halt controller', async() => {
+        const dataBefore = await controller.getControllerData();
+        expect(dataBefore.state).not.toEqual(ControllerState.HALTED);
+        const res = await controller.sendHaltMessage(deployer.getSender());
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.state).toEqual(ControllerState.HALTED);
+        snapStates.set('halted', bc.snapshot());
+      });
+      it('Not governor should not be able to unhalt controller', async () => {
+      });
+    });
     it('Controller credit should only be accepted from pool address', async() => {
       const notPool = differentAddress(poolAddress);
       const stateBefore  = await getContractData(controller.address);
