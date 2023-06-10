@@ -1,4 +1,4 @@
-import { Address, toNano, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from 'ton-core';
+import { Address, toNano, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, Message, storeMessage } from 'ton-core';
 import { buff2bigint } from '../utils';
 import { signData } from "./ValidatorUtils";
 import { Conf, Op } from "../PoolConstants";
@@ -247,6 +247,39 @@ export class Controller implements Contract {
 	          value
         });
 	  }
+
+    async sendSetSudoer(provider: ContractProvider, via: Sender, sudoer: Address, value: bigint = toNano('1')) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            value,
+            body: beginCell().storeUint(Op.governor.set_sudoer, 32)
+                             .storeUint(1, 64)
+                             .storeAddress(sudoer)
+                  .endCell()
+        });
+    }
+
+    async sendSudoMsg(provider: ContractProvider, via: Sender, mode:number, msg: Message, query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            value : toNano('1'),
+            body: beginCell().storeUint(Op.sudo.send_message, 32)
+                             .storeUint(query_id, 64)
+                             .storeUint(mode, 8)
+                             .storeRef(beginCell().store(storeMessage(msg)).endCell())
+                  .endCell()
+        });
+    }
+
+    async sendHaltMessage(provider: ContractProvider, via: Sender, query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            value: toNano('1'),
+            body: beginCell().storeUint(Op.halter.halt, 32)
+                             .storeUint(query_id, 64)
+                  .endCell()
+        });
+    }
 
     // Get methods
     async getControllerData(provider: ContractProvider) {
