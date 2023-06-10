@@ -254,7 +254,7 @@ int check_new_stake_msg(slice cs);
                          request_amount,
                          null(), ;; payload
                          msgflag::NON_BOUNCEABLE,
-                         sendmode::IGNORE_ERRORS | sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);
+                         sendmode::REGULAR);
 
             } elseif (op == controller::new_stake) {
                 assert_state!(state::REST);
