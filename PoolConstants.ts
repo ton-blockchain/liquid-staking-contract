@@ -9,6 +9,7 @@ export abstract class Conf {
     static readonly hashUpdateFine = toNano('10');
     static readonly stakeRecoverFine = toNano('10');
     static readonly gracePeriod    = 600;
+    static readonly sudoQuarantine = 86400;
 };
 
 export abstract class Op {
