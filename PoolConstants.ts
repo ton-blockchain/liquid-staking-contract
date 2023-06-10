@@ -50,6 +50,7 @@ export abstract class ControllerState {
     static readonly HALTED = 0xff;
 }
 export abstract class Errors {
+ static readonly success = 0;
  static readonly unknown_op = 0xffff;
 
  static readonly wrong_sender = 0x9283;
