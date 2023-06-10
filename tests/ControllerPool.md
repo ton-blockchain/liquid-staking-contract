@@ -12,7 +12,7 @@ are both starting as a message from controller to pool.
 Pool should accept it only from controllers that were minted by this pool
 with exact approver. Tests are need to cover 
 
-Selected interest rate should be greater or eqal to pool's interest
+Selected interest rate should be greater or equal to pool's interest
 
 Then pool should correctly add the loan to it's list. 
 

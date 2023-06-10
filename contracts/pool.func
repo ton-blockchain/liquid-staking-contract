@@ -602,9 +602,9 @@ slice get_current_round_withdrawal_minter() method_id {
     return withdrawal_payout;
 }
 
-(int, int, int, int, slice) get_finance_data() method_id {
+(int, int, int, int, slice, int) get_finance_data() method_id {
     load_data();
-    return (total_balance, supply, requested_for_deposit, requested_for_withdrawal, jetton_minter);
+    return (total_balance, supply, requested_for_deposit, requested_for_withdrawal, jetton_minter, interest_rate);
 }
 
 (slice) _get_controller_address(int controller_id, slice validator) inline {

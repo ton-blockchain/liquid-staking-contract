@@ -153,6 +153,8 @@ export class Pool implements Contract {
         let supply = res.stack.readBigNumber();
         let requestedForDeposit = res.stack.readBigNumber();
         let requestedForWithdrawal = res.stack.readBigNumber();
-        return {totalBalance, supply, requestedForDeposit, requestedForWithdrawal};
+        res.stack.readCell();
+        let interestRate = res.stack.readNumber();
+        return {totalBalance, supply, requestedForDeposit, requestedForWithdrawal, interestRate};
     }
 }

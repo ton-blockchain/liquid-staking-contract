@@ -17,6 +17,7 @@ const errors = {
     TOO_EARLY_LOAN_REQUEST: 0xfa02,
     TOO_LATE_LOAN_REQUEST: 0xfa03,
     TOO_HIGH_LOAN_REQUEST_AMOUNT: 0xfa04,
+    INTEREST_TOO_LOW: 0xf100
 };
 
 
@@ -216,5 +217,39 @@ describe('Controller & Pool', () => {
             expect(requestLoanResult.vmLogs).toContain("terminating vm with exit code " + errors.WRONG_SENDER);
             expect(bounced.body.beginParse().loadUint(32)).toEqual(0xFFFFFFFF);
         });
+
+        it('should not accept loan from another approver\'s controller', async () => {
+            let anotherPoolConfig = {...poolConfig};
+            const approver = await blockchain.treasury('approver');
+            anotherPoolConfig.approver = approver.address;
+            const anotherPool = blockchain.openContract(Pool.createFromConfig(anotherPoolConfig, pool_code));
+            let anotherControllerConfig = {...controllerConfig};
+            anotherControllerConfig.pool = anotherPool.address;
+            const anotherController = blockchain.openContract(Controller.createFromConfig(anotherControllerConfig, controller_code));
+
+            const poolSmc = await blockchain.getContract(pool.address);
+            const requestLoanResult = poolSmc.receiveMessage(internal({
+                from: anotherController.address,
+                to: pool.address,
+                value: toNano('0.5'),
+                body: loanRequestBodyToPool
+            }));
+            expect(requestLoanResult.vmLogs).toContain(
+                "terminating vm with exit code " + errors.WRONG_SENDER);
+        });
+
+        it('should not accept loan with low interest rate', async () => {
+            const { interestRate } = await pool.getFinanceData();
+            const requestLoanResult1 = await controller.sendLoanRequest(deployer.getSender(), toNano('100000'), toNano('320000'), interestRate - 1);
+            expect(requestLoanResult1.transactions).toHaveTransaction({
+                from: controller.address,
+                to: pool.address,
+                success: false,
+                exitCode: errors.INTEREST_TOO_LOW,
+            });
+            const requestLoanResult2 = await controller.sendLoanRequest(deployer.getSender(), toNano('100000'), toNano('320000'), interestRate);
+            expect(requestLoanResult2.transactions).toHaveTransaction({ to: pool.address, success: true });
+        });
+        
     });
 });
