@@ -300,14 +300,13 @@ describe('Cotroller mock', () => {
           body: Controller.requestLoanMessage(minLoan, maxLoan, interest),
           value: toNano('1')
         }),{now: bc.now});
-        /*
-        await testRequestLoan(0,
-                              validator.wallet.getSender(),
-                              minLoan,
-                              maxLoan,
-                              interest);
 
-        */
+        expect(res.outMessagesCount).toEqual(1);
+        const reqMsg    = res.outMessages.get(0)!;
+        if(reqMsg.info.type !== "internal")
+          throw Error("Should be internal");
+        expect(reqMsg.body.beginParse().preloadUint(32)).toEqual(Op.pool.request_loan);
+
         const dataAfter = await controller.getControllerData();
         expect(dataAfter.state).toEqual(ControllerState.SENT_BORROWING_REQUEST);
         snapStates.set('borrowing_req', bc.snapshot());
