@@ -326,7 +326,6 @@ describe('Cotroller mock', () => {
         const stateBefore = await getControllerState();
         expect(dataBefore.approved).toEqual(false);
 
-        const interest = Math.floor((1 << 16) * 0.05);
         let res = await controller.sendRequestLoan(validator.wallet.getSender(),
                                                    toNano('100000'),
                                                    toNano('200000'),
@@ -358,7 +357,6 @@ describe('Cotroller mock', () => {
         await bc.loadFrom(approved);
 
         const stateBefore = await getControllerState();
-        const interest = Math.floor((1 << 16) * 0.05);
         const curVset  = getVset(bc.config, 34);
         bc.now = curVset.utime_unitl - eConf.begin_before;
 
@@ -378,7 +376,6 @@ describe('Cotroller mock', () => {
         await bc.loadFrom(approved);
 
         const stateBefore = await getControllerState();
-        const interest = Math.floor((1 << 16) * 0.05);
         const curVset  = getVset(bc.config, 34);
         bc.now = curVset.utime_unitl - eConf.end_before;
 
