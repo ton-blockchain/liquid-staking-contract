@@ -404,13 +404,58 @@ describe('Cotroller mock', () => {
                               toNano('200000'),
                               interest);
       });
+      it('Loan requirements should change accordingly to interest passed', async () => {
+        const minLoan = getRandomTon(50000, 100000);
+        const maxLoan = getRandomTon(200000, 300000);
+
+        const controllerSmc = await bc.getContract(controller.address);
+        const baseReq       = await controller.getBalanceForLoan(maxLoan, interest);
+
+        // Test that changes of interest changes required balance
+        let   higherInterest = BigInt(interest * 2);
+        let   higherReq      = await controller.getBalanceForLoan(maxLoan, higherInterest);
+        let   expStakeGrow   = maxLoan * BigInt(interest) / 65535n;
+        expect(higherReq).toBeGreaterThan(baseReq);
+        expect(higherReq - baseReq).toEqual(expStakeGrow);
+      });
+      it('Loan requirements should change accordingly to validator punishment', async () => {
+        const minLoan = getRandomTon(50000, 100000);
+        const maxLoan = getRandomTon(200000, 300000);
+
+        const controllerSmc = await bc.getContract(controller.address);
+        const baseReq       = await controller.getBalanceForLoan(maxLoan, interest);
+
+        // Test that changing punishment configuration changes resulting requirements
+        const punishmentBase   = maxLoan + controllerSmc.balance;
+        const punishmentBefore = await controller.getMaxPunishment(punishmentBase);
+        const confDict = loadConfig(bc.config);
+        confDict.set(40, beginCell()
+                         .storeUint(1, 8) //prefix
+                         .storeCoins(toNano('5000')) //Default flat fine
+                         .storeUint((1 << 32) - 1, 32) // All of the stake
+                         .storeUint(256, 16)
+                         .storeUint(256, 16)
+                         .storeUint(0, 16)
+                         .storeUint(0, 16)
+                         .storeUint(256, 16)
+                         .storeUint(256, 16)
+                        .endCell())
+        bc.setConfig(beginCell().storeDictDirect(confDict).endCell());
+        const punishmentAfter = await controller.getMaxPunishment(punishmentBase);
+        expect(punishmentAfter).toBeGreaterThan(punishmentBefore);
+
+        const higherReq = await controller.getBalanceForLoan(maxLoan, interest);
+        expect(higherReq).toBeGreaterThan(baseReq);
+        // Compare deltas
+        expect(higherReq - baseReq).toEqual(punishmentAfter - punishmentBefore);
+      });
       it('Controller should have enough balance to apply for loan', async () => {
         await bc.loadFrom(reqReady);
 
         const maxLoan = toNano('200000');
 
         const controllerSmc  = await bc.getContract(controller.address);
-        const balanceForLoan = await controller.getBalanceForLoan(maxLoan, BigInt(interest));
+        const balanceForLoan = await controller.getBalanceForLoan(maxLoan, interest);
         expect(controllerSmc.balance).toBeLessThan(balanceForLoan);
 
         await testRequestLoan(Errors.too_high_loan_request_amount,
