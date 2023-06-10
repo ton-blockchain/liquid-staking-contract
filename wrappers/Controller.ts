@@ -174,6 +174,14 @@ export class Controller implements Contract {
                .endCell();
     }
 
+    async sendValidatorWithdraw(provider: ContractProvider, via: Sender, amount: bigint, query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            value: toNano('10'),
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: Controller.validatorWithdrawMessage(amount, query_id)
+        });
+    }
+
     static newStakeMessage(stake_val: bigint,
                            src: Address,
                            public_key: Buffer,

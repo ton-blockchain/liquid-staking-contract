@@ -1328,4 +1328,46 @@ describe('Cotroller mock', () => {
         expect(await getControllerState()).toEqualCell(stateBefore);
       });
     });
+
+    describe('Validator withdraw', () => {
+      let testValidatorWithdraw : (exp_code:number, via: Sender, amount:bigint) => Promise<SendMessageResult>;
+      beforeAll(() => {
+        testValidatorWithdraw = async (exp_code:number, via: Sender, amount: bigint) => {
+          const stateBefore = await getControllerState();
+          const res = await controller.sendValidatorWithdraw(via, amount);
+          expect(res.transactions).toHaveTransaction({
+            from: via.address!,
+            to: controller.address,
+            success: exp_code == Errors.success,
+            exitCode: exp_code
+          });
+          if(exp_code == Errors.success)
+            expect(await getControllerState()).toEqualCell(stateBefore);
+          return res;
+        };
+      });
+      it('Validator can\'t withdraw if controller has borrowed funds', async () => {
+        await loadSnapshot('borrowed');
+        const availableFunds = await controller.getValidatorAmount();
+
+        await testValidatorWithdraw(Errors.withdrawal_while_credited, validator.wallet.getSender(), availableFunds);
+      });
+      it('Validator can\'t request withdraw <= 0', async () => {
+        await testValidatorWithdraw(Errors.incorrect_withdrawal_amount, validator.wallet.getSender(), 0n);
+      });
+      it('Validator should be able to withdraw from controller', async () => {
+        const availableFunds = (await controller.getValidatorAmount()) - Conf.minStorage;
+
+        const res = await testValidatorWithdraw(Errors.success, validator.wallet.getSender(), availableFunds);
+        const trans = res.transactions[1];
+        expect(trans.outMessagesCount).toEqual(1);
+        const retMsg = trans.outMessages.get(0)!;
+        const fwdFees = computeMessageForwardFees(msgConfMc, retMsg);
+        expect(res.transactions).toHaveTransaction({
+          from: controller.address,
+          to: validator.wallet.address,
+          value: availableFunds - fwdFees.fees - fwdFees.remaining
+        });
+      });
+    });
 });
