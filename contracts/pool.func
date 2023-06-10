@@ -593,11 +593,11 @@ int current_round_index() {
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = current_round_borrowers;
     return round_id;
 }
-slice get_current_round_deposit_minter() method_id {
+slice get_current_round_deposit_payout() method_id {
     load_data();
     return deposit_payout;
 }
-slice get_current_round_withdrawal_minter() method_id {
+slice get_current_round_withdrawal_payout() method_id {
     load_data();
     return withdrawal_payout;
 }
