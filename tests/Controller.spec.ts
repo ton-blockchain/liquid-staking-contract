@@ -58,7 +58,9 @@ describe('Cotroller mock', () => {
             keys: keyPairFromSeed(await getSecureRandomBytes(32))
         };
         electorAddress = Address.parse('Ef8zMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM0vF')
-        poolAddress    = randomAddress(-1);
+        // Putting wallet for mock. (Just takes all messages in).
+        const poolWallet = await bc.treasury('pool');
+        poolAddress      = poolWallet.address;
 
         let controllerConfig = {
           controllerId:0,
