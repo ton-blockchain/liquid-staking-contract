@@ -40,6 +40,20 @@ export abstract class Op {
         withdrawal     : 0x31777cdc, //TODO
         deploy_controller : 0xdf108122
     }
+    static readonly governor = {
+        set_sudoer : 0x79e7c016,
+        set_roles  : 0x7a756db8, // TODO
+        unhalt     : 0x7247e7a5,
+        operation_fee : 0x93a, // TODO
+        set_deposit_settings : 0x2233ff55
+    }
+    static readonly sudo = {
+        send_message : 0x270695fb,
+        upgrade : 0x96e7f528
+    }
+    static readonly halter = {
+        halt : 0x139a1b4e
+    }
 }
 
 export abstract class ControllerState {
