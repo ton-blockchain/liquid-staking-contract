@@ -404,8 +404,8 @@ describe('Cotroller mock', () => {
                               interest);
       });
       it('Loan requirements should change accordingly to interest passed', async () => {
-        const minLoan = getRandomTon(50000, 100000);
-        const maxLoan = getRandomTon(200000, 300000);
+        const minLoan = toNano('100000');
+        const maxLoan = toNano('200000');
 
         const controllerSmc = await bc.getContract(controller.address);
         const baseReq       = await controller.getBalanceForLoan(maxLoan, interest);
@@ -418,8 +418,8 @@ describe('Cotroller mock', () => {
         expect(higherReq - baseReq).toEqual(expStakeGrow);
       });
       it('Loan requirements should change accordingly to validator punishment', async () => {
-        const minLoan = getRandomTon(50000, 100000);
-        const maxLoan = getRandomTon(200000, 300000);
+        const minLoan = toNano('100000');
+        const maxLoan = toNano('200000');
 
         const controllerSmc = await bc.getContract(controller.address);
         const baseReq       = await controller.getBalanceForLoan(maxLoan, interest);
