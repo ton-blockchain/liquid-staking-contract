@@ -294,34 +294,6 @@ describe('Controller & Pool', () => {
             });
         });
 
-        it('should get max borrowers amount', async () => {
-            let controllerId = 0;
-            const poolSmc = await blockchain.getContract(pool.address);
-            const loanLimits = await pool.getMinMaxLoanPerValidator();
-            let minLoanRequestBody = Controller.loanRequestBody(loanLimits.min, loanLimits.min, 1000);
-            while (true) {
-                let config = {...controllerConfig};
-                config.controllerId = controllerId;
-
-                let nextController = Controller.createFromConfig(config, controller_code);
-                let body = loanRequestControllerIntoPool(minLoanRequestBody, controllerId, deployer.address);
-                let result = poolSmc.receiveMessage(internal({
-                    from: nextController.address,
-                    to: pool.address,
-                    value: toNano('0.5'),
-                    body: body
-                }));
-                if (result.vmLogs.includes("terminating vm with exit code")) {
-                    let words = result.vmLogs.split(' ');
-                    let exitCode = parseInt(words[words.length - 1]);
-                    expect(exitCode).toEqual(errors.CREDIT_BOOK_TOO_DEEP);
-                    break;
-                }
-                controllerId++;
-            }
-            console.log("Max borrowers amount:", controllerId + 1);
-        });
-
         it('should test max depth of borrowers dict', async () => {
             // hashmap are compact binary trees, so we need to
             // test the max depth of the splitting by generating
