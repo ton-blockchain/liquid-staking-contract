@@ -68,6 +68,7 @@ const int WITHDRAWAL_FEE = ONE_TON / 2;
 const int TRANSFER_NOTIFICATION_AMOUNT = ONE_TON / 10;
 const int PAYOUT_PROCESS_FEE = ONE_TON / 7; ;; Due to consigliere wallet_fee is >= 0.1
 const int POOL_JETTON_WALLET_FEE = 22900000; ;; 0.0229
+const int MAX_POOL_GAS_ON_USER_ACTION = ONE_TON / 3;
 const int POOL_JETTON_MINT_FEE = 27500000; ;; 0.0275
 const int PAYOUT_ITEM_MINT_FEE = ONE_TON / 6;
 const int MINT_PAYOUT_FEE = ONE_TON / 20;
@@ -491,10 +492,17 @@ int current_round_index();
 () request_to_mint_pool_jettons(slice destination, int amount, int query_id, builder payload, int for_user?) impure {
     if (for_user?) {
       send_mint_message(jetton_minter, query_id, destination, amount, payload,
-              DEPOSIT_FEE - POOL_JETTON_WALLET_FEE - POOL_JETTON_MINT_FEE - 16800000, ;;TODO
-              DEPOSIT_FEE - POOL_JETTON_WALLET_FEE,
-              0,
-              sendmode::CARRY_ALL_BALANCE);
+              DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - POOL_JETTON_WALLET_FEE - POOL_JETTON_MINT_FEE - 16800000, ;;TODO
+              DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - POOL_JETTON_WALLET_FEE,
+              DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION,
+              sendmode::PAY_FEES_SEPARETELY);
+      var msg = begin_cell()
+                .store_msg_flags(msgflag::NON_BOUNCEABLE)
+                .store_slice(destination)
+                .store_coins(0)
+                .store_msgbody_prefix_slice()
+                .store_body_header(jetton::excesses, query_id);
+      send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE);
     } else {
       send_mint_message(jetton_minter, query_id, destination, amount, payload,
               TRANSFER_NOTIFICATION_AMOUNT,
@@ -533,11 +541,18 @@ int current_round_index();
         send_raw_message(msg.end_cell(), sendmode::REGULAR);
     }
     send_mint_message(deposit_payout, query_id, destination, amount, begin_cell(),
-                       DEPOSIT_FEE - PAYOUT_PROCESS_FEE - PAYOUT_ITEM_MINT_FEE - 11300000, ;;TODO
-                       DEPOSIT_FEE - PAYOUT_PROCESS_FEE,
-                       0,
-                       sendmode::CARRY_ALL_BALANCE
+                       DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - PAYOUT_PROCESS_FEE - PAYOUT_ITEM_MINT_FEE,
+                       DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - PAYOUT_PROCESS_FEE,
+                       DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION,
+                       sendmode::PAY_FEES_SEPARETELY
                      );
+    var msg = begin_cell()
+            .store_msg_flags(msgflag::NON_BOUNCEABLE)
+            .store_slice(destination)
+            .store_coins(0)
+            .store_msgbody_prefix_slice()
+            .store_body_header(jetton::excesses, query_id);
+    send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE | sendmode::IGNORE_ERRORS);
 }
 
 () request_to_mint_withdrawal(slice destination, int amount, int query_id) impure {
@@ -562,10 +577,18 @@ int current_round_index();
         send_raw_message(msg.end_cell(), sendmode::REGULAR);
     }
     send_mint_message(withdrawal_payout, query_id, destination, amount, begin_cell(),
-            DEPOSIT_FEE - PAYOUT_PROCESS_FEE - PAYOUT_ITEM_MINT_FEE - 11300000, ;;TODO
-            DEPOSIT_FEE - PAYOUT_PROCESS_FEE,
-            0,
-            sendmode::CARRY_ALL_BALANCE);
+            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - PAYOUT_PROCESS_FEE - PAYOUT_ITEM_MINT_FEE,
+            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - PAYOUT_PROCESS_FEE,
+            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION,
+            sendmode::PAY_FEES_SEPARETELY
+    );
+    var msg = begin_cell()
+            .store_msg_flags(msgflag::NON_BOUNCEABLE)
+            .store_slice(destination)
+            .store_coins(0)
+            .store_msgbody_prefix_slice()
+            .store_body_header(jetton::excesses, query_id);
+    send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE);
 }
 
 () initiate_distribution_of_tons(round_id) impure {
