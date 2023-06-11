@@ -1,4 +1,4 @@
-import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from 'ton-core';
+import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from 'ton-core';
 import { JettonMinter as DAOJettonMinter } from '../contracts/jetton_dao/wrappers/JettonMinter';
 import { JettonMinter as AwaitedJettonMinter} from '../contracts/awaited_minter/wrappers/JettonMinter';
 
@@ -71,8 +71,8 @@ export function poolConfigToCell(config: PoolConfig): Cell {
                   .storeRef(emptyRoundData)
                 .endCell()
               )
-              .storeCoins(100 * 1000000000)
-              .storeCoins(1000000 * 1000000000)
+              .storeCoins(100 * 1000000000) // min_loan_per_validator
+              .storeCoins(1000000 * 1000000000) // max_loan_per_validator
               .storeUint(655, 16) // governance fee
               .storeRef(mintersData)
               .storeRef(roles)
@@ -99,9 +99,8 @@ export class Pool implements Contract {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
             //TODO make proper init message
-                     .storeUint(0x7247e7a5, 32) // op = unhalt
+                     .storeUint(0x65430987, 32) // op = touch
                      .storeUint(0, 64) // query id
-                     .storeUint(0, 8) // query id
                   .endCell(),
         });
     }
@@ -127,8 +126,30 @@ export class Pool implements Contract {
                      .storeUint(1, 64) // query id
                   .endCell(),
         });
+   }
+    async sendSetDepositSettings(provider: ContractProvider, via: Sender, value: bigint, optimistic: Boolean, depositOpen: Boolean) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                     .storeUint(0x2233ff55, 32) // op = setDepositSettings
+                     .storeUint(1, 64) // query id
+                     .storeUint(Number(optimistic), 1)
+                     .storeUint(Number(depositOpen), 1)
+                  .endCell(),
+        });
     }
 
+    async sendTouch(provider: ContractProvider, via: Sender) {
+        await provider.internal(via, {
+            value: toNano('0.1'),
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                     .storeUint(0x65430987, 32) // op = touch
+                     .storeUint(1, 64) // query id
+                  .endCell(),
+        });
+    }
 
 
 
