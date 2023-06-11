@@ -87,14 +87,14 @@ global slice collection;
     );
 }
 
-() store_data_full(slice owner, int amount, slice next, slice prev) impure {
+() store_data_full(slice owner, int amount, slice prev, slice next) impure {
     set_data(
         begin_cell()
             .store_int(true, 1)
             .store_slice(owner)
             .store_slice(static_data)
             .store_coins(amount)
-            .store_slice(next)
+            .store_slice(prev)
             .store_ref(begin_cell().store_slice(next).end_cell())
         .end_cell()
     );
