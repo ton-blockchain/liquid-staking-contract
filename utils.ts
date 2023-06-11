@@ -23,6 +23,13 @@ const differentAddress = (oldAddr:Address) => {
     return newAddr;
 }
 
+export function findCommon(s1: string, s2: string): number {
+    let i = 0;
+    while (i < s1.length && s1[i] === s2[i])
+        i++;
+    return i;
+}
+
 export const getRandom = (min:number, max:number) => {
     return Math.random() * (max - min) + min;
 }

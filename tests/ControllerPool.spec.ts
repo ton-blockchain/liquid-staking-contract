@@ -11,7 +11,7 @@ import { getElectionsConf, getValidatorsConf, getVset, loadConfig, packValidator
 import '@ton-community/test-utils';
 import { randomAddress } from "@ton-community/test-utils";
 import { compile } from '@ton-community/blueprint';
-import { getRandomInt } from '../utils';
+import { findCommon } from '../utils';
 
 const errors = {
     WRONG_SENDER: 0x9283,
@@ -19,7 +19,8 @@ const errors = {
     TOO_LATE_LOAN_REQUEST: 0xfa03,
     TOO_HIGH_LOAN_REQUEST_AMOUNT: 0xfa04,
     INTEREST_TOO_LOW: 0xf100,
-    CONTRADICTING_BORROWING_PARAMS: 0xf101
+    CONTRADICTING_BORROWING_PARAMS: 0xf101,
+    CREDIT_BOOK_TOO_DEEP: 0xf401
 };
 
 
@@ -293,16 +294,93 @@ describe('Controller & Pool', () => {
             });
         });
 
-        // it('should test max depth of borrowers dict', async () => {
-        //     // Test 
-        //     const { min } = await pool.getMinMaxLoanPerValidator();
-        //     let controllerId = 0;
-        //     let prefixes
-        //     while (true) {
+        it('should get max borrowers amount', async () => {
+            let controllerId = 0;
+            const poolSmc = await blockchain.getContract(pool.address);
+            const loanLimits = await pool.getMinMaxLoanPerValidator();
+            let minLoanRequestBody = Controller.loanRequestBody(loanLimits.min, loanLimits.min, 1000);
+            while (true) {
+                let config = {...controllerConfig};
+                config.controllerId = controllerId;
 
+                let nextController = Controller.createFromConfig(config, controller_code);
+                let body = loanRequestControllerIntoPool(minLoanRequestBody, controllerId, deployer.address);
+                let result = poolSmc.receiveMessage(internal({
+                    from: nextController.address,
+                    to: pool.address,
+                    value: toNano('0.5'),
+                    body: body
+                }));
+                if (result.vmLogs.includes("terminating vm with exit code")) {
+                    let words = result.vmLogs.split(' ');
+                    let exitCode = parseInt(words[words.length - 1]);
+                    expect(exitCode).toEqual(errors.CREDIT_BOOK_TOO_DEEP);
+                    break;
+                }
+                controllerId++;
+            }
+            console.log("Max borrowers amount:", controllerId + 1);
+        });
 
-        //         controllerId++;
-        //     }
-        // });
+        it('should test max depth of borrowers dict', async () => {
+            // hashmap are compact binary trees, so we need to
+            // test the max depth of the splitting by generating
+            // addresses with different prefixes (0b0000, 0b0001, 0b0010, ...)
+            let controllerId = 0;
+            function nextController(): Controller {
+                let config = {...controllerConfig};
+                controllerId++;
+                config.controllerId = controllerId;
+                return Controller.createFromConfig(config, controller_code);
+            }
+            function tobin(addr: Address): string {
+                // address hash to binary string
+                const hashPart = '0x' + addr.hash.toString('hex');
+                return BigInt(hashPart).toString(2).padStart(256, '0');
+            }
+
+            const MAX_DEPTH = 12;
+            const mainAddr = controller.address;
+
+            const mainAddrBin = tobin(mainAddr);
+            const commons: number[] = [];
+
+            let controllers: {id: number, addr: Address}[] = [ {id: 0, addr: mainAddr} ];
+            while (controllers.length < MAX_DEPTH + 1) {
+                let next = nextController();
+                const common = findCommon(mainAddrBin, tobin(next.address));
+                if (commons.indexOf(common) === -1) {
+                    controllers.push(
+                        {id: controllerId, addr: next.address}
+                    );
+                    commons.push(common);
+                }
+            }
+            const loanLimits = await pool.getMinMaxLoanPerValidator();
+            const poolSmc = await blockchain.getContract(pool.address);
+            let minLoanRequestBody = Controller.loanRequestBody(loanLimits.min, loanLimits.min, 1000);
+            for (let i = 0; i < MAX_DEPTH; i++) {
+                const {id, addr} = controllers[i];
+
+                let body = loanRequestControllerIntoPool(minLoanRequestBody, id, deployer.address);
+                let result = poolSmc.receiveMessage(internal({
+                    from: addr,
+                    to: pool.address,
+                    value: toNano('0.5'),
+                    body: body
+                }));
+                // limit reached
+                expect(result.vmLogs).not.toContain("terminating vm with exit code");
+            }
+            const {id, addr} = controllers[MAX_DEPTH];
+            let body = loanRequestControllerIntoPool(minLoanRequestBody, id, deployer.address);
+            let result = poolSmc.receiveMessage(internal({
+                from: addr,
+                to: pool.address,
+                value: toNano('0.5'),
+                body: body
+            }));
+            expect(result.vmLogs).toContain("terminating vm with exit code " + errors.CREDIT_BOOK_TOO_DEEP);
+        });
     });
 });
