@@ -270,8 +270,8 @@ int current_round_index();
                 process_sudo_upgrade_request(sender_address, in_msg_body);
     } elseif (op == governor::set_sudoer) {
                 process_set_sudo_request(sender_address, in_msg_body);
-    } elseif (op == governor::unhalt) {
-                process_unhalt_request(sender_address, in_msg_body);
+    } elseif (op == governor::set_state) {
+                process_set_state_request(sender_address, in_msg_body);
     } elseif (op == governor::set_roles) {
       assert_sender!(sender_address, governor);
       if(in_msg_body~load_int(1)) {
