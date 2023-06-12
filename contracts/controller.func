@@ -176,8 +176,8 @@ int check_new_stake_msg(slice cs);
                 process_sudo_request(sender_address, in_msg_body);
             } elseif (op == governor::set_sudoer) {
                 process_set_sudo_request(sender_address, in_msg_body);
-            }  elseif (op == governor::unhalt) {
-                process_unhalt_request(sender_address, in_msg_body);
+            }  elseif (op == governor::set_state) {
+                process_set_state_request(sender_address, in_msg_body);
             } elseif (op == halter::halt) {
                 process_halt_request(sender_address, in_msg_body);
             } elseif (op == controller::recover_stake) { ;; send recover_stake to elector

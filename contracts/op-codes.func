@@ -41,7 +41,7 @@ const int pool::loan_repayment = 0xdfdca27b;
 const int pool::deposit = 0x47d54391;
 const int pool::withdraw = 0x319b0cdc; ;;TODO
 const int pool::withdrawal = 0x31777cdc; ;;TODO
-
+const int pool::touch = 0x65430987; ;;TODO
 
 const int pool::deploy_controller = 0xdf108122;
 
@@ -50,9 +50,9 @@ const int sudo::send_message = 0x270695fb;
 const int sudo::upgrade = 0x96e7f528;
 const int governor::set_sudoer = 0x79e7c016;
 const int governor::set_roles = 0x7a756db8; ;; TODO
-const int governor::unhalt = 0x7247e7a5;
+const int governor::set_state = 0x7247e7a5;
 const int governor::operation_fee = 0x93a; ;; TODO
-const int governor::set_deposit_settings = 0x2233ff55;
+const int governor::set_deposit_settings = 0x2233ff55; ;;TODO
 
 const int halter::halt = 0x139a1b4e;
 

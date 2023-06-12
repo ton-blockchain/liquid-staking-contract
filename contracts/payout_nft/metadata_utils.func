@@ -1,0 +1,32 @@
+cell pack_metadata_value(slice a) inline {
+    return begin_cell().store_uint(0, 8).store_slice(a).end_cell();
+}
+
+(int, int) encode_number_to_text(int number) {
+    int len = 0;
+    int value = 0;
+    int mult = 1;
+    do {
+        (number, int res) = number.divmod(10);
+        value = value + (res + 48) * mult;
+        mult = mult * 256;
+        len = len + 1;
+    } until (number == 0);
+    return (len, value);
+}
+
+builder store_coins_string(builder msg, int amount) {
+    (int ceil, int res) = divmod(amount, 1000000000);
+    (int cl, int cv) = encode_number_to_text(ceil);
+    msg = msg.store_uint(cv, cl * 8 );
+    msg = msg.store_uint(46, 8); ;; "."
+    (int rl, int rv) =  encode_number_to_text(res);
+    repeat( 9 - rl ) {
+        msg = msg.store_uint(48, 8); ;; " "
+    }
+    return msg.store_uint(rv, rl * 8);
+}
+
+slice concat(slice a, slice b) inline {
+    return begin_cell().store_slice(a).store_slice(b).end_cell().begin_parse();
+}

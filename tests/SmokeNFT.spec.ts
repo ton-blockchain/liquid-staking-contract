@@ -237,4 +237,36 @@ describe('Pool', () => {
 
     });
 
+    it('should deposit', async () => {
+        let confDict = loadConfig(blockchain.config);
+        confDict.set(34, beginCell().storeUint(0x12, 8).storeUint(0, 32).storeUint(0xfffffdcf, 32).endCell());
+        blockchain.setConfig(beginCell().storeDictDirect(confDict).endCell());
+        //touch pool to trigger rotate
+        let touchResult = await pool.sendTouch(deployer.getSender());
+
+
+        //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
+        let myPoolJettonWalletAddress = await poolJetton.getWalletAddress(deployer.address);
+        let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
+        const jettonAmount1 = await myPoolJettonWallet.getJettonBalance();
+        await pool.sendDeposit(deployer.getSender(), toNano('2'));
+        await pool.sendDeposit(deployer.getSender(), toNano('3'));
+        await pool.sendDeposit(deployer.getSender(), toNano('4'));
+        await pool.sendDeposit(deployer.getSender(), toNano('5'));
+        await pool.sendDeposit(deployer.getSender(), toNano('6'));
+
+
+        confDict = loadConfig(blockchain.config);
+        confDict.set(34, beginCell().storeUint(0x12, 8).storeUint(0, 32).storeUint(0xfffffdef, 32).endCell());
+        blockchain.setConfig(beginCell().storeDictDirect(confDict).endCell());
+        //touch pool to trigger rotate
+        //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
+        touchResult = await pool.sendTouch(deployer.getSender());
+
+        const jettonAmount2 = await myPoolJettonWallet.getJettonBalance();
+        let data = await pool.getFinanceData();
+
+        expect((1n + jettonAmount2 - jettonAmount1)*data.totalBalance/data.supply).toBe(toNano('15.0'));
+
+    });
 });

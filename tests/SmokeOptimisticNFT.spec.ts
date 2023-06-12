@@ -151,18 +151,5 @@ describe('Pool', () => {
 
     });
 
-    it('should deposit', async () => {
-        //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
-        const depositResult = await pool.sendDeposit(deployer.getSender(), toNano('10'));
-        let myPoolJettonWalletAddress = await poolJetton.getWalletAddress(deployer.address);
-        let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
 
-
-        expect(depositResult.transactions).toHaveTransaction({
-            from: myPoolJettonWallet.address,
-            on: deployer.address,
-            op: 0x7362d09c, // excesses
-            success: true,
-        });
-    });
 });

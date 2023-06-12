@@ -5,6 +5,7 @@
 #include "errors.func";
 #include "params.func";
 #include "messages.func";
+#include "metadata_utils.func";
 
 
 slice addr_none() asm " <b 0 2 u, b> <s PUSHSLICE";
@@ -275,8 +276,7 @@ slice calculate_nft_item_address(cell state_init) {
 
 (int, cell, slice) get_collection_data() method_id {
   var (issued_bills, admin, distribution, collection_content, next_item_index, prev, current, next, next_state_init) = load_data();
-  slice cs = collection_content.begin_parse();
-  return (next_item_index, cs~load_ref(), admin);
+  return (next_item_index, collection_content, admin);
 }
 
 slice get_nft_address_by_index(int index) method_id {
@@ -286,12 +286,34 @@ slice get_nft_address_by_index(int index) method_id {
 
 cell get_nft_content(int index, cell individual_nft_content) method_id {
   var (issued_bills, admin, distribution, collection_content, next_item_index, prev, current, next, next_state_init) = load_data();
-  slice cs = collection_content.begin_parse();
-  cs~load_ref();
-  slice common_content = cs~load_ref().begin_parse();
-  return (begin_cell()
-                      .store_uint(1, 8) ;; offchain tag
-                      .store_slice(common_content)
-                      .store_ref(individual_nft_content)
-          .end_cell());
+  slice cs = individual_nft_content.begin_parse();
+  int amount = cs~load_coins();
+  cs = distribution.begin_parse();
+  cs~skip_bits(1);
+  int jettons? = cs~load_int(1);
+  cs = collection_content.begin_parse();
+  ;;cell onchain_content = begin_cell().store_uint(0, 8).store_dict(content_dict).end_cell();
+  cs~skip_bits(8);
+  cell content = cs~load_dict();
+  (cell old_name_cell, int success?) = content.udict_get_ref?(256, "name"H);
+  slice old_name = old_name_cell.begin_parse();
+  old_name~skip_bits(8); ;; 0 for string
+
+  builder new_name = begin_cell()
+                                 .store_uint(0, 8)
+                                 .store_slice("Bill for ")
+                                 .store_coins_string(amount);
+  if(jettons?) {
+      new_name = new_name.store_slice(" TON in ");
+  } else {
+      new_name = new_name.store_slice(" Pool Jetton in ");
+  }
+  content~udict_set_ref(256, "name"H, new_name.store_slice(old_name).end_cell());
+  if (jettons?) {
+      content~udict_set_ref(256, "description"H, pack_metadata_value("DO NOT SEND ON CONTRACTS: Automatically converts deposited TON to Pool Jettons when ready"));
+  } else {
+      content~udict_set_ref(256, "description"H, pack_metadata_value("DO NOT SEND ON CONTRACTS: Converts burned Pool Jettons to TON when ready"));
+  }
+  cell onchain_content = begin_cell().store_uint(0, 8).store_dict(content).end_cell();
+  return onchain_content;
 }
