@@ -5,8 +5,8 @@ import { keyPairFromSeed, getSecureRandomBytes, getSecureRandomWords, KeyPair } 
 import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
 import { randomAddress } from "@ton-community/test-utils";
-import { getElectionsConf, getValidatorsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
-import { buff2bigint, differentAddress, getMsgExcess, getRandomTon } from "../utils";
+import { calcMaxPunishment, getElectionsConf, getValidatorsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
+import { buff2bigint, differentAddress, getMsgExcess, getRandomInt, getRandomTon } from "../utils";
 import { Conf, ControllerState, Errors, Op } from "../PoolConstants";
 import { computeMessageForwardFees, getMsgPrices } from "../fees";
 
@@ -575,6 +575,29 @@ describe('Cotroller mock', () => {
         expect(higherReq).toBeGreaterThan(baseReq);
         expect(higherReq - baseReq).toEqual(expStakeGrow);
       });
+      it.skip('Test max punishment calculation', async () => {
+        const testStake = getRandomTon(100000, 200000);
+        const confDict  = loadConfig(bc.config);
+
+        confDict.set(40, beginCell()
+                         .storeUint(1, 8) //prefix
+                         .storeCoins(toNano('5000')) //Default flat fine
+                         .storeUint((1 << getRandomInt(1,31)), 32) // All of the stake
+                         .storeUint(256, 16)
+                         .storeUint(256, 16)
+                         .storeUint(0, 16)
+                         .storeUint(0, 16)
+                         .storeUint(256, 16)
+                         .storeUint(256, 16)
+                        .endCell())
+
+        bc.setConfig(beginCell().storeDictDirect(confDict).endCell());
+
+        const expected = calcMaxPunishment(testStake, confDict);
+
+        expect(await controller.getMaxPunishment(testStake)).toEqual(expected);
+      });
+
       it('Loan requirements should change accordingly to validator punishment', async () => {
         const minLoan = toNano('100000');
         const maxLoan = toNano('200000');

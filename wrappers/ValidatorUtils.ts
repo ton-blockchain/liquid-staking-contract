@@ -1,4 +1,4 @@
-import {Cell, beginCell, Dictionary, Slice, DictionaryValue } from 'ton-core';
+import {Cell, beginCell, Dictionary, Slice, DictionaryValue, toNano } from 'ton-core';
 import {sign} from 'ton-crypto';
 import { bigint2buff} from '../utils';
 
@@ -263,4 +263,46 @@ export const getVset = (config: Cell | ConfigDict, idx: 34 | 36): ValidatorSetEx
 export const signData = (data:Cell, priv:Buffer) => {
 	// I know buffer aggregation is supposed to be recursive, but it's good enough for elector cases
 	return beginCell().storeBuffer(sign(Buffer.from(data.bits.toString(), 'hex'), priv)).endCell();
+}
+
+export const calcMaxPunishment = (stake: bigint, config: Cell | ConfigDict) => {
+	// https://github.com/ton-blockchain/ton/blob/master/lite-client/lite-client.cpp#L3733
+	// Code taken from here.
+	// All conditions removed to calculate worst case scenario fine.
+
+	const confDict = config instanceof Cell ? loadConfig(config) : config;
+	const punishmentConf = confDict.get(40);
+	if(! punishmentConf)
+		return toNano('101');
+
+	const ps = punishmentConf.beginParse();
+	if(ps.loadUint(8) != 1)
+		throw Error("Incorrect prefix in punishment config");
+	const flat_fine = ps.loadCoins();
+	const proporitonal_fine = ps.loadUintBig(32);
+	console.log(proporitonal_fine);
+	const severity_flat_mult = ps.loadUintBig(16);
+	const severity_prop_mult = ps.loadUintBig(16);
+	ps.skip(32); // unpunishable_interval, long_interval
+	const long_flat_mult = ps.loadUintBig(16);
+	const long_prop_mult = ps.loadUintBig(16);
+	let fine = flat_fine;
+	let fine_part = proporitonal_fine;
+
+	fine      = fine * severity_flat_mult; fine >>= 8n;
+  fine_part = fine_part * severity_prop_mult; fine_part >>= 8n;
+
+  fine = fine * long_flat_mult; fine >>= 8n;
+  fine_part = fine_part * long_prop_mult; fine_part >>= 8n;
+	/*
+		That is lower than long_flat, so it's not calculated in worst case scenario
+  fine = fine * medium_flat_mult; fine >>= 8;
+  fine_part = fine_part * rec.medium_proportional_mult; fine_part >>= 8;
+	*/
+	fine = fine + (stake * fine_part / BigInt(1 << 32));
+	// console.log(stake);
+ 	if(fine > stake) 
+		return stake;
+
+	return fine;
 }
