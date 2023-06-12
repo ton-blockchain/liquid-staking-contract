@@ -575,7 +575,7 @@ describe('Cotroller mock', () => {
         expect(higherReq).toBeGreaterThan(baseReq);
         expect(higherReq - baseReq).toEqual(expStakeGrow);
       });
-      it.skip('Test max punishment calculation', async () => {
+      it('Test max punishment calculation', async () => {
         const testStake = getRandomTon(100000, 200000);
         const confDict  = loadConfig(bc.config);
 
