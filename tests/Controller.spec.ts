@@ -422,7 +422,7 @@ describe('Cotroller mock', () => {
         const controllerSmc = await bc.getContract(controller.address);
         const reqBalance    = await controller.getBalanceForLoan(maxLoan, interest);
         if(controllerSmc.balance < reqBalance)
-          await controller.sendDeploy(deployer.getSender(),
+          await controller.sendTopUp(deployer.getSender(),
                                       reqBalance - controllerSmc.balance + toNano('1'));
 
 
@@ -595,7 +595,7 @@ describe('Cotroller mock', () => {
                               maxLoan,
                               interest);
         const delta = balanceForLoan - controllerSmc.balance;
-        await controller.sendDeploy(deployer.getSender(), delta + toNano('1'));
+        await controller.sendTopUp(deployer.getSender(), delta + toNano('1'));
 
         await testRequestLoan(0,
                               validator.wallet.getSender(),

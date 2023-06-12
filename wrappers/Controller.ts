@@ -70,6 +70,17 @@ export class Controller implements Contract {
         });
     }
 
+    async sendTopUp(provider: ContractProvider, via: Sender, value:bigint = toNano('2000')) {
+        await provider.internal(via, {
+            value: value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                     .storeUint(Op.controller.top_up, 32) // op = top up
+                     .storeUint(0, 64) // query id
+                  .endCell(),
+        });
+    }
+
     static creditMessage(credit:bigint, query_id:number | bigint = 0) {
         return beginCell().storeUint(Op.controller.credit, 32)
                           .storeUint(query_id, 64)
