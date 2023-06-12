@@ -127,7 +127,7 @@ int current_round_index();
     (int op, int query_id) = in_msg_body~load_body_header();
 
     if (op == halter::halt) {
-                process_halt_request(sender_address, in_msg_body);
+        return process_halt_request(sender_address, in_msg_body);
     } else {    
         update_round();
     }
@@ -184,8 +184,7 @@ int current_round_index();
                             .store_uint(max_interest, 16),
                     msgflag::NON_BOUNCEABLE, sendmode::PAY_FEES_SEPARETELY);
           
-    }
-    if (op == pool::loan_repayment) {
+    } elseif (op == pool::loan_repayment) {
     
         assert_1of2_state!(state::NORMAL, state::REPAYMENT_ONLY);
         ;; we expect loans from previous round only
@@ -205,11 +204,9 @@ int current_round_index();
         if(last_one) {
             update_round();
         }
-    }
-    if (op == pool::touch) {
+    } elseif (op == pool::touch) {
         ;; return save_data
-    }
-    if (op == pool::deploy_controller) {
+    } elseif (op == pool::deploy_controller) {
         assert_state!(state::NORMAL);
         int controller_id = in_msg_body~load_uint(32);
         (slice controller_address, cell init_state ) = build_controller_address(controller_id, sender_address);
@@ -220,8 +217,7 @@ int current_round_index();
                       .store_msgbody_prefix_stateinit_slice(init_state)
                       .store_body_header(controller::top_up, cur_lt());
         send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);
-    }
-    if (op == pool::deposit) {
+    } elseif (op == pool::deposit) {
         assert_state!(state::NORMAL);
         throw_unless(error::deposits_are_closed, deposits_open?);
         int deposit_amount = msg_value - DEPOSIT_FEE;
@@ -238,8 +234,7 @@ int current_round_index();
           request_to_mint_deposit(sender_address, deposit_amount, query_id);
           requested_for_deposit += deposit_amount;
         }
-    }
-    if (op == pool::withdraw) { 
+    } elseif (op == pool::withdraw) {
         assert_1of2_state!(state::NORMAL, state::REPAYMENT_ONLY);
         int jetton_amount = in_msg_body~load_coins();
         slice from_address = in_msg_body~load_msg_addr();
@@ -268,20 +263,15 @@ int current_round_index();
         }
     }
     {- ========== General operations ========== -}
-
-    if (op == sudo::send_message) {
+      elseif (op == sudo::send_message) {
                 process_sudo_request(sender_address, in_msg_body);
-    }
-    if (op == sudo::upgrade) {
+    } elseif (op == sudo::upgrade) {
                 process_sudo_upgrade_request(sender_address, in_msg_body);
-    } 
-    if (op == governor::set_sudoer) {
+    } elseif (op == governor::set_sudoer) {
                 process_set_sudo_request(sender_address, in_msg_body);
-    }
-    if (op == governor::unhalt) {
+    } elseif (op == governor::unhalt) {
                 process_unhalt_request(sender_address, in_msg_body);
-    }
-    if (op == governor::set_roles) {
+    } elseif (op == governor::set_roles) {
       assert_sender!(sender_address, governor);
       if(in_msg_body~load_int(1)) {
         governor = in_msg_body~load_msg_addr();
@@ -295,16 +285,16 @@ int current_round_index();
       if(in_msg_body~load_int(1)) {
         halter = in_msg_body~load_msg_addr();
       }
-    }
-    if(op == governor::set_deposit_settings) {
+    } elseif(op == governor::set_deposit_settings) {
         assert_sender!(sender_address, governor);
         optimistic_deposit_withdrawals = in_msg_body~load_int(1);
         deposits_open?  = in_msg_body~load_int(1);
-    }
-    if (op == interest_manager::set_interest) {
+    } elseif (op == interest_manager::set_interest) {
         assert_state!(state::NORMAL);
         assert_sender!(sender_address, interest_manager);
         interest_rate = in_msg_body~load_uint(16);
+    } else {
+        throw(error::unknown_op);
     }
 
     save_data();
@@ -663,11 +653,6 @@ slice get_current_round_withdrawal_payout() method_id {
     return controller_address;
 }
 
-(slice) get_controller_address(int controller_id, slice validator) method_id {
-    load_data();
-    return _get_controller_address(controller_id, validator);
-}
-
 (int, int) _get_projected_conversion_ratio () inline {
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = prev_round_borrowers;
     return (expected - borrowed + total_balance, supply);
@@ -677,6 +662,11 @@ slice get_current_round_withdrawal_payout() method_id {
 (int, int) get_projected_conversion_ratio () method_id {
   load_data();
   return _get_projected_conversion_ratio();
+}
+
+(slice) get_controller_address(int controller_id, slice validator) method_id {
+    load_data();
+    return _get_controller_address(controller_id, validator);
 }
 
 (int, int) get_controller_address_legacy(int controller_id, int wc, int addr_hash) method_id {
