@@ -44,7 +44,7 @@ export abstract class Op {
     static readonly governor = {
         set_sudoer : 0x79e7c016,
         set_roles  : 0x7a756db8, // TODO
-        unhalt     : 0x7247e7a5,
+        set_state  : 0x7247e7a5,
         operation_fee : 0x93a, // TODO
         set_deposit_settings : 0x2233ff55
     }
