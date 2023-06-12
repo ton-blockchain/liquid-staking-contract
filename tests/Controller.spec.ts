@@ -325,7 +325,33 @@ describe('Cotroller mock', () => {
         expect(dataAfter.state).toEqual(ControllerState.HALTED);
         snapStates.set('halted', bc.snapshot());
       });
-      it('Not governor should not be able to unhalt controller', async () => {
+      it('Not governor should not be able to set controller state', async () => {
+        await loadSnapshot('halted');
+        const notGovernor = differentAddress(deployer.address);
+        const stateBefore = await getControllerState();
+        const res         = await controller.sendSetState(bc.sender(notGovernor), ControllerState.REST);
+        expect(res.transactions).toHaveTransaction({
+          from: notGovernor,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.wrong_sender
+        });
+        expect(await getControllerState()).toEqualCell(stateBefore);
+      });
+      it('Governot should be able to set controller state', async () => {
+        await loadSnapshot('halted');
+
+        const states = [
+          ControllerState.REST,
+          ControllerState.SENT_BORROWING_REQUEST,
+          ControllerState.SENT_STAKE_REQUEST,
+          ControllerState.FUNDS_STAKEN,
+          ControllerState.HALTED ];
+
+        for (let state of states) {
+          const res = await controller.sendSetState(deployer.getSender(), state);
+          expect((await controller.getControllerData()).state).toEqual(state);
+        }
       });
     });
     it('Controller credit should only be accepted from pool address', async() => {

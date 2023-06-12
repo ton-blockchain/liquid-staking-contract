@@ -1,7 +1,7 @@
 import { Address, toNano, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, Message, storeMessage } from 'ton-core';
 import { buff2bigint } from '../utils';
 import { signData } from "./ValidatorUtils";
-import { Conf, Op } from "../PoolConstants";
+import { Conf, ControllerState, Op } from "../PoolConstants";
 
 
 export type ControllerConfig = {
@@ -291,6 +291,19 @@ export class Controller implements Contract {
                   .endCell()
         });
     }
+
+    async sendSetState(provider: ContractProvider, via: Sender, new_state: number, query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            value: toNano('1'),
+            body: beginCell().storeUint(Op.governor.set_state, 32)
+                             .storeUint(query_id, 64)
+                             .storeUint(new_state, 8)
+                  .endCell()
+        });
+    }
+
+
 
     // Get methods
     async getControllerData(provider: ContractProvider) {
