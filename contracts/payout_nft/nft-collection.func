@@ -276,8 +276,7 @@ slice calculate_nft_item_address(cell state_init) {
 
 (int, cell, slice) get_collection_data() method_id {
   var (issued_bills, admin, distribution, collection_content, next_item_index, prev, current, next, next_state_init) = load_data();
-  slice cs = collection_content.begin_parse();
-  return (next_item_index, cs~load_ref(), admin);
+  return (next_item_index, collection_content, admin);
 }
 
 slice get_nft_address_by_index(int index) method_id {
