@@ -244,7 +244,8 @@ int current_round_index();
         assert_sender!(sender_address, jetton_minter);
         int approximate_amount = muldiv(jetton_amount, total_balance, supply);
         if(optimistic_deposit_withdrawals &
-           request_immediate_withdrawal & 
+           request_immediate_withdrawal &
+           (state == state::NORMAL) &
            (balance - msg_value - MIN_TONS_FOR_STORAGE > approximate_amount)) {
           total_balance -= approximate_amount;
           supply -= jetton_amount;
