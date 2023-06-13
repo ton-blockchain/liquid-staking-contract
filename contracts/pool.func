@@ -235,32 +235,42 @@ int current_round_index();
           requested_for_deposit += deposit_amount;
         }
     } elseif (op == pool::withdraw) {
-        assert_1of2_state!(state::NORMAL, state::REPAYMENT_ONLY);
+        assert_sender!(sender_address, jetton_minter);
         int jetton_amount = in_msg_body~load_coins();
         slice from_address = in_msg_body~load_msg_addr();
+        ;; response will be ignored
         slice response_address = in_msg_body~load_msg_addr();
-        int request_immediate_withdrawal = in_msg_body~load_int(1);
-        throw_unless(error::not_enough_TON_to_process, msg_value > WITHDRAWAL_FEE);
-        assert_sender!(sender_address, jetton_minter);
-        int approximate_amount = muldiv(jetton_amount, total_balance, supply);
-        if(optimistic_deposit_withdrawals &
-           request_immediate_withdrawal &
-           (state == state::NORMAL) &
-           (balance - msg_value - MIN_TONS_FOR_STORAGE > approximate_amount)) {
-          total_balance -= approximate_amount;
-          supply -= jetton_amount;
-          raw_reserve(balance - msg_value - approximate_amount - sent_during_rotation, 0);
-          var msg = begin_cell()
-                  .store_msg_flags(msgflag::NON_BOUNCEABLE)
-                  .store_slice(from_address)
-                  .store_coins(0)
-                  .store_msgbody_prefix_slice()
-                  .store_body_header(pool::withdrawal, query_id);
-          send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE);
-        } else {
-          raw_reserve(balance - msg_value - sent_during_rotation, 0);
-          request_to_mint_withdrawal(from_address, jetton_amount, query_id);
-          requested_for_withdrawal += jetton_amount;
+        int request_immediate_withdrawal = ~ in_msg_body~load_int(1);
+        int fill_or_kill = in_msg_body~load_int(1);
+        ;; after that point we should not revert because jettons should not be lost
+        try {
+            assert_1of2_state!(state::NORMAL, state::REPAYMENT_ONLY);
+            throw_unless(error::not_enough_TON_to_process, msg_value > WITHDRAWAL_FEE);
+            int approximate_amount = muldiv(jetton_amount, total_balance, supply);
+            int available_funds = balance - msg_value - MIN_TONS_FOR_STORAGE;
+
+            if(optimistic_deposit_withdrawals &
+               request_immediate_withdrawal &
+               (state == state::NORMAL) &
+               (balance - msg_value - MIN_TONS_FOR_STORAGE > approximate_amount)) {
+              total_balance -= approximate_amount;
+              supply -= jetton_amount;
+              raw_reserve(balance - msg_value - approximate_amount - sent_during_rotation, 0);
+              var msg = begin_cell()
+                      .store_msg_flags(msgflag::NON_BOUNCEABLE)
+                      .store_slice(from_address)
+                      .store_coins(0)
+                      .store_msgbody_prefix_slice()
+                      .store_body_header(pool::withdrawal, query_id);
+              send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE);
+            } else {
+              throw_if(105, fill_or_kill);
+              raw_reserve(balance - msg_value - sent_during_rotation, 0);
+              request_to_mint_withdrawal(from_address, jetton_amount, query_id);
+              requested_for_withdrawal += jetton_amount;
+            }
+        } catch (exc_arg, exc_num) {
+            request_to_mint_pool_jettons(sender_address, jetton_amount, query_id, begin_cell(), true);
         }
     }
     {- ========== General operations ========== -}

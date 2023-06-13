@@ -250,7 +250,7 @@ describe('Controller & Pool', () => {
         let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
         const jettonAmount = await myPoolJettonWallet.getJettonBalance();
 
-        const burnResult = await myPoolJettonWallet.sendBurn(deployer.getSender(), toNano('1.0'), jettonAmount, deployer.address, null);
+        const burnResult = await myPoolJettonWallet.sendBurn(deployer.getSender(), toNano('1.0'), jettonAmount, deployer.address, beginCell().storeInt(0n, 1).storeInt(0n, 1).endCell());
 
         const withdrawalMinter = blockchain.openContract(await pool.getWithdrawalMinter());
         const myWithdrawWalletAddress = await withdrawalMinter.getWalletAddress(deployer.address);
