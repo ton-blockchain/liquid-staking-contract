@@ -6,6 +6,8 @@
 - `state`
 - `total_balance` - amount of TONs accounted when deposit, withdraw and profit
 - `interest_rate` - surplus of credit that should be returned with credit body. Set as integer equal share of credit volume times 65536
+- `optimistic_deposit_withdrawals?` - flag notifies whether optimistic mode is enabled
+- `deposits_open?` - flag notifies whether deposits are open
 - `current_round_borrowers` - Current _round\_data_
   * `borrowers` - dict of borrowers: `controller_address -> borrowed_amount`
   * `round_id`
@@ -29,9 +31,9 @@
 - **Minters Data**
   * pool jetton jetton minter address
   * pool jetton supply
-  * Deposit Payout (minter) address
+  * Deposit Payout address
   * Deposit Payout supply == number of deposited TON in this round
-  * Withdrawal Payout (minter) address
+  * Withdrawal Payout address
   * Withdrawal Payout supply == number of burned pool jettons in this round
 
 - **Roles** addresses
@@ -39,18 +41,15 @@
   * governance
   * interest manager
   * halter
-  * consigliere
   * approver
 
 - **Codes** - code of child contracts needed either for deploy or for address authorization
   * `controller_code` - needed for controller authorization
-  * `awaited_jetton_wallet_code` - needed for awaited*TON deployment
-  * `payout_minter_code` - needed for awaited*TON deployment
+  * `payout_code` - needed for Deposit/Withdrawal payouts deployment
   * `pool_jetton_wallet_code` - needed for calculation of address of Deposit Payout wallet
-  * `vote_keeper_code` - needed for calculation of address of Deposit Payout wallet
 
 ## Deploy
 
-Pool and pool jetton minter are deployed separately. Pool deploys Payout minters and initiate it. Address of pool jetton wallet for Deposit Payout (minter) is calculated on Pool and passed to Deposit Payout in init message.
+Pool and pool jetton minter are deployed separately. Pool deploys Payout minters and initiates them. Address of pool jetton wallet for Deposit Payout (minter) is calculated on Pool and passed to Deposit Payout in init message.
 
 ![scheme](images/pool-scheme.png)
