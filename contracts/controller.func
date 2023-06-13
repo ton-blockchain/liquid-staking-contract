@@ -70,6 +70,7 @@ const int state::REST = 0;
 const int state::SENT_BORROWING_REQUEST = 1;
 const int state::SENT_STAKE_REQUEST = 2;
 const int state::FUNDS_STAKEN = 3;
+const int state::SENT_RECOVER_REQUEST = 4;
 const int state::HALTED = 0xff;
 
 () save_data() impure;
@@ -138,6 +139,13 @@ int check_new_stake_msg(slice cs);
                   borrowing_time = 0;
                 } else {
                   state = state::HALTED;
+                }
+            } elseif (op == elector::recover_stake_error) {
+                if(state == state::SENT_RECOVER_REQUEST) {
+                    ;; The only case when we get elector::recover_stake_error is credits = 0
+                    ;; in this case we should not return state to FUNDS_STAKEN to avoid
+                    ;; further balance depletion due to repetitive STAKE_RECOVER_FINE
+                    state = state::HALTED;
                 }
             }
 
@@ -209,6 +217,7 @@ int check_new_stake_msg(slice cs);
                          payload,
                          msgflag::BOUNCEABLE,
                          sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE); ;; remaining inbound message amount, fee deducted from amount, revert on errors
+                state = state::SENT_RECOVER_REQUEST;
                 if( (time_since_unfreeze < GRACE_PERIOD) | (borrowed_amount == 0) ) {
                   assert_sender!(sender_address, validator);
                 } else {
