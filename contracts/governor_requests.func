@@ -3,6 +3,7 @@ global slice governor;
 global slice sudoer;
 global int sudoer_set_at;
 global int state;
+global int halted?;
 
 () process_set_sudo_request(slice sender, slice in_msg) impure inline_ref {
     assert_sender!(sender, governor);
@@ -10,8 +11,7 @@ global int state;
     sudoer = in_msg~load_msg_addr();
 }
 
-() process_set_state_request(slice sender, slice in_msg) impure inline_ref {
+() process_unhalt_request(slice sender) impure inline_ref {
     assert_sender!(sender, governor);
-    int new_state = in_msg~load_uint(8);
-    state = new_state;
+    halted? = false;
 }

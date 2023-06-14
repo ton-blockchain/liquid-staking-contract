@@ -60,6 +60,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
                 .endCell();
     return beginCell()
               .storeUint(0, 8) // state NORMAL
+              .storeInt(0n, 1) // halted?
               .storeCoins(0) // total_balance
               .storeUint(30, 16) // interest_rate
               .storeInt(config.optimistic_deposit_withdrawals, 1) // optimistic_deposit_withdrawals

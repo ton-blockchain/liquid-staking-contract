@@ -2,6 +2,7 @@ const int error::unknown_op = 0xffff;
 
 const int error::wrong_sender = 0x9283;
 const int error::wrong_state = 0x9284;
+const int error::halted = 0x9285;
 
 const int sudoer::quarantine = 0xa000;
 

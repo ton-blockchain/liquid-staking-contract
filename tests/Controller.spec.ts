@@ -330,17 +330,17 @@ describe('Cotroller mock', () => {
       });
       it('Halter should be able to halt controller', async() => {
         const dataBefore = await controller.getControllerData();
-        expect(dataBefore.state).not.toEqual(ControllerState.HALTED);
+        expect(dataBefore.halted).toEqual(false);
         const res = await controller.sendHaltMessage(deployer.getSender());
         const dataAfter = await controller.getControllerData();
-        expect(dataAfter.state).toEqual(ControllerState.HALTED);
+        expect(dataAfter.halted).toEqual(true);
         snapStates.set('halted', bc.snapshot());
       });
-      it('Not governor should not be able to set controller state', async () => {
+      it('Not governor should not be able to unhalt', async () => {
         await loadSnapshot('halted');
         const notGovernor = differentAddress(deployer.address);
         const stateBefore = await getControllerState();
-        const res         = await controller.sendSetState(bc.sender(notGovernor), ControllerState.REST);
+        const res         = await controller.sendUnhalt(bc.sender(notGovernor));
         expect(res.transactions).toHaveTransaction({
           from: notGovernor,
           to: controller.address,
@@ -349,20 +349,15 @@ describe('Cotroller mock', () => {
         });
         expect(await getControllerState()).toEqualCell(stateBefore);
       });
-      it('Governot should be able to set controller state', async () => {
+      it('Governor should be able to unhalt', async () => {
         await loadSnapshot('halted');
 
-        const states = [
-          ControllerState.REST,
-          ControllerState.SENT_BORROWING_REQUEST,
-          ControllerState.SENT_STAKE_REQUEST,
-          ControllerState.FUNDS_STAKEN,
-          ControllerState.HALTED ];
+        const dataBefore = await controller.getControllerData();
+        expect(dataBefore.halted).toEqual(true);
+        const res = await controller.sendUnhalt(deployer.getSender());
 
-        for (let state of states) {
-          const res = await controller.sendSetState(deployer.getSender(), state);
-          expect((await controller.getControllerData()).state).toEqual(state);
-        }
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.halted).toEqual(false);
       });
     });
     it('Controller credit should only be accepted from pool address', async() => {
@@ -1355,8 +1350,9 @@ describe('Cotroller mock', () => {
         expect(res.outMessagesCount).toEqual(0);
 
         const dataAfter = await controller.getControllerData();
-        // State get's halted
-        expect(dataAfter.state).toEqual(ControllerState.HALTED);
+        // State get's insolvent
+        expect(dataAfter.state).toEqual(ControllerState.INSOLVENT);
+        snapStates.set('insolvent', bc.snapshot());
         // Should not change borrow related info just in case
         expect(dataAfter.borrowedAmount).toEqual(dataBefore.borrowedAmount);
         expect(dataAfter.borrowingTime).toEqual(dataBefore.borrowingTime);
@@ -1575,20 +1571,20 @@ describe('Cotroller mock', () => {
       it('Update validator hash only allowed in "staken" state', async () => {
         const vSender = validator.wallet.getSender();
         const testCb = async () => await controller.sendUpdateHash(vSender);
-        await testStates([InitialState, 'stake_sent', 'halted', 'borrowing_req'], true, testCb);
+        await testStates([InitialState, 'stake_sent', 'insolvent', 'borrowing_req'], true, testCb);
         await loadSnapshot('staken');
         await testState(false, testCb);
       });
       it('Stake recovery only allowed in "staken" state', async () => {
         const vSender = validator.wallet.getSender();
         const testCb  = async () => await controller.sendRecoverStake(vSender);
-        await testStates([InitialState, 'stake_sent', 'halted', 'borrowing_req'], true, testCb);
+        await testStates([InitialState, 'stake_sent', 'insolvent', 'borrowing_req'], true, testCb);
         await loadSnapshot('staken');
         await testState(false, testCb);
       });
       it('Withdraw validator is only allowed in REST state', async () => {
         const testCb = async () => await controller.sendValidatorWithdraw(validator.wallet.getSender(), 1n);
-        await testStates(['borrowing_req', 'stake_sent', 'staken', 'halted'], true, testCb);
+        await testStates(['borrowing_req', 'stake_sent', 'staken', 'insolvent'], true, testCb);
         await bc.loadFrom(InitialState);
         await testState(false, testCb);
       });
@@ -1600,7 +1596,7 @@ describe('Cotroller mock', () => {
                                                validator.keys.secretKey,
                                                12345);
         };
-        await testStates(['borrowing_req', 'stake_sent', 'staken', 'halted'], true, testCb);
+        await testStates(['borrowing_req', 'stake_sent', 'staken', 'insolvent'], true, testCb);
         await bc.loadFrom(InitialState);
         await testState(false, testCb);
       });
@@ -1609,15 +1605,18 @@ describe('Cotroller mock', () => {
         const maxLoan = toNano('200000');
         const interest = Math.floor(0.1 * 65535);
         const testCb = async () => controller.sendRequestLoan(validator.wallet.getSender(), minLoan, maxLoan, interest);
-        await testStates(['borrowing_req', 'stake_sent', 'staken', 'halted'], true, testCb);
+        await testStates(['borrowing_req', 'stake_sent', 'staken', 'insolvent'], true, testCb);
         await bc.loadFrom(InitialState);
         await testState(false, testCb);
       });
       it('Return unused loan is only allowed in REST state', async () => {
         const testCb = async () => controller.sendReturnUnusedLoan(validator.wallet.getSender());
-        await testStates(['borrowing_req', 'stake_sent', 'staken', 'halted'], true, testCb);
+        await testStates(['borrowing_req', 'stake_sent', 'staken', 'insolvent'], true, testCb);
         await bc.loadFrom(InitialState);
         await testState(false, testCb);
       });
     });
+    // TODO "insolvent can become solvent after via top up"
+    // TODO "after solvency another address can return_unused_stake"
+    // TODO "tests for sent_recover_request" state
 });

@@ -44,7 +44,7 @@ export abstract class Op {
     static readonly governor = {
         set_sudoer : 0x79e7c016,
         set_roles  : 0x7a756db8, // TODO
-        set_state  : 0x7247e7a5,
+        unhalt  : 0x7247e7a5,
         operation_fee : 0x93a, // TODO
         set_deposit_settings : 0x2233ff55
     }
@@ -62,7 +62,8 @@ export abstract class ControllerState {
     static readonly SENT_BORROWING_REQUEST = 1;
     static readonly SENT_STAKE_REQUEST = 2;
     static readonly FUNDS_STAKEN = 3;
-    static readonly HALTED = 0xff;
+    static readonly SENT_RECOVER_REQUEST = 4;
+    static readonly INSOLVENT = 5;
 }
 export abstract class Errors {
  static readonly success = 0;

@@ -40,7 +40,8 @@ const int STAKE_RECOVER_FINE = 10 * ONE_TON;
 ;; Whole storage is put to global variables
 
 global int state;
-global int approved;
+global int halted?;
+global int approved?;
 
 global int stake_amount_sent;
 global int stake_at;
@@ -71,7 +72,8 @@ const int state::SENT_BORROWING_REQUEST = 1;
 const int state::SENT_STAKE_REQUEST = 2;
 const int state::FUNDS_STAKEN = 3;
 const int state::SENT_RECOVER_REQUEST = 4;
-const int state::HALTED = 0xff;
+const int state::INSOLVENT = 5;
+
 
 () save_data() impure;
 () load_data() impure;
@@ -128,6 +130,7 @@ int check_new_stake_msg(slice cs);
             accept_message();
 
             if (op == elector::recover_stake_ok) {
+                ;; Note, this request will be processed even in halted state
                 state = state::REST;
                 if(balance >= MIN_TONS_FOR_STORAGE + borrowed_amount) {
                   send_msg(pool,
@@ -138,14 +141,15 @@ int check_new_stake_msg(slice cs);
                   borrowed_amount = 0;
                   borrowing_time = 0;
                 } else {
-                  state = state::HALTED;
+                  state = state::INSOLVENT;
                 }
             } elseif (op == elector::recover_stake_error) {
                 if(state == state::SENT_RECOVER_REQUEST) {
                     ;; The only case when we get elector::recover_stake_error is credits = 0
                     ;; in this case we should not return state to FUNDS_STAKEN to avoid
                     ;; further balance depletion due to repetitive STAKE_RECOVER_FINE
-                    state = state::HALTED;
+                    halted? = true;
+                    state = state::INSOLVENT;
                 }
             }
 
@@ -164,7 +168,11 @@ int check_new_stake_msg(slice cs);
     } else {
 
             if (op == controller::top_up) {
-                ;; just accept coins
+                if(state == state::INSOLVENT) {
+                    if (balance > MIN_TONS_FOR_STORAGE + STAKE_RECOVER_FINE + borrowed_amount) {
+                        state = state::REST;
+                    }
+                }
             } elseif (op == controller::credit) {
                 assert_sender!(sender_address, pool);
                 ;; borrowed_amount includes interest
@@ -176,212 +184,217 @@ int check_new_stake_msg(slice cs);
                 state = state::REST;
             } elseif (op == controller::approve) {
                 assert_sender!(sender_address, approver);
-                approved = true;
+                approved? = true;
             }  elseif (op == controller::disapprove) {
                 assert_sender!(sender_address, approver);
-                approved = false;
+                approved? = false;
             } elseif (op == sudo::send_message) {
                 process_sudo_request(sender_address, in_msg_body);
             } elseif (op == governor::set_sudoer) {
                 process_set_sudo_request(sender_address, in_msg_body);
-            }  elseif (op == governor::set_state) {
-                process_set_state_request(sender_address, in_msg_body);
+            }  elseif (op == governor::unhalt) {
+                process_unhalt_request(sender_address);
             } elseif (op == halter::halt) {
-                process_halt_request(sender_address, in_msg_body);
-            } elseif (op == controller::recover_stake) { ;; send recover_stake to elector
-                assert_state!(state::FUNDS_STAKEN);
-                in_msg_body.end_parse();
-                ;; We need to take all credits from the elector at once,
-                ;; because if we do not take all at once, then it will be processed as a fine by pool.
-                ;; In the elector, credits (`credit_to`) are accrued in three places:
-                ;; 1) return of surplus stake in elections (`try_elect`)
-                ;; 2) reward for complaint when punish (`punish`) - before unfreezing
-                ;; 3) unfreeze round (`unfreeze_without_bonuses`/`unfreeze_with_bonuses`)
-                ;; We need to be guaranteed to wait for unfreezing round and only then send `recover_stake`.
-                ;; So we are waiting for the change of 3 validator sets.
+                process_halt_request(sender_address);
+            } else {
+                ;; actions above considered safe or critical enough to be processed in halted regime
+                ;; actions below are only allowed for not halted controller
+                assert_not_halted!();
+                if (op == controller::recover_stake) { ;; send recover_stake to elector
+                    assert_state!(state::FUNDS_STAKEN);
+                    in_msg_body.end_parse();
+                    ;; We need to take all credits from the elector at once,
+                    ;; because if we do not take all at once, then it will be processed as a fine by pool.
+                    ;; In the elector, credits (`credit_to`) are accrued in three places:
+                    ;; 1) return of surplus stake in elections (`try_elect`)
+                    ;; 2) reward for complaint when punish (`punish`) - before unfreezing
+                    ;; 3) unfreeze round (`unfreeze_without_bonuses`/`unfreeze_with_bonuses`)
+                    ;; We need to be guaranteed to wait for unfreezing round and only then send `recover_stake`.
+                    ;; So we are waiting for the change of 3 validator sets.
 
-                ;; ADDITIONAL NOTE:
-                ;; In a special case (if the network was down), the config theoretically can refuse the elector to save a new round after election - https://github.com/ton-blockchain/ton/blob/b38d227a469666d83ac535ad2eea80cb49d911b8/crypto/smartcont/config-code.fc#L494
-                ;; and the elector will start a new election - https://github.com/ton-blockchain/ton/blob/b38d227a469666d83ac535ad2eea80cb49d911b8/crypto/smartcont/elector-code.fc#L364
-                ;; in this case, our pool will have to skip the round, but it will be able to recover stake later
+                    ;; ADDITIONAL NOTE:
+                    ;; In a special case (if the network was down), the config theoretically can refuse the elector to save a new round after election - https://github.com/ton-blockchain/ton/blob/b38d227a469666d83ac535ad2eea80cb49d911b8/crypto/smartcont/config-code.fc#L494
+                    ;; and the elector will start a new election - https://github.com/ton-blockchain/ton/blob/b38d227a469666d83ac535ad2eea80cb49d911b8/crypto/smartcont/elector-code.fc#L364
+                    ;; in this case, our pool will have to skip the round, but it will be able to recover stake later
 
-                throw_unless(error::too_early_stake_recover_attempt_count, validator_set_changes_count >= 2);
-                int time_since_unfreeze = now() - validator_set_change_time - stake_held_for;
-                throw_unless(error::too_early_stake_recover_attempt_time, (validator_set_changes_count > 2) | (time_since_unfreeze > 60));
-                ;; https://github.com/ton-blockchain/ton/blob/b38d227a469666d83ac535ad2eea80cb49d911b8/crypto/smartcont/elector-code.fc#L887
-                throw_unless(error::too_low_recover_stake_value, msg_value >= ELECTOR_OPERATION_VALUE);
+                    throw_unless(error::too_early_stake_recover_attempt_count, validator_set_changes_count >= 2);
+                    int time_since_unfreeze = now() - validator_set_change_time - stake_held_for;
+                    throw_unless(error::too_early_stake_recover_attempt_time, (validator_set_changes_count > 2) | (time_since_unfreeze > 60));
+                    ;; https://github.com/ton-blockchain/ton/blob/b38d227a469666d83ac535ad2eea80cb49d911b8/crypto/smartcont/elector-code.fc#L887
+                    throw_unless(error::too_low_recover_stake_value, msg_value >= ELECTOR_OPERATION_VALUE);
 
-                cell payload = begin_cell().store_body_header(elector::recover_stake, query_id).end_cell();
-                send_msg(elector_address(),
-                         0, ;; amount
-                         payload,
-                         msgflag::BOUNCEABLE,
-                         sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE); ;; remaining inbound message amount, fee deducted from amount, revert on errors
-                state = state::SENT_RECOVER_REQUEST;
-                if( (time_since_unfreeze < GRACE_PERIOD) | (borrowed_amount == 0) ) {
-                  assert_sender!(sender_address, validator);
-                } else {
-                  if(balance - msg_value - STAKE_RECOVER_FINE >= MIN_TONS_FOR_STORAGE) {
-                    ifnot( equal_slice_bits(sender_address, validator)) {
-                      send_msg(sender_address, STAKE_RECOVER_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
-                    }
-                  }
-                }
-
-            } elseif (op == controller::update_validator_hash) {
-                assert_state!(state::FUNDS_STAKEN);
-                in_msg_body.end_parse();
-                throw_unless(error::too_much_validator_set_counts, validator_set_changes_count < 3);
-                (int utime_since, int utime_until, cell vset) = get_current_validator_set();
-                int current_hash = cell_hash(vset);
-                if (saved_validator_set_hash != current_hash) {
-                    saved_validator_set_hash = current_hash;
-                    validator_set_changes_count += 1;
-                    validator_set_change_time = now();
-                }
-                int overdue = now() - utime_since;
-                if( (overdue < GRACE_PERIOD) | (borrowed_amount == 0) ) {
-                  assert_sender!(sender_address, validator);
-                  send_excesses(sender_address);
-                } else {
-                  if(balance - HASH_UPDATE_FINE >= MIN_TONS_FOR_STORAGE) {
-                    ifnot( equal_slice_bits(sender_address, validator)) {
-                      send_msg(sender_address, HASH_UPDATE_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
-                    }
-                  }
-                }
-            } elseif (op == controller::withdraw_validator) { ;; withdraw validator (after recover_stake and before new_stake)
-                assert_state!(state::REST);
-                throw_if(error::withdrawal_while_credited, borrowed_amount);
-                assert_sender!(sender_address, validator);
-                int request_amount = in_msg_body~load_coins();
-                in_msg_body.end_parse();
-                throw_unless(error::incorrect_withdrawal_amount, request_amount > 0);
-
-                raw_reserve(MIN_TONS_FOR_STORAGE, 2);
-                send_msg(validator,
-                         request_amount,
-                         null(), ;; payload
-                         msgflag::NON_BOUNCEABLE,
-                         sendmode::REGULAR);
-
-            } elseif (op == controller::new_stake) {
-                assert_state!(state::REST);
-                assert_sender!(sender_address, validator);
-
-                throw_unless(error::incorrect_new_stake::query_id, query_id); ;; query_id must be greater then 0 to receive confirmation message from elector
-
-                throw_unless(error::incorrect_new_stake::request_value,
-                             msg_value >= ELECTOR_OPERATION_VALUE); ;; must be greater then new_stake sending to elector fee
-
-                int value = in_msg_body~load_coins();
-
-                slice msg = in_msg_body;
-
-                stake_at = check_new_stake_msg(in_msg_body);
-
-                stake_amount_sent = value - ELECTOR_OPERATION_VALUE;
-
-                throw_unless(error::incorrect_new_stake::value_lt_minimum, value >= MIN_STAKE_TO_SEND);
-
-                int overdue_fine = (HASH_UPDATE_FINE * 3) - STAKE_RECOVER_FINE;
-
-                throw_unless(error::incorrect_new_stake::value_too_high, balance - value >=  MIN_TONS_FOR_STORAGE + overdue_fine);
-                (_, stake_held_for, int elections_end_before) = get_validator_config();
-                (int utime_since, int utime_until, cell vset) = get_current_validator_set();
-                if (borrowed_amount) {
-                  ;; it is allowed to use credit funds only in the same round when they were obtained
-                  throw_unless(error::incorrect_new_stake::wrongly_used_credit,
-                              (borrowing_time > utime_since) & (now() < utime_until - elections_end_before));
-                }
-
-                int validator_own_funds = balance - borrowed_amount;
-
-                throw_unless(error::incorrect_new_stake::solvency_not_guaranteed,
-                             validator_own_funds >= max_recommended_punishment_for_validator_misbehaviour(stake_amount_sent) + (overdue_fine + MIN_TONS_FOR_STORAGE));
-
-                state = state::SENT_STAKE_REQUEST;
-
-
-
-                saved_validator_set_hash = cell_hash(vset); ;; current validator set, we will be in next validator set
-                validator_set_changes_count = 0;
-                validator_set_change_time = utime_since;
-
-                send_msg(elector_address(),
-                         value,
-                         begin_cell().store_body_header(elector::new_stake, query_id).store_slice(msg).end_cell(),
-                         msgflag::BOUNCEABLE,
-                         sendmode::PAY_FEES_SEPARETELY); ;; pay fee separately, revert on errors
-
-            } elseif (op == controller::send_request_loan) {
-              assert_state!(state::REST);
-              assert_sender!(sender_address, validator);
-              slice request = in_msg_body;
-              int min_loan = in_msg_body~load_coins();
-              int max_loan = in_msg_body~load_coins();
-              int max_interest = in_msg_body~load_uint(16);
-              in_msg_body.end_parse();
-
-              throw_unless(error::controller_not_approved, approved);
-
-              ;; For simplicity forbid multiple borrowing
-              ;; TODO
-              throw_if(error::multiple_loans_are_prohibited, borrowed_amount);
-
-              (int elections_start_before, _, int elections_end_before) = get_validator_config();
-              (int utime_since, int utime_until, cell vset) = get_current_validator_set();
-              throw_unless(error::too_early_loan_request, now() > utime_until - elections_start_before); ;; elections started
-              throw_unless(error::too_late_loan_request, now() < utime_until - elections_end_before);   ;; elections not yet closed
-
-
-              ;; lets check whether we can afford it
-              int elector_fine = max_recommended_punishment_for_validator_misbehaviour(max_loan + balance);
-              int overdue_fine = (HASH_UPDATE_FINE * 3) - STAKE_RECOVER_FINE;
-              int interest_payment = muldiv(max_loan, max_interest, 65535);
-              int validator_amount = balance - borrowed_amount;
-              throw_unless(error::too_high_loan_request_amount, validator_amount >= (MIN_TONS_FOR_STORAGE + overdue_fine) + elector_fine + interest_payment);
-
-              cell payload = begin_cell()
-                                         .store_body_header(pool::request_loan, query_id)
-                                         .store_slice(request)
-                                         .store_slice(static_data)
-                             .end_cell();
-              send_msg(pool,
-                       0,
-                       payload,
-                       msgflag::BOUNCEABLE,
-                       sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);
-              state = state::SENT_BORROWING_REQUEST;
-            } elseif (op == controller::return_unused_loan) {
-                assert_state!(state::REST);
-                throw_unless(error::no_credit, borrowed_amount);
-                (int utime_since, int utime_until, cell vset) = get_current_validator_set();
-                throw_unless(error::too_early_loan_return, utime_since > borrowing_time); ;; load was requested in previous round
-                int overdue = now() - utime_since;
-                if(balance >= MIN_TONS_FOR_STORAGE + borrowed_amount) {
-                  send_msg(pool,
-                           borrowed_amount, ;; TODO add fee???
-                           begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),
-                           msgflag::BOUNCEABLE,
-                           sendmode::PAY_FEES_SEPARETELY); ;; remaining inbound message amount, fee deducted from
-                  borrowed_amount = 0;
-                  borrowing_time = 0;
-                  if(overdue < GRACE_PERIOD) {
-                    assert_sender!(sender_address, validator);
-                    send_excesses(sender_address);
-                  } else {
-                    if(balance >=  MIN_TONS_FOR_STORAGE + borrowed_amount + STAKE_RECOVER_FINE) {
-                      ifnot( equal_slice_bits(sender_address, validator)) {
-                        send_msg(sender_address, STAKE_RECOVER_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
+                    cell payload = begin_cell().store_body_header(elector::recover_stake, query_id).end_cell();
+                    send_msg(elector_address(),
+                             0, ;; amount
+                             payload,
+                             msgflag::BOUNCEABLE,
+                             sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE); ;; remaining inbound message amount, fee deducted from amount, revert on errors
+                    state = state::SENT_RECOVER_REQUEST;
+                    if( (time_since_unfreeze < GRACE_PERIOD) | (borrowed_amount == 0) ) {
+                      assert_sender!(sender_address, validator);
+                    } else {
+                      if(balance - msg_value - STAKE_RECOVER_FINE >= MIN_TONS_FOR_STORAGE) {
+                        ifnot( equal_slice_bits(sender_address, validator)) {
+                          send_msg(sender_address, STAKE_RECOVER_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
+                        }
                       }
                     }
-                  }
+
+                } elseif (op == controller::update_validator_hash) {
+                    assert_state!(state::FUNDS_STAKEN);
+                    in_msg_body.end_parse();
+                    throw_unless(error::too_much_validator_set_counts, validator_set_changes_count < 3);
+                    (int utime_since, int utime_until, cell vset) = get_current_validator_set();
+                    int current_hash = cell_hash(vset);
+                    if (saved_validator_set_hash != current_hash) {
+                        saved_validator_set_hash = current_hash;
+                        validator_set_changes_count += 1;
+                        validator_set_change_time = now();
+                    }
+                    int overdue = now() - utime_since;
+                    if( (overdue < GRACE_PERIOD) | (borrowed_amount == 0) ) {
+                      assert_sender!(sender_address, validator);
+                      send_excesses(sender_address);
+                    } else {
+                      if(balance - HASH_UPDATE_FINE >= MIN_TONS_FOR_STORAGE) {
+                        ifnot( equal_slice_bits(sender_address, validator)) {
+                          send_msg(sender_address, HASH_UPDATE_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
+                        }
+                      }
+                    }
+                } elseif (op == controller::withdraw_validator) { ;; withdraw validator (after recover_stake and before new_stake)
+                    assert_state!(state::REST);
+                    throw_if(error::withdrawal_while_credited, borrowed_amount);
+                    assert_sender!(sender_address, validator);
+                    int request_amount = in_msg_body~load_coins();
+                    in_msg_body.end_parse();
+                    throw_unless(error::incorrect_withdrawal_amount, request_amount > 0);
+
+                    raw_reserve(MIN_TONS_FOR_STORAGE, 2);
+                    send_msg(validator,
+                             request_amount,
+                             null(), ;; payload
+                             msgflag::NON_BOUNCEABLE,
+                             sendmode::REGULAR);
+
+                } elseif (op == controller::new_stake) {
+                    assert_state!(state::REST);
+                    assert_sender!(sender_address, validator);
+
+                    throw_unless(error::incorrect_new_stake::query_id, query_id); ;; query_id must be greater then 0 to receive confirmation message from elector
+
+                    throw_unless(error::incorrect_new_stake::request_value,
+                                 msg_value >= ELECTOR_OPERATION_VALUE); ;; must be greater then new_stake sending to elector fee
+
+                    int value = in_msg_body~load_coins();
+
+                    slice msg = in_msg_body;
+
+                    stake_at = check_new_stake_msg(in_msg_body);
+
+                    stake_amount_sent = value - ELECTOR_OPERATION_VALUE;
+
+                    throw_unless(error::incorrect_new_stake::value_lt_minimum, value >= MIN_STAKE_TO_SEND);
+
+                    int overdue_fine = (HASH_UPDATE_FINE * 3) - STAKE_RECOVER_FINE;
+
+                    throw_unless(error::incorrect_new_stake::value_too_high, balance - value >=  MIN_TONS_FOR_STORAGE + overdue_fine);
+                    (_, stake_held_for, int elections_end_before) = get_validator_config();
+                    (int utime_since, int utime_until, cell vset) = get_current_validator_set();
+                    if (borrowed_amount) {
+                      ;; it is allowed to use credit funds only in the same round when they were obtained
+                      throw_unless(error::incorrect_new_stake::wrongly_used_credit,
+                                  (borrowing_time > utime_since) & (now() < utime_until - elections_end_before));
+                    }
+
+                    int validator_own_funds = balance - borrowed_amount;
+
+                    throw_unless(error::incorrect_new_stake::solvency_not_guaranteed,
+                                 validator_own_funds >= max_recommended_punishment_for_validator_misbehaviour(stake_amount_sent) + (overdue_fine + MIN_TONS_FOR_STORAGE));
+
+                    state = state::SENT_STAKE_REQUEST;
+
+
+
+                    saved_validator_set_hash = cell_hash(vset); ;; current validator set, we will be in next validator set
+                    validator_set_changes_count = 0;
+                    validator_set_change_time = utime_since;
+
+                    send_msg(elector_address(),
+                             value,
+                             begin_cell().store_body_header(elector::new_stake, query_id).store_slice(msg).end_cell(),
+                             msgflag::BOUNCEABLE,
+                             sendmode::PAY_FEES_SEPARETELY); ;; pay fee separately, revert on errors
+
+                } elseif (op == controller::send_request_loan) {
+                  assert_state!(state::REST);
+                  assert_sender!(sender_address, validator);
+                  slice request = in_msg_body;
+                  int min_loan = in_msg_body~load_coins();
+                  int max_loan = in_msg_body~load_coins();
+                  int max_interest = in_msg_body~load_uint(16);
+                  in_msg_body.end_parse();
+
+                  throw_unless(error::controller_not_approved, approved?);
+
+                  ;; For simplicity forbid multiple borrowing
+                  ;; TODO
+                  throw_if(error::multiple_loans_are_prohibited, borrowed_amount);
+
+                  (int elections_start_before, _, int elections_end_before) = get_validator_config();
+                  (int utime_since, int utime_until, cell vset) = get_current_validator_set();
+                  throw_unless(error::too_early_loan_request, now() > utime_until - elections_start_before); ;; elections started
+                  throw_unless(error::too_late_loan_request, now() < utime_until - elections_end_before);   ;; elections not yet closed
+
+
+                  ;; lets check whether we can afford it
+                  int elector_fine = max_recommended_punishment_for_validator_misbehaviour(max_loan + balance);
+                  int overdue_fine = (HASH_UPDATE_FINE * 3) - STAKE_RECOVER_FINE;
+                  int interest_payment = muldiv(max_loan, max_interest, 65535);
+                  int validator_amount = balance - borrowed_amount;
+                  throw_unless(error::too_high_loan_request_amount, validator_amount >= (MIN_TONS_FOR_STORAGE + overdue_fine) + elector_fine + interest_payment);
+
+                  cell payload = begin_cell()
+                                             .store_body_header(pool::request_loan, query_id)
+                                             .store_slice(request)
+                                             .store_slice(static_data)
+                                 .end_cell();
+                  send_msg(pool,
+                           0,
+                           payload,
+                           msgflag::BOUNCEABLE,
+                           sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);
+                  state = state::SENT_BORROWING_REQUEST;
+                } elseif (op == controller::return_unused_loan) {
+                    assert_state!(state::REST);
+                    throw_unless(error::no_credit, borrowed_amount);
+                    (int utime_since, int utime_until, cell vset) = get_current_validator_set();
+                    throw_unless(error::too_early_loan_return, utime_since > borrowing_time); ;; load was requested in previous round
+                    int overdue = now() - utime_since;
+                    if(balance >= MIN_TONS_FOR_STORAGE + borrowed_amount) {
+                      send_msg(pool,
+                               borrowed_amount, ;; TODO add fee???
+                               begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),
+                               msgflag::BOUNCEABLE,
+                               sendmode::PAY_FEES_SEPARETELY); ;; remaining inbound message amount, fee deducted from
+                      borrowed_amount = 0;
+                      borrowing_time = 0;
+                      if(overdue < GRACE_PERIOD) {
+                        assert_sender!(sender_address, validator);
+                        send_excesses(sender_address);
+                      } else {
+                        if(balance >=  MIN_TONS_FOR_STORAGE + borrowed_amount + STAKE_RECOVER_FINE) {
+                          ifnot( equal_slice_bits(sender_address, validator)) {
+                            send_msg(sender_address, STAKE_RECOVER_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
+                          }
+                        }
+                      }
+                    } else {
+                      state = state::INSOLVENT;
+                    }
                 } else {
-                  state = state::HALTED;
+                  throw(error::unknown_op);
                 }
-            } else {
-              throw(error::unknown_op);
             }
     }
 
@@ -391,7 +404,8 @@ int check_new_stake_msg(slice cs);
 () save_data() impure inline_ref {
     set_data(begin_cell()
         .store_uint(state, 8)
-        .store_int(approved, 1)
+        .store_int(halted?, 1)
+        .store_int(approved?, 1)
         .store_coins(stake_amount_sent)
         .store_timestamp(stake_at)
         .store_uint(saved_validator_set_hash, 256)
@@ -410,7 +424,8 @@ int check_new_stake_msg(slice cs);
 
     slice ds = get_data().begin_parse();
     state = ds~load_uint(8);
-    approved = ds~load_int(1);
+    halted? = ds~load_int(1);
+    approved? = ds~load_int(1);
 
     stake_amount_sent = ds~load_coins();
     stake_at = ds~load_timestamp();
@@ -475,7 +490,7 @@ int check_new_stake_msg(slice cs) impure inline_ref {
 _ get_validator_controller_data() method_id {
     load_data();
     return (
-      state, approved,
+      state, halted?, approved?,
       
       stake_amount_sent, stake_at,
       

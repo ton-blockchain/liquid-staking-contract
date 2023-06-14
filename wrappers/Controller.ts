@@ -18,7 +18,8 @@ export type ControllerConfig = {
 export function controllerConfigToCell(config: ControllerConfig): Cell {
     return beginCell()
               .storeUint(0, 8)   // state NORMAL
-              .storeUint(0, 1)   // approved
+              .storeInt(0n, 1)   // halted?
+              .storeInt(0n, 1)   // approved?
               .storeCoins(0)     // stake_amount_sent
               .storeUint(0, 48)  // stake_at
               .storeUint(0, 256) // saved_validator_set_hash
@@ -292,13 +293,12 @@ export class Controller implements Contract {
         });
     }
 
-    async sendSetState(provider: ContractProvider, via: Sender, new_state: number, query_id: bigint | number = 0) {
+    async sendUnhalt(provider: ContractProvider, via: Sender, query_id: bigint | number = 0) {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             value: toNano('1'),
-            body: beginCell().storeUint(Op.governor.set_state, 32)
+            body: beginCell().storeUint(Op.governor.unhalt, 32)
                              .storeUint(query_id, 64)
-                             .storeUint(new_state, 8)
                   .endCell()
         });
     }
@@ -310,6 +310,7 @@ export class Controller implements Contract {
         const {stack} = await provider.get('get_validator_controller_data', []);
         return {
             state: stack.readNumber(),
+            halted: stack.readBoolean(),
             approved: stack.readBoolean(),
             stakeSent: stack.readBigNumber(),
             stakeAt: stack.readNumber(),
