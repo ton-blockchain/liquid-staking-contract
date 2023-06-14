@@ -1,4 +1,5 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from 'ton-core';
+
 import { JettonMinter as DAOJettonMinter } from '../contracts/jetton_dao/wrappers/JettonMinter';
 import { JettonMinter as AwaitedJettonMinter} from '../contracts/awaited_minter/wrappers/JettonMinter';
 
@@ -20,8 +21,25 @@ export type PoolConfig = {
   pool_jetton_wallet_code: Cell;
   payout_minter_code: Cell;
   vote_keeper_code: Cell;
-  
 };
+
+export type BorrowerDiscription = {
+    borrowed: bigint,
+    accounted_interest: bigint
+}
+
+export const BorrowerDiscriptionValue: DictionaryValue<BorrowerDiscription> = {
+	serialize: (src, builder) => {
+        builder.storeCoins(src.borrowed);
+        builder.storeCoins(src.accounted_interest);
+	},
+	parse: (src) => {
+        return {
+            borrowed: src.loadCoins(),
+            accounted_interest: src.loadCoins()
+        }
+	}
+}
 
 export function poolConfigToCell(config: PoolConfig): Cell {
     let emptyRoundData = beginCell()
@@ -62,7 +80,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeUint(0, 8) // state NORMAL
               .storeInt(0n, 1) // halted?
               .storeCoins(0) // total_balance
-              .storeUint(30, 16) // interest_rate
+              .storeUint(100, 16) // minimal interest_rate
               .storeInt(config.optimistic_deposit_withdrawals, 1) // optimistic_deposit_withdrawals
               .storeInt(-1n, 1) // deposits_open?
               .storeUint(0, 256) // saved_validator_set_hash
@@ -176,11 +194,43 @@ export class Pool implements Contract {
         return this.getWithdrawalPayout(provider);
     }
     async getFinanceData(provider: ContractProvider) {
-        let res = await provider.get('get_finance_data', []);
-        let totalBalance = res.stack.readBigNumber();
-        let supply = res.stack.readBigNumber();
-        let requestedForDeposit = res.stack.readBigNumber();
-        let requestedForWithdrawal = res.stack.readBigNumber();
-        return {totalBalance, supply, requestedForDeposit, requestedForWithdrawal};
+        let { stack } = await provider.get('get_finance_data', []);
+        let totalBalance = stack.readBigNumber();
+        let supply = stack.readBigNumber();
+        let requestedForDeposit = stack.readBigNumber();
+        let requestedForWithdrawal = stack.readBigNumber();
+        stack.readCell();
+        let interestRate = stack.readNumber();
+        return {totalBalance, supply, requestedForDeposit, requestedForWithdrawal, interestRate};
+    }
+    async getMinMaxLoanPerValidator(provider: ContractProvider) {
+        let { stack } = await provider.get('get_min_max_loan_per_validator', []);
+        let min = stack.readBigNumber();
+        let max = stack.readBigNumber();
+        return {min, max};
+    }
+    async getLoan(provider: ContractProvider, controllerId: number, validator: Address, previous=false) {
+        const args = new TupleBuilder();
+        args.writeNumber(controllerId);
+        args.writeAddress(validator);
+        args.writeBoolean(previous);
+        let { stack } = await provider.get('get_loan', args.build());
+        return {
+            borrowed: stack.readBigNumber(),
+            interestAmount: stack.readBigNumber(),
+        }
+    }
+    async getRoundId(provider: ContractProvider) {
+        let { stack } = await provider.get('get_round_index', []);
+        return stack.readNumber();
+    }
+    async getBorrowersDict(provider: ContractProvider, previous=false) {
+        const args = new TupleBuilder();
+        args.writeBoolean(previous);
+        let { stack } = await provider.get('get_borrowers_dict', args.build());
+        if (stack.peek().type == 'null')
+            return Dictionary.empty();
+        const dict = Dictionary.loadDirect(Dictionary.Keys.BigInt(256), BorrowerDiscriptionValue, stack.readCell().asSlice());
+        return dict;
     }
 }

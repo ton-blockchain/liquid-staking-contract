@@ -108,7 +108,7 @@ int check_new_stake_msg(slice cs);
                     state = state::REST;
                 }
             } elseif (equal_slice_bits(sender_address, pool)) {
-              if(op == pool::loan_repayment) {
+              if(op == pool::repay_loan) {
                 borrowed_amount += msg_value;
                 borrowing_time = now();
               } elseif (op == pool::request_loan) {
@@ -135,7 +135,7 @@ int check_new_stake_msg(slice cs);
                 if(balance >= MIN_TONS_FOR_STORAGE + borrowed_amount) {
                   send_msg(pool,
                            borrowed_amount, ;; TODO add fee???
-                           begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),
+                           begin_cell().store_body_header(pool::repay_loan, query_id).end_cell(),
                            msgflag::BOUNCEABLE,
                            sendmode::PAY_FEES_SEPARETELY); ;; remaining inbound message amount, fee deducted from
                   borrowed_amount = 0;
@@ -532,4 +532,13 @@ int get_max_punishment(int stake) method_id {
     int validator_amount = balance - borrowed_amount;
     return (MIN_TONS_FOR_STORAGE + overdue_fine + elector_fine + interest_payment,
             validator_amount);
+}
+
+
+(int, int) request_window_time() method_id { ;; TODO: put it in recv_internal in request_loan operation
+    ;; get time window (since, until) when controller may request loan
+    (int elections_start_before, _, int elections_end_before) = get_validator_config();
+    (int utime_since, int utime_until, _) = get_current_validator_set();
+    return (utime_until - elections_start_before,
+            utime_until - elections_end_before);
 }

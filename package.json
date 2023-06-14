@@ -6,8 +6,8 @@
         "test": "jest"
     },
     "devDependencies": {
-        "@ton-community/blueprint": "^0.9.0",
-        "@ton-community/sandbox": "^0.10.0",
+        "@ton-community/blueprint": "^0.10.0",
+        "@ton-community/sandbox": "^0.11.0",
         "@ton-community/test-utils": "^0.2.0",
         "@types/jest": "^29.5.0",
         "@types/node": "^18.15.5",
