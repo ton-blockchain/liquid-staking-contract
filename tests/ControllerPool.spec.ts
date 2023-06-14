@@ -412,9 +412,6 @@ describe('Controller & Pool', () => {
         let anotherController: SandboxContract<Controller>;
         let thirdController: SandboxContract<Controller>;
         let roundId: number;
-        // afterEach(async () => {
-        //     await blockchain.loadFrom(nextRound);
-        // });
         beforeAll(async () => {
             let config = controllerConfig;
             config.controllerId++;
@@ -436,6 +433,8 @@ describe('Controller & Pool', () => {
             for (let loan of [loan1, loan2])
                 expect(loan.borrowed).toEqual(toNano('100000'));
             roundId = await pool.getRoundId();
+            const borrowers = await pool.getBorrowersDict();
+            expect(borrowers.size).toEqual(2);
         });
         
         it('should prepare two loans', async () => {});
@@ -443,9 +442,6 @@ describe('Controller & Pool', () => {
         let repayingTime: BlockchainSnapshot;
 
         it('should update round with empty finalizing', async () => {
-            console.log("should update round with empty finalizing");
-            // update round to put current loans into previous to close them later
-
             newVset();
             toElections();
             const newRoundLoanResult = await thirdController.sendLoanRequest(deployer.getSender(), toNano('10000'), toNano('20000'), 100);
@@ -480,17 +476,13 @@ describe('Controller & Pool', () => {
             let newRoundId = await pool.getRoundId();
             expect(newRoundId).toEqual(roundId + 1);
             roundId = newRoundId;
-        }); // ok
-
-
-
+            const currBorrowers = await pool.getBorrowersDict();
+            expect(currBorrowers.size).toEqual(1);
+            const prevBorrowers = await pool.getBorrowersDict(true);
+            expect(prevBorrowers.size).toEqual(2);
+        });
 
         it('should not rotate on the next regular loan request in this round', async () => {
-            console.log("should not rotate on the next regular loan request in this round");
-            const borrowers = await pool.getBorrowersDict(true);
-            console.log("borrowers", borrowers);
-            console.log("prev borrowers:", borrowers.size);
-
             let config = controllerConfig;
             config.controllerId = 3;
             const fourthController = blockchain.openContract(Controller.createFromConfig(config, controller_code));
@@ -517,12 +509,10 @@ describe('Controller & Pool', () => {
 
             let newRoundId = await pool.getRoundId();
             expect(newRoundId).toEqual(roundId);
+            const borrowers = await pool.getBorrowersDict(true);
+            expect(borrowers.size).toEqual(2);
         });
         it('should not rotate on the non-last loan repayment', async () => {
-            console.log("should not rotate on the non-last loan repayment");
-            const borrowers = await pool.getBorrowersDict(true);
-            console.log("prev borrowers:", borrowers.size);
-
             newVset();
             const repayResult = await controller.sendReturnUnusedLoan(deployer.getSender());
             expect(repayResult.transactions).toHaveTransaction({
@@ -540,27 +530,46 @@ describe('Controller & Pool', () => {
             // expect(state).toEqual(poolStates.REPAYMENT_ONLY);
             let newRoundId = await pool.getRoundId();
             expect(newRoundId).toEqual(roundId);
+            const borrowers = await pool.getBorrowersDict(true);
+            expect(borrowers.size).toEqual(1);
         });
         it('repaying of the last loan should rotate round', async () => {
-            console.log("repaying of the last loan should rotate round");
-            const borrowers = await pool.getBorrowersDict(true);
-            console.log("prev borrowers:", borrowers.size);
-
             const repayLoanResult = await anotherController.sendReturnUnusedLoan(deployer.getSender());
             expect(repayLoanResult.transactions).toHaveTransaction({
                 from: anotherController.address,
                 to: pool.address,
                 success: true
             });
-            // expect(repayLoanResult.transactions).toHaveTransaction({
-            //     from: pool.address,
-            //     to: poolConfig.interest_manager,
-            //     op: 0x7776, // interest_manager::stats
-            // });
-            const state = await readState(pool.address);
+            expect(repayLoanResult.transactions).toHaveTransaction({
+                from: pool.address,
+                to: poolConfig.interest_manager,
+                op: 0x7776, // interest_manager::stats
+            });
+            expect(repayLoanResult.transactions).toHaveTransaction({
+                from: pool.address,
+                to: poolConfig.governor,
+                op: 0x93a // governor::operation_fee
+            });
             let newRoundId = await pool.getRoundId();
             expect(newRoundId).toEqual(roundId + 1);
             roundId = newRoundId;
+
+            const loan3 = await pool.getLoan(2, deployer.address, true);
+            expect(loan3.borrowed).toEqual(toNano('20000'));
+            const loan4 = await pool.getLoan(3, deployer.address, true);
+            expect(loan4.borrowed).toEqual(toNano('20000'));
+
+            for (let loan of [
+                await pool.getLoan(0, deployer.address),
+                await pool.getLoan(1, deployer.address),
+                await pool.getLoan(0, deployer.address, true),
+                await pool.getLoan(1, deployer.address, true)
+            ]) expect(loan.borrowed).toEqual(0n);
+
+            const currBorrowers = await pool.getBorrowersDict();
+            expect(currBorrowers.size).toEqual(0);
+            const prevBorrowers = await pool.getBorrowersDict(true);
+            expect(prevBorrowers.size).toEqual(2);
         });
     });
 });

@@ -205,6 +205,8 @@ export class Pool implements Contract {
         const args = new TupleBuilder();
         args.writeBoolean(previous);
         let { stack } = await provider.get('get_borrowers_dict', args.build());
+        if (stack.peek().type == 'null')
+            return Dictionary.empty();
         const dict = Dictionary.loadDirect(Dictionary.Keys.BigInt(256), BorrowerDiscriptionValue, stack.readCell().asSlice());
         return dict;
     }
