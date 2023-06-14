@@ -378,7 +378,7 @@ int current_round_index();
     log_repayment(borrower, was_borrowed, amount - was_borrowed);
 
     borrowers_data = [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit];
-    int last_one = active_borrowers;
+    int last_one = active_borrowers == 0;
     
     return (borrowers_data, (true, last_one));
 }
