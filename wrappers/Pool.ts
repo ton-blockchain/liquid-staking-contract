@@ -1,4 +1,4 @@
-import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from 'ton-core';
+import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, TupleBuilder, Dictionary, DictionaryValue } from 'ton-core';
 import { JettonMinter as DAOJettonMinter } from '../contracts/jetton_dao/wrappers/JettonMinter';
 import { JettonMinter as AwaitedJettonMinter} from '../contracts/awaited_minter/wrappers/JettonMinter';
 
@@ -20,8 +20,25 @@ export type PoolConfig = {
   pool_jetton_wallet_code: Cell;
   payout_minter_code: Cell;
   vote_keeper_code: Cell;
-  
 };
+
+export type BorrowerDiscription = {
+    borrowed: bigint,
+    accounted_interest: bigint
+}
+
+export const BorrowerDiscriptionValue: DictionaryValue<BorrowerDiscription> = {
+	serialize: (src, builder) => {
+        builder.storeCoins(src.borrowed);
+        builder.storeCoins(src.accounted_interest);
+	},
+	parse: (src) => {
+        return {
+            borrowed: src.loadCoins(),
+            accounted_interest: src.loadCoins()
+        }
+	}
+}
 
 export function poolConfigToCell(config: PoolConfig): Cell {
     let emptyRoundData = beginCell()
@@ -163,11 +180,32 @@ export class Pool implements Contract {
         let interestRate = stack.readNumber();
         return {totalBalance, supply, requestedForDeposit, requestedForWithdrawal, interestRate};
     }
-
     async getMinMaxLoanPerValidator(provider: ContractProvider) {
         let { stack } = await provider.get('get_min_max_loan_per_validator', []);
         let min = stack.readBigNumber();
         let max = stack.readBigNumber();
         return {min, max};
+    }
+    async getLoan(provider: ContractProvider, controllerId: number, validator: Address, previous=false) {
+        const args = new TupleBuilder();
+        args.writeNumber(controllerId);
+        args.writeAddress(validator);
+        args.writeBoolean(previous);
+        let { stack } = await provider.get('get_loan', args.build());
+        return {
+            borrowed: stack.readBigNumber(),
+            interestAmount: stack.readBigNumber(),
+        }
+    }
+    async getRoundId(provider: ContractProvider) {
+        let { stack } = await provider.get('get_round_index', []);
+        return stack.readNumber();
+    }
+    async getBorrowersDict(provider: ContractProvider, previous=false) {
+        const args = new TupleBuilder();
+        args.writeBoolean(previous);
+        let { stack } = await provider.get('get_borrowers_dict', args.build());
+        const dict = Dictionary.loadDirect(Dictionary.Keys.BigInt(256), BorrowerDiscriptionValue, stack.readCell().asSlice());
+        return dict;
     }
 }

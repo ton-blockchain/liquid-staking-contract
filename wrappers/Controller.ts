@@ -67,9 +67,9 @@ export class Controller implements Contract {
         });
     }
 
-    async sendApprove(provider: ContractProvider, via: Sender) {
+    async sendApprove(provider: ContractProvider, via: Sender, amount?: bigint) {
         await provider.internal(via, {
-            value: toNano('0.1'),
+            value: amount || toNano('0.1'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
                      .storeUint(0x7b4b42e6, 32) // op
@@ -94,6 +94,25 @@ export class Controller implements Contract {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: Controller.loanRequestBody(minLoan, maxLoan, maxInterest),
         });
+    }
+
+    async getControllerData(provider: ContractProvider) {
+        const {stack} = await provider.get('get_validator_controller_data', []);
+        return {
+            state: stack.readNumber(),
+            approved: stack.readBoolean(),
+            stakeSent: stack.readBigNumber(),
+            stakeAt: stack.readNumber(),
+            validatorSetHash: stack.readBigNumber(),
+            validatorSetChangeCount: stack.readNumber(),
+            validatorSetChangeTime: stack.readNumber(),
+            stakeHeldFor: stack.readNumber(),
+            borrowedAmount: stack.readBigNumber(),
+            borrowingTime: stack.readNumber(),
+            validator: stack.readAddress(),
+            pool: stack.readAddress(),
+            sudoer: stack.readAddressOpt()
+        };
     }
 
     async sendReturnUnusedLoan(provider: ContractProvider, via: Sender) {
