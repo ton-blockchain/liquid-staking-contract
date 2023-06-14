@@ -150,6 +150,7 @@ builder save_codes(builder pb) {
 
     slice ds = get_data().begin_parse();
     state = ds~load_uint(8);
+    halted? = ds~load_int(1);
     total_balance = ds~load_coins();
     interest_rate = ds~load_uint(16);
     optimistic_deposit_withdrawals = ds~load_int(1);
@@ -169,6 +170,7 @@ builder save_codes(builder pb) {
 () save_data() impure inline_ref {
     set_data(begin_cell()
         .store_uint(state, 8)
+        .store_int(halted?, 1)
         .store_coins(total_balance)
         .store_uint(interest_rate, 16)
         .store_int(optimistic_deposit_withdrawals, 1)
@@ -182,7 +184,7 @@ builder save_codes(builder pb) {
         )
         .store_coins(min_loan_per_validator)
         .store_coins(max_loan_per_validator)
-        .store_uint(governance_fee, 8)
+        .store_uint(governance_fee, 16)
         .save_minters_data()
         .save_roles()
         .save_codes()

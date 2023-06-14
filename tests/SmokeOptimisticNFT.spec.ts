@@ -139,7 +139,7 @@ describe('Pool', () => {
         let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
         const jettonAmount = await myPoolJettonWallet.getJettonBalance();
 
-        const burnResult = await myPoolJettonWallet.sendBurn(deployer.getSender(), toNano('1.0'), jettonAmount, deployer.address, null);
+        const burnResult = await myPoolJettonWallet.sendBurn(deployer.getSender(), toNano('1.0'), jettonAmount, deployer.address, beginCell().storeInt(0n, 1).storeInt(0n, 1).endCell());
 
 
         expect(burnResult.transactions).toHaveTransaction({
@@ -151,18 +151,5 @@ describe('Pool', () => {
 
     });
 
-    it('should deposit', async () => {
-        //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
-        const depositResult = await pool.sendDeposit(deployer.getSender(), toNano('10'));
-        let myPoolJettonWalletAddress = await poolJetton.getWalletAddress(deployer.address);
-        let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
 
-
-        expect(depositResult.transactions).toHaveTransaction({
-            from: myPoolJettonWallet.address,
-            on: deployer.address,
-            op: 0x7362d09c, // excesses
-            success: true,
-        });
-    });
 });

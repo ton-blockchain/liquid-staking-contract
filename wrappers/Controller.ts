@@ -1,4 +1,7 @@
-import { Address, toNano, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode } from 'ton-core';
+import { Address, toNano, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, Message, storeMessage } from 'ton-core';
+import { buff2bigint } from '../utils';
+import { signData } from "./ValidatorUtils";
+import { Conf, ControllerState, Op } from "../PoolConstants";
 
 
 export type ControllerConfig = {
@@ -15,7 +18,8 @@ export type ControllerConfig = {
 export function controllerConfigToCell(config: ControllerConfig): Cell {
     return beginCell()
               .storeUint(0, 8)   // state NORMAL
-              .storeUint(0, 1)   // approved
+              .storeInt(0n, 1)   // halted?
+              .storeInt(0n, 1)   // approved?
               .storeCoins(0)     // stake_amount_sent
               .storeUint(0, 48)  // stake_at
               .storeUint(0, 256) // saved_validator_set_hash
@@ -56,25 +60,100 @@ export class Controller implements Contract {
         return new Controller(contractAddress(workchain, init), init);
     }
 
-    async sendDeploy(provider: ContractProvider, via: Sender) {
+    async sendDeploy(provider: ContractProvider, via: Sender, value:bigint = toNano('2000')) {
         await provider.internal(via, {
-            value: toNano('20000'),
+            value: value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0xd372158c, 32) // op = top up
+                     .storeUint(Op.controller.top_up, 32) // op = top up
                      .storeUint(0, 64) // query id
                   .endCell(),
         });
     }
 
-    async sendApprove(provider: ContractProvider, via: Sender, amount?: bigint) {
+    async sendTopUp(provider: ContractProvider, via: Sender, value:bigint = toNano('2000')) {
+        await provider.internal(via, {
+            value: value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                     .storeUint(Op.controller.top_up, 32) // op = top up
+                     .storeUint(0, 64) // query id
+                  .endCell(),
+        });
+    }
+
+    static creditMessage(credit:bigint, query_id:number | bigint = 0) {
+        return beginCell().storeUint(Op.controller.credit, 32)
+                          .storeUint(query_id, 64)
+                          .storeCoins(credit)
+               .endCell();
+    }
+
+    async sendCredit(provider: ContractProvider,
+                     via: Sender,
+                     credit:bigint,
+                     value:bigint = toNano('0.1'),
+                     query_id?: number | bigint) {
+        await provider.internal(via, {
+            value: value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: Controller.creditMessage(credit, query_id)
+        });
+    }
+
+    static requestLoanMessage(min_loan: bigint,
+                              max_loan: bigint,
+                              max_interest: number,
+                              query_id: bigint | number = 0) {
+
+        return beginCell().storeUint(Op.controller.send_request_loan, 32)
+                          .storeUint(query_id, 64)
+                          .storeCoins(min_loan)
+                          .storeCoins(max_loan)
+                          .storeUint(max_interest, 16)
+               .endCell();
+    }
+    async sendRequestLoan(provider: ContractProvider,
+                          via: Sender,
+                          min_loan: bigint,
+                          max_loan: bigint,
+                          max_interest: number,
+                          value: bigint = toNano('1'),
+                          query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: Controller.requestLoanMessage(min_loan, max_loan, max_interest, query_id)
+        });
+    }
+    async sendApprove(provider: ContractProvider, via: Sender, approve: boolean = true) {
+        // dissaprove support
+        const op = approve ? Op.controller.approve : Op.controller.disapprove;
+
         await provider.internal(via, {
             value: amount || toNano('0.1'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0x7b4b42e6, 32) // op
+                     .storeUint(op, 32) // op
                      .storeUint(1, 64) // query id
                   .endCell(),
+        });
+    }
+
+    static updateHashMessage(query_id: bigint | number = 0) {
+        return beginCell().storeUint(Op.controller.update_validator_hash, 32)
+                          .storeUint(query_id, 64)
+               .endCell();
+    }
+
+    async sendUpdateHash(provider: ContractProvider,
+                         via: Sender,
+                         value: bigint = toNano('1'),
+                         query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: Controller.updateHashMessage()
         });
     }
 
@@ -96,6 +175,142 @@ export class Controller implements Contract {
         });
     }
 
+    async sendReturnUnusedLoan(provider: ContractProvider, via: Sender, value:bigint = toNano('0.5')) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                     .storeUint(Op.controller.return_unused_loan, 32) // op
+                     .storeUint(1, 64) // query id
+                  .endCell(),
+        });
+    }
+    
+    static validatorWithdrawMessage(amount: bigint, query_id: bigint | number = 0) {
+        return beginCell().storeUint(Op.controller.withdraw_validator, 32)
+                          .storeUint(query_id, 64)
+                          .storeCoins(amount)
+               .endCell();
+    }
+
+    async sendValidatorWithdraw(provider: ContractProvider, via: Sender, amount: bigint, query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            value: toNano('10'),
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: Controller.validatorWithdrawMessage(amount, query_id)
+        });
+    }
+
+    static newStakeMessage(stake_val: bigint,
+                           src: Address,
+                           public_key: Buffer,
+                           private_key: Buffer,
+                           stake_at: number | bigint,
+                           max_factor: number,
+                           adnl_address: bigint,
+                           query_id:bigint | number = 1) {
+
+        const signCell = beginCell().storeUint(0x654c5074, 32)
+                                    .storeUint(stake_at, 32)
+                                    .storeUint(max_factor, 32)
+                                    .storeUint(buff2bigint(src.hash), 256)
+                                    .storeUint(adnl_address, 256)
+                         .endCell()
+
+        const signature = signData(signCell, private_key);
+
+        return  beginCell().storeUint(0x4e73744b, 32)
+                           .storeUint(query_id, 64)
+                           .storeCoins(stake_val)
+                           .storeUint(buff2bigint(public_key), 256)
+                           .storeUint(stake_at, 32)
+                           .storeUint(max_factor, 32)
+                           .storeUint(adnl_address, 256)
+                           .storeRef(signature)
+                .endCell();
+    }
+
+
+    async sendNewStake(provider: ContractProvider,
+                       via: Sender,
+                       stake_val: bigint,
+                       public_key: Buffer,
+                       private_key: Buffer,
+                       stake_at: number | bigint,
+                       max_factor: number = 1 << 16,
+                       adnl_address: bigint = 0n,
+                       query_id:bigint | number = 1,
+                       value: bigint = Conf.electorOpValue) {
+        await provider.internal(via,{
+            value,
+            body: Controller.newStakeMessage(stake_val,
+                                             this.address,
+                                             public_key,
+                                             private_key,
+                                             stake_at,
+                                             max_factor,
+                                             adnl_address,
+                                             query_id),
+            sendMode: SendMode.PAY_GAS_SEPARATELY
+        });
+    }
+
+	  static recoverStakeMessage(query_id: bigint | number = 0) {
+	      return beginCell().storeUint(Op.controller.recover_stake, 32).storeUint(query_id, 64).endCell();
+	  }
+
+	  async sendRecoverStake(provider: ContractProvider, via: Sender, value:bigint = Conf.electorOpValue, query_id: bigint | number = 0) {
+	      await provider.internal(via, {
+	          body: Controller.recoverStakeMessage(query_id),
+	          sendMode: SendMode.PAY_GAS_SEPARATELY,
+	          value
+        });
+	  }
+
+    async sendSetSudoer(provider: ContractProvider, via: Sender, sudoer: Address, value: bigint = toNano('1')) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            value,
+            body: beginCell().storeUint(Op.governor.set_sudoer, 32)
+                             .storeUint(1, 64)
+                             .storeAddress(sudoer)
+                  .endCell()
+        });
+    }
+
+    async sendSudoMsg(provider: ContractProvider, via: Sender, mode:number, msg: Message, query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            value : toNano('1'),
+            body: beginCell().storeUint(Op.sudo.send_message, 32)
+                             .storeUint(query_id, 64)
+                             .storeUint(mode, 8)
+                             .storeRef(beginCell().store(storeMessage(msg)).endCell())
+                  .endCell()
+        });
+    }
+
+    async sendHaltMessage(provider: ContractProvider, via: Sender, query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            value: toNano('1'),
+            body: beginCell().storeUint(Op.halter.halt, 32)
+                             .storeUint(query_id, 64)
+                  .endCell()
+        });
+    }
+
+    async sendUnhalt(provider: ContractProvider, via: Sender, query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            value: toNano('1'),
+            body: beginCell().storeUint(Op.governor.unhalt, 32)
+                             .storeUint(query_id, 64)
+                  .endCell()
+        });
+    }
+
+    // Get methods
     async getControllerData(provider: ContractProvider) {
         const {stack} = await provider.get('get_validator_controller_data', []);
         return {
@@ -114,18 +329,25 @@ export class Controller implements Contract {
             sudoer: stack.readAddressOpt()
         };
     }
-
-    async sendReturnUnusedLoan(provider: ContractProvider, via: Sender) {
-        await provider.internal(via, {
-            value: toNano('0.5'),
-            sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: beginCell()
-                     .storeUint(0xed7378a6, 32) // op
-                     .storeUint(1, 64) // query id
-                  .endCell(),
-        });
+    async getValidatorAmount(provider: ContractProvider) {
+        const res = await this.getControllerData(provider);
+        const state = await provider.getState();
+        return state.balance - res.borrowedAmount;
     }
 
+    async getMaxPunishment(provider: ContractProvider, stake:bigint) {
+        const {stack} = await provider.get('get_max_punishment', [{type:"int", value:stake}]);
+        return stack.readBigNumber();
+    }
+
+    async getBalanceForLoan(provider: ContractProvider, credit:bigint, interest:bigint | number) {
+        const {stack} = await provider.get('required_balance_for_loan', [
+            {type: "int", value: credit},
+            {type: "int", value: BigInt(interest)}
+        ]);
+        return stack.readBigNumber();
+    }
+  
     async getRequestWindow(provider: ContractProvider) {
         const { stack } = await provider.get("request_window_time", [])
         return {
