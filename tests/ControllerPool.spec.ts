@@ -197,216 +197,216 @@ describe('Controller & Pool', () => {
 
     it('should deploy and deposit', async () => {});
 
-    // describe('Loan request', () => {
-    //     const loanRequestParams: [bigint, bigint, number] = [ toNano('100000'), toNano('320000'), 1000 ];
-    //     const loanRequestBody = Controller.loanRequestBody(...loanRequestParams);
-    //     let loanRequestBodyToPool: Cell;
-    //     const loanRequestControllerIntoPool: (reqBody: Cell, controllerId: number, valik: Address) => Cell =
-    //         (reqBody, controllerId, valik) => {
-    //                 return beginCell()
-    //                 .storeUint(0x7ccd46e9, 32) // op pool::request_loan
-    //                 // skip part with requesting to send a request to pool from controller
-    //                 // send request to pool directly
-    //                 .storeSlice(
-    //                     reqBody
-    //                     .beginParse().skip(32)) // - op. the rest of request
-    //                 .storeRef( // static data
-    //                     beginCell()
-    //                     .storeUint(controllerId, 32)
-    //                     .storeAddress(valik))
-    //                 .endCell();
-    //     }
+    describe('Loan request', () => {
+        const loanRequestParams: [bigint, bigint, number] = [ toNano('100000'), toNano('320000'), 1000 ];
+        const loanRequestBody = Controller.loanRequestBody(...loanRequestParams);
+        let loanRequestBodyToPool: Cell;
+        const loanRequestControllerIntoPool: (reqBody: Cell, controllerId: number, valik: Address) => Cell =
+            (reqBody, controllerId, valik) => {
+                    return beginCell()
+                    .storeUint(0x7ccd46e9, 32) // op pool::request_loan
+                    // skip part with requesting to send a request to pool from controller
+                    // send request to pool directly
+                    .storeSlice(
+                        reqBody
+                        .beginParse().skip(32)) // - op. the rest of request
+                    .storeRef( // static data
+                        beginCell()
+                        .storeUint(controllerId, 32)
+                        .storeAddress(valik))
+                    .endCell();
+        }
 
-    //     afterEach(async () => {
-    //         await blockchain.loadFrom(normalState);
-    //     });
+        afterEach(async () => {
+            await blockchain.loadFrom(normalState);
+        });
 
-    //     it('should accept standart loan', async () => {
-    //         const requestLoanResult = await controller.sendLoanRequest(deployer.getSender(), ...loanRequestParams);
-    //         expect(requestLoanResult.transactions).toHaveTransaction({
-    //             from: deployer.address,
-    //             to: controller.address,
-    //             success: true,
-    //         });
-    //         const loan = await pool.getLoan(0, deployer.address);
-    //         const { interestRate } = await pool.getFinanceData()
-    //         const expectedInterest = loanRequestParams[1] * BigInt(interestRate) / 65535n;
-    //         expect(loan.borrowed).toEqual(loanRequestParams[1]);
-    //         expect(loan.interestAmount).toEqual(expectedInterest);
-    //     });
-    //     it('should not accept from random address', async () => {
-    //         loanRequestBodyToPool = loanRequestControllerIntoPool(loanRequestBody, 0, deployer.address);
-    //         const fakeRandController = await blockchain.treasury('fakeRandController');
-    //         const requestLoanResult = await fakeRandController.send({
-    //             to: pool.address,
-    //             value: toNano('0.5'),
-    //             body: loanRequestBodyToPool,
-    //         });
-    //         expect(requestLoanResult.transactions).toHaveTransaction({
-    //             to: pool.address,
-    //             success: false,
-    //             exitCode: errors.WRONG_SENDER,
-    //         });
-    //     });
-    //     it('should not accept loan from another pool\'s controller', async () => {
-    //         let anotherPoolConfig = {...poolConfig};
-    //         anotherPoolConfig.sudoer = randomAddress(); // just to change the address
-    //         const anotherPool = blockchain.openContract(Pool.createFromConfig(anotherPoolConfig, pool_code));
-    //         let anotherControllerConfig = {...controllerConfig};
-    //         anotherControllerConfig.pool = anotherPool.address;
-    //         const anotherController = blockchain.openContract(Controller.createFromConfig(anotherControllerConfig, controller_code));
+        it('should accept standart loan', async () => {
+            const requestLoanResult = await controller.sendLoanRequest(deployer.getSender(), ...loanRequestParams);
+            expect(requestLoanResult.transactions).toHaveTransaction({
+                from: deployer.address,
+                to: controller.address,
+                success: true,
+            });
+            const loan = await pool.getLoan(0, deployer.address);
+            const { interestRate } = await pool.getFinanceData()
+            const expectedInterest = loanRequestParams[1] * BigInt(interestRate) / 65535n;
+            expect(loan.borrowed).toEqual(loanRequestParams[1]);
+            expect(loan.interestAmount).toEqual(expectedInterest);
+        });
+        it('should not accept from random address', async () => {
+            loanRequestBodyToPool = loanRequestControllerIntoPool(loanRequestBody, 0, deployer.address);
+            const fakeRandController = await blockchain.treasury('fakeRandController');
+            const requestLoanResult = await fakeRandController.send({
+                to: pool.address,
+                value: toNano('0.5'),
+                body: loanRequestBodyToPool,
+            });
+            expect(requestLoanResult.transactions).toHaveTransaction({
+                to: pool.address,
+                success: false,
+                exitCode: errors.WRONG_SENDER,
+            });
+        });
+        it('should not accept loan from another pool\'s controller', async () => {
+            let anotherPoolConfig = {...poolConfig};
+            anotherPoolConfig.sudoer = randomAddress(); // just to change the address
+            const anotherPool = blockchain.openContract(Pool.createFromConfig(anotherPoolConfig, pool_code));
+            let anotherControllerConfig = {...controllerConfig};
+            anotherControllerConfig.pool = anotherPool.address;
+            const anotherController = blockchain.openContract(Controller.createFromConfig(anotherControllerConfig, controller_code));
 
-    //         const poolSmc = await blockchain.getContract(pool.address);
+            const poolSmc = await blockchain.getContract(pool.address);
 
-    //         const requestLoanResult = poolSmc.receiveMessage(internal({
-    //             from: anotherController.address,
-    //             to: pool.address,
-    //             value: toNano('0.5'),
-    //             body: loanRequestBodyToPool
-    //         }));
-    //         expect(requestLoanResult.outMessagesCount).toEqual(1);
-    //         const bounced = requestLoanResult.outMessages.get(0)!
-    //         expect(requestLoanResult.vmLogs).toContain("terminating vm with exit code " + errors.WRONG_SENDER);
-    //         expect(bounced.body.beginParse().loadUint(32)).toEqual(0xFFFFFFFF);
-    //     });
-    //     it('should not accept loan from another approver\'s controller', async () => {
-    //         let anotherPoolConfig = {...poolConfig};
-    //         const approver = await blockchain.treasury('approver');
-    //         anotherPoolConfig.approver = approver.address;
-    //         const anotherPool = blockchain.openContract(Pool.createFromConfig(anotherPoolConfig, pool_code));
-    //         let anotherControllerConfig = {...controllerConfig};
-    //         anotherControllerConfig.pool = anotherPool.address;
-    //         const anotherController = blockchain.openContract(Controller.createFromConfig(anotherControllerConfig, controller_code));
+            const requestLoanResult = poolSmc.receiveMessage(internal({
+                from: anotherController.address,
+                to: pool.address,
+                value: toNano('0.5'),
+                body: loanRequestBodyToPool
+            }));
+            expect(requestLoanResult.outMessagesCount).toEqual(1);
+            const bounced = requestLoanResult.outMessages.get(0)!
+            expect(requestLoanResult.vmLogs).toContain("terminating vm with exit code " + errors.WRONG_SENDER);
+            expect(bounced.body.beginParse().loadUint(32)).toEqual(0xFFFFFFFF);
+        });
+        it('should not accept loan from another approver\'s controller', async () => {
+            let anotherPoolConfig = {...poolConfig};
+            const approver = await blockchain.treasury('approver');
+            anotherPoolConfig.approver = approver.address;
+            const anotherPool = blockchain.openContract(Pool.createFromConfig(anotherPoolConfig, pool_code));
+            let anotherControllerConfig = {...controllerConfig};
+            anotherControllerConfig.pool = anotherPool.address;
+            const anotherController = blockchain.openContract(Controller.createFromConfig(anotherControllerConfig, controller_code));
 
-    //         const poolSmc = await blockchain.getContract(pool.address);
-    //         const requestLoanResult = poolSmc.receiveMessage(internal({
-    //             from: anotherController.address,
-    //             to: pool.address,
-    //             value: toNano('0.5'),
-    //             body: loanRequestBodyToPool
-    //         }));
-    //         expect(requestLoanResult.vmLogs).toContain(
-    //             "terminating vm with exit code " + errors.WRONG_SENDER);
-    //     });
-    //     it('should not accept loan from controller not from the masterchain', async () => {
-    //         const basechainController = blockchain.openContract(
-    //             Controller.createFromConfig(
-    //                 controllerConfig, controller_code, 0));
-    //         let deployResult = await basechainController.sendDeploy(deployer.getSender());
-    //         let approveResult = await basechainController.sendApprove(deployer.getSender());
-    //         expect([...approveResult.transactions, ...deployResult.transactions])
-    //                .not.toHaveTransaction({ success: false });
+            const poolSmc = await blockchain.getContract(pool.address);
+            const requestLoanResult = poolSmc.receiveMessage(internal({
+                from: anotherController.address,
+                to: pool.address,
+                value: toNano('0.5'),
+                body: loanRequestBodyToPool
+            }));
+            expect(requestLoanResult.vmLogs).toContain(
+                "terminating vm with exit code " + errors.WRONG_SENDER);
+        });
+        it('should not accept loan from controller not from the masterchain', async () => {
+            const basechainController = blockchain.openContract(
+                Controller.createFromConfig(
+                    controllerConfig, controller_code, 0));
+            let deployResult = await basechainController.sendDeploy(deployer.getSender());
+            let approveResult = await basechainController.sendApprove(deployer.getSender());
+            expect([...approveResult.transactions, ...deployResult.transactions])
+                   .not.toHaveTransaction({ success: false });
 
-    //         const requestLoanResult = await basechainController.sendLoanRequest(deployer.getSender(), ...loanRequestParams);
-    //         expect(requestLoanResult.transactions).toHaveTransaction({
-    //             from: basechainController.address,
-    //             to: pool.address,
-    //             success: false,
-    //             exitCode: errors.WRONG_SENDER,
-    //         });
-    //     });
-    //     it('should not accept loan with low interest rate', async () => {
-    //         const { interestRate } = await pool.getFinanceData();
-    //         const requestLoanResult1 = await controller.sendLoanRequest(deployer.getSender(), toNano('100000'), toNano('320000'), interestRate - 1);
-    //         expect(requestLoanResult1.transactions).toHaveTransaction({
-    //             from: controller.address,
-    //             to: pool.address,
-    //             success: false,
-    //             exitCode: errors.INTEREST_TOO_LOW,
-    //         });
-    //         const requestLoanResult2 = await controller.sendLoanRequest(deployer.getSender(), toNano('100000'), toNano('320000'), interestRate);
-    //         expect(requestLoanResult2.transactions).toHaveTransaction({ to: pool.address, success: true });
-    //     });
-    //     it('should not accept a small loan', async () => {
-    //         const { min } = await pool.getMinMaxLoanPerValidator();
-    //         const requestLoanResult = await controller.sendLoanRequest(deployer.getSender(), min-1n, min-1n, 1000);
-    //         expect(requestLoanResult.transactions).toHaveTransaction({
-    //             from: controller.address,
-    //             to: pool.address,
-    //             success: false,
-    //             exitCode: errors.CONTRADICTING_BORROWING_PARAMS,
-    //         });
-    //     });
-    //     it('should not accept a big one', async () => {
-    //         const { max } = await pool.getMinMaxLoanPerValidator();
-    //         const requestLoanResult = await controller.sendLoanRequest(deployer.getSender(), max+1n, max+1n, 1000);
-    //         expect(requestLoanResult.transactions).toHaveTransaction({
-    //             from: controller.address,
-    //             to: pool.address,
-    //             success: false,
-    //             exitCode: errors.CONTRADICTING_BORROWING_PARAMS,
-    //         });
-    //     });
-    //     it('should not accept a dumb loan where min > max', async () => {
-    //         const requestLoanResult = await controller.sendLoanRequest(deployer.getSender(), toNano('320000'), toNano('100000'), 1000);
-    //         expect(requestLoanResult.transactions).toHaveTransaction({
-    //             from: controller.address,
-    //             to: pool.address,
-    //             success: false,
-    //             exitCode: errors.CONTRADICTING_BORROWING_PARAMS,
-    //         });
-    //     });
-    //     it('should test max depth of borrowers dict', async () => {
-    //         // hashmap are compact binary trees, so we need to
-    //         // test the max depth of the splitting by generating
-    //         // addresses with different prefixes (0b0000, 0b0001, 0b0010, ...)
-    //         let controllerId = 0;
-    //         function nextController(): Controller {
-    //             let config = {...controllerConfig};
-    //             controllerId++;
-    //             config.controllerId = controllerId;
-    //             return Controller.createFromConfig(config, controller_code);
-    //         }
-    //         function tobin(addr: Address): string {
-    //             // address hash to binary string
-    //             const hashPart = '0x' + addr.hash.toString('hex');
-    //             return BigInt(hashPart).toString(2).padStart(256, '0');
-    //         }
+            const requestLoanResult = await basechainController.sendLoanRequest(deployer.getSender(), ...loanRequestParams);
+            expect(requestLoanResult.transactions).toHaveTransaction({
+                from: basechainController.address,
+                to: pool.address,
+                success: false,
+                exitCode: errors.WRONG_SENDER,
+            });
+        });
+        it('should not accept loan with low interest rate', async () => {
+            const { interestRate } = await pool.getFinanceData();
+            const requestLoanResult1 = await controller.sendLoanRequest(deployer.getSender(), toNano('100000'), toNano('320000'), interestRate - 1);
+            expect(requestLoanResult1.transactions).toHaveTransaction({
+                from: controller.address,
+                to: pool.address,
+                success: false,
+                exitCode: errors.INTEREST_TOO_LOW,
+            });
+            const requestLoanResult2 = await controller.sendLoanRequest(deployer.getSender(), toNano('100000'), toNano('320000'), interestRate);
+            expect(requestLoanResult2.transactions).toHaveTransaction({ to: pool.address, success: true });
+        });
+        it('should not accept a small loan', async () => {
+            const { min } = await pool.getMinMaxLoanPerValidator();
+            const requestLoanResult = await controller.sendLoanRequest(deployer.getSender(), min-1n, min-1n, 1000);
+            expect(requestLoanResult.transactions).toHaveTransaction({
+                from: controller.address,
+                to: pool.address,
+                success: false,
+                exitCode: errors.CONTRADICTING_BORROWING_PARAMS,
+            });
+        });
+        it('should not accept a big one', async () => {
+            const { max } = await pool.getMinMaxLoanPerValidator();
+            const requestLoanResult = await controller.sendLoanRequest(deployer.getSender(), max+1n, max+1n, 1000);
+            expect(requestLoanResult.transactions).toHaveTransaction({
+                from: controller.address,
+                to: pool.address,
+                success: false,
+                exitCode: errors.CONTRADICTING_BORROWING_PARAMS,
+            });
+        });
+        it('should not accept a dumb loan where min > max', async () => {
+            const requestLoanResult = await controller.sendLoanRequest(deployer.getSender(), toNano('320000'), toNano('100000'), 1000);
+            expect(requestLoanResult.transactions).toHaveTransaction({
+                from: controller.address,
+                to: pool.address,
+                success: false,
+                exitCode: errors.CONTRADICTING_BORROWING_PARAMS,
+            });
+        });
+        it('should test max depth of borrowers dict', async () => {
+            // hashmap are compact binary trees, so we need to
+            // test the max depth of the splitting by generating
+            // addresses with different prefixes (0b0000, 0b0001, 0b0010, ...)
+            let controllerId = 0;
+            function nextController(): Controller {
+                let config = {...controllerConfig};
+                controllerId++;
+                config.controllerId = controllerId;
+                return Controller.createFromConfig(config, controller_code);
+            }
+            function tobin(addr: Address): string {
+                // address hash to binary string
+                const hashPart = '0x' + addr.hash.toString('hex');
+                return BigInt(hashPart).toString(2).padStart(256, '0');
+            }
 
-    //         const MAX_DEPTH = 12;
-    //         const mainAddr = controller.address;
+            const MAX_DEPTH = 12;
+            const mainAddr = controller.address;
 
-    //         const mainAddrBin = tobin(mainAddr);
-    //         const commons: number[] = [];
+            const mainAddrBin = tobin(mainAddr);
+            const commons: number[] = [];
 
-    //         let controllers: {id: number, addr: Address}[] = [ {id: 0, addr: mainAddr} ];
-    //         while (controllers.length < MAX_DEPTH + 1) {
-    //             let next = nextController();
-    //             const common = findCommon(mainAddrBin, tobin(next.address));
-    //             if (commons.indexOf(common) === -1) {
-    //                 controllers.push(
-    //                     {id: controllerId, addr: next.address}
-    //                 );
-    //                 commons.push(common);
-    //             }
-    //         }
-    //         const loanLimits = await pool.getMinMaxLoanPerValidator();
-    //         const poolSmc = await blockchain.getContract(pool.address);
-    //         let minLoanRequestBody = Controller.loanRequestBody(loanLimits.min, loanLimits.min, 1000);
-    //         for (let i = 0; i < MAX_DEPTH; i++) {
-    //             const {id, addr} = controllers[i];
+            let controllers: {id: number, addr: Address}[] = [ {id: 0, addr: mainAddr} ];
+            while (controllers.length < MAX_DEPTH + 1) {
+                let next = nextController();
+                const common = findCommon(mainAddrBin, tobin(next.address));
+                if (commons.indexOf(common) === -1) {
+                    controllers.push(
+                        {id: controllerId, addr: next.address}
+                    );
+                    commons.push(common);
+                }
+            }
+            const loanLimits = await pool.getMinMaxLoanPerValidator();
+            const poolSmc = await blockchain.getContract(pool.address);
+            let minLoanRequestBody = Controller.loanRequestBody(loanLimits.min, loanLimits.min, 1000);
+            for (let i = 0; i < MAX_DEPTH; i++) {
+                const {id, addr} = controllers[i];
 
-    //             let body = loanRequestControllerIntoPool(minLoanRequestBody, id, deployer.address);
-    //             let result = poolSmc.receiveMessage(internal({
-    //                 from: addr,
-    //                 to: pool.address,
-    //                 value: toNano('0.5'),
-    //                 body: body
-    //             }));
-    //             // limit reached
-    //             expect(result.vmLogs).not.toContain("terminating vm with exit code");
-    //         }
-    //         const {id, addr} = controllers[MAX_DEPTH];
-    //         let body = loanRequestControllerIntoPool(minLoanRequestBody, id, deployer.address);
-    //         let result = poolSmc.receiveMessage(internal({
-    //             from: addr,
-    //             to: pool.address,
-    //             value: toNano('0.5'),
-    //             body: body
-    //         }));
-    //         expect(result.vmLogs).toContain("terminating vm with exit code " + errors.CREDIT_BOOK_TOO_DEEP);
-    //     });
-    // });
+                let body = loanRequestControllerIntoPool(minLoanRequestBody, id, deployer.address);
+                let result = poolSmc.receiveMessage(internal({
+                    from: addr,
+                    to: pool.address,
+                    value: toNano('0.5'),
+                    body: body
+                }));
+                // limit reached
+                expect(result.vmLogs).not.toContain("terminating vm with exit code");
+            }
+            const {id, addr} = controllers[MAX_DEPTH];
+            let body = loanRequestControllerIntoPool(minLoanRequestBody, id, deployer.address);
+            let result = poolSmc.receiveMessage(internal({
+                from: addr,
+                to: pool.address,
+                value: toNano('0.5'),
+                body: body
+            }));
+            expect(result.vmLogs).toContain("terminating vm with exit code " + errors.CREDIT_BOOK_TOO_DEEP);
+        });
+    });
     describe('Loan repayment', () => {
         let nextRound: BlockchainSnapshot;
         let anotherController: SandboxContract<Controller>;
