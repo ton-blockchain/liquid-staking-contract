@@ -1,6 +1,6 @@
 import { Address, Tuple, TupleItem, TupleItemInt, TupleReader, toNano } from "ton";
 import { Cell, Slice, Sender, SenderArguments, ContractProvider, Message, beginCell, Dictionary, MessageRelaxed, Transaction } from "ton-core";
-import { Blockchain } from "@ton-community/sandbox";
+import { Blockchain, MessageParams, SendMessageResult, SmartContract, SmartContractTransaction } from "@ton-community/sandbox";
 import { computeMessageForwardFees, MsgPrices } from "./fees";
 
 
@@ -68,6 +68,16 @@ export const computedGeneric = (trans:Transaction) => {
 export const getMsgExcess = (trans:Transaction, msg:Message, value:bigint, msgConf:MsgPrices) => {
   const fwdFees = computeMessageForwardFees(msgConf, msg);
   return value - computedGeneric(trans).gasFees - fwdFees.remaining - fwdFees.fees;
+}
+
+export const sendBulkMessage = async (msg: Message,
+                                      smc:SmartContract,
+                                      count:number,
+                                      cb: (res:SmartContractTransaction,n:number) => Promise<void>,
+                                      params?: MessageParams )=> {
+    for ( let i = 0; i < count; i++ ) {
+        await cb(await smc.receiveMessage(msg, params), i);
+    }
 }
 
 
