@@ -1,13 +1,10 @@
-import { Blockchain, SandboxContract, internal, TreasuryContract, BlockchainSnapshot, ExternalOutInfo } from '@ton-community/sandbox';
-import { Cell, toNano, fromNano, Dictionary, beginCell, Address } from 'ton-core';
+import { Blockchain, SandboxContract, internal, TreasuryContract, BlockchainSnapshot } from '@ton-community/sandbox';
+import { Cell, toNano, beginCell, Address } from 'ton-core';
 import { Pool, PoolConfig } from '../wrappers/Pool';
 import { Controller, ControllerConfig } from '../wrappers/Controller';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
 import { setConsigliere } from '../wrappers/PayoutMinter.compile';
-import {JettonWallet as PoolJettonWallet } from '../contracts/jetton_dao/wrappers/JettonWallet';
-import {JettonWallet as DepositWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
-import {JettonWallet as WithdrawalWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
-import { getElectionsConf, getValidatorsConf, getVset, loadConfig, packValidatorsSet, genRandomValidators } from "../wrappers/ValidatorUtils";
+import { getElectionsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
 import '@ton-community/test-utils';
 import { randomAddress } from "@ton-community/test-utils";
 import { compile } from '@ton-community/blueprint';
@@ -141,7 +138,7 @@ describe('Controller & Pool', () => {
         pool = blockchain.openContract(Pool.createFromConfig(poolConfig, pool_code));
 
         controllerConfig = {
-          controllerId:0,
+          controllerId: 0,
           validator: deployer.address,
           pool: pool.address,
           governor: deployer.address,
@@ -199,7 +196,7 @@ describe('Controller & Pool', () => {
 
     describe('Loan request', () => {
         const loanRequestParams: [bigint, bigint, number] = [ toNano('100000'), toNano('320000'), 1000 ];
-        const loanRequestBody = Controller.loanRequestBody(...loanRequestParams);
+        const loanRequestBody = Controller.requestLoanMessage(...loanRequestParams);
         let loanRequestBodyToPool: Cell;
         const loanRequestControllerIntoPool: (reqBody: Cell, controllerId: number, valik: Address) => Cell =
             (reqBody, controllerId, valik) => {
@@ -222,7 +219,7 @@ describe('Controller & Pool', () => {
         });
 
         it('should accept standart loan', async () => {
-            const requestLoanResult = await controller.sendLoanRequest(deployer.getSender(), ...loanRequestParams);
+            const requestLoanResult = await controller.sendRequestLoan(deployer.getSender(), ...loanRequestParams);
             expect(requestLoanResult.transactions).toHaveTransaction({
                 from: deployer.address,
                 to: controller.address,
@@ -297,7 +294,7 @@ describe('Controller & Pool', () => {
             expect([...approveResult.transactions, ...deployResult.transactions])
                    .not.toHaveTransaction({ success: false });
 
-            const requestLoanResult = await basechainController.sendLoanRequest(deployer.getSender(), ...loanRequestParams);
+            const requestLoanResult = await basechainController.sendRequestLoan(deployer.getSender(), ...loanRequestParams);
             expect(requestLoanResult.transactions).toHaveTransaction({
                 from: basechainController.address,
                 to: pool.address,
@@ -307,19 +304,19 @@ describe('Controller & Pool', () => {
         });
         it('should not accept loan with low interest rate', async () => {
             const { interestRate } = await pool.getFinanceData();
-            const requestLoanResult1 = await controller.sendLoanRequest(deployer.getSender(), toNano('100000'), toNano('320000'), interestRate - 1);
+            const requestLoanResult1 = await controller.sendRequestLoan(deployer.getSender(), toNano('100000'), toNano('320000'), interestRate - 1);
             expect(requestLoanResult1.transactions).toHaveTransaction({
                 from: controller.address,
                 to: pool.address,
                 success: false,
                 exitCode: errors.INTEREST_TOO_LOW,
             });
-            const requestLoanResult2 = await controller.sendLoanRequest(deployer.getSender(), toNano('100000'), toNano('320000'), interestRate);
+            const requestLoanResult2 = await controller.sendRequestLoan(deployer.getSender(), toNano('100000'), toNano('320000'), interestRate);
             expect(requestLoanResult2.transactions).toHaveTransaction({ to: pool.address, success: true });
         });
         it('should not accept a small loan', async () => {
             const { min } = await pool.getMinMaxLoanPerValidator();
-            const requestLoanResult = await controller.sendLoanRequest(deployer.getSender(), min-1n, min-1n, 1000);
+            const requestLoanResult = await controller.sendRequestLoan(deployer.getSender(), min-1n, min-1n, 1000);
             expect(requestLoanResult.transactions).toHaveTransaction({
                 from: controller.address,
                 to: pool.address,
@@ -329,7 +326,7 @@ describe('Controller & Pool', () => {
         });
         it('should not accept a big one', async () => {
             const { max } = await pool.getMinMaxLoanPerValidator();
-            const requestLoanResult = await controller.sendLoanRequest(deployer.getSender(), max+1n, max+1n, 1000);
+            const requestLoanResult = await controller.sendRequestLoan(deployer.getSender(), max+1n, max+1n, 1000);
             expect(requestLoanResult.transactions).toHaveTransaction({
                 from: controller.address,
                 to: pool.address,
@@ -338,7 +335,7 @@ describe('Controller & Pool', () => {
             });
         });
         it('should not accept a dumb loan where min > max', async () => {
-            const requestLoanResult = await controller.sendLoanRequest(deployer.getSender(), toNano('320000'), toNano('100000'), 1000);
+            const requestLoanResult = await controller.sendRequestLoan(deployer.getSender(), toNano('320000'), toNano('100000'), 1000);
             expect(requestLoanResult.transactions).toHaveTransaction({
                 from: controller.address,
                 to: pool.address,
@@ -382,7 +379,7 @@ describe('Controller & Pool', () => {
             }
             const loanLimits = await pool.getMinMaxLoanPerValidator();
             const poolSmc = await blockchain.getContract(pool.address);
-            let minLoanRequestBody = Controller.loanRequestBody(loanLimits.min, loanLimits.min, 1000);
+            let minLoanRequestBody = Controller.requestLoanMessage(loanLimits.min, loanLimits.min, 1000);
             for (let i = 0; i < MAX_DEPTH; i++) {
                 const {id, addr} = controllers[i];
 
@@ -408,7 +405,6 @@ describe('Controller & Pool', () => {
         });
     });
     describe('Loan repayment', () => {
-        let nextRound: BlockchainSnapshot;
         let anotherController: SandboxContract<Controller>;
         let thirdController: SandboxContract<Controller>;
         let roundId: number;
@@ -416,15 +412,15 @@ describe('Controller & Pool', () => {
             let config = controllerConfig;
             config.controllerId++;
             anotherController = blockchain.openContract(Controller.createFromConfig(config, controller_code));
-            await anotherController.sendApprove(deployer.getSender(), toNano('100000'));
+            await anotherController.sendApprove(deployer.getSender(), true, toNano('100000'));
 
             config.controllerId++;
             thirdController = blockchain.openContract(Controller.createFromConfig(config, controller_code));
-            await thirdController.sendApprove(deployer.getSender(), toNano('100000'));
+            await thirdController.sendApprove(deployer.getSender(), true, toNano('100000'));
 
             toElections();
-            const loanRequestResult1 = await controller.sendLoanRequest(deployer.getSender(), toNano('50000'), toNano('100000'), 100);
-            const loanRequestResult2 = await anotherController.sendLoanRequest(deployer.getSender(), toNano('50000'), toNano('100000'), 100);
+            const loanRequestResult1 = await controller.sendRequestLoan(deployer.getSender(), toNano('50000'), toNano('100000'), 100);
+            const loanRequestResult2 = await anotherController.sendRequestLoan(deployer.getSender(), toNano('50000'), toNano('100000'), 100);
             for (let result of [loanRequestResult1, loanRequestResult2])
               expect(result.transactions).toHaveTransaction({ to: pool.address, success: true });
 
@@ -439,12 +435,10 @@ describe('Controller & Pool', () => {
         
         it('should prepare two loans', async () => {});
 
-        let repayingTime: BlockchainSnapshot;
-
         it('should update round with empty finalizing', async () => {
             newVset();
             toElections();
-            const newRoundLoanResult = await thirdController.sendLoanRequest(deployer.getSender(), toNano('10000'), toNano('20000'), 100);
+            const newRoundLoanResult = await thirdController.sendRequestLoan(deployer.getSender(), toNano('10000'), toNano('20000'), 100);
             expect(newRoundLoanResult.transactions).toHaveTransaction({
                 from: thirdController.address,
                 to: pool.address,
@@ -471,8 +465,6 @@ describe('Controller & Pool', () => {
             for (let loan of [prevLoan1, prevLoan2])
                 expect(loan.borrowed).toEqual(toNano('100000'));
 
-            repayingTime = blockchain.snapshot();
-
             let newRoundId = await pool.getRoundId();
             expect(newRoundId).toEqual(roundId + 1);
             roundId = newRoundId;
@@ -481,13 +473,12 @@ describe('Controller & Pool', () => {
             const prevBorrowers = await pool.getBorrowersDict(true);
             expect(prevBorrowers.size).toEqual(2);
         });
-
         it('should not rotate on the next regular loan request in this round', async () => {
             let config = controllerConfig;
             config.controllerId = 3;
             const fourthController = blockchain.openContract(Controller.createFromConfig(config, controller_code));
-            await fourthController.sendApprove(deployer.getSender(), toNano('100000'));
-            const regularRequestResult = await fourthController.sendLoanRequest(deployer.getSender(), toNano('10000'), toNano('20000'), 100);
+            await fourthController.sendApprove(deployer.getSender(), true, toNano('100000'));
+            const regularRequestResult = await fourthController.sendRequestLoan(deployer.getSender(), toNano('10000'), toNano('20000'), 100);
             expect(regularRequestResult.transactions).toHaveTransaction({
                 from: fourthController.address,
                 to: pool.address,
