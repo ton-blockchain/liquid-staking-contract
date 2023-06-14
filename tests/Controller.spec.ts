@@ -61,6 +61,17 @@ describe('Cotroller mock', () => {
         // Putting wallet for mock. (Just takes all messages in).
         const poolWallet = await bc.treasury('pool');
         poolAddress      = poolWallet.address;
+        const treasurySmc = await bc.getContract(poolAddress);
+        // Hacky way of deploying treasury at constant address
+        if(treasurySmc.account.account!.storage.state.type !== "active")
+          throw(Error("Should be active!"));
+
+        await bc.setShardAccount(electorAddress, createShardAccount({
+          address: electorAddress,
+          code: treasurySmc.account.account!.storage.state.state.code!,
+          data: treasurySmc.account.account!.storage.state.state.data!,
+          balance: toNano('1000')
+        }));
 
         let controllerConfig = {
           controllerId:0,
@@ -1060,6 +1071,7 @@ describe('Cotroller mock', () => {
 
     describe('Recover stake', () => {
       let recoverReady: BlockchainSnapshot;
+      let expectRecoverMsg: BlockchainSnapshot;
       let recoverStakeOk: Cell;
       beforeAll(() => {
         recoverStakeOk = beginCell().storeUint(Op.elector.recover_stake_ok, 32)
@@ -1103,6 +1115,8 @@ describe('Cotroller mock', () => {
         expect(res.transactions).not.toHaveTransaction(recTrans);
         // > 60 sec after unfreeze
         bc.now = stateAfter.validatorSetChangeTime + eConf.stake_held_for + 61;
+        recoverReady = bc.snapshot();
+
         res = await controller.sendRecoverStake(vSender);
         expect(res.transactions).toHaveTransaction({
           from: validator.wallet.address,
@@ -1110,8 +1124,8 @@ describe('Cotroller mock', () => {
           success: true
         });
         expect(res.transactions).toHaveTransaction(recTrans);
-        recoverReady = bc.snapshot();
 
+        expectRecoverMsg = bc.snapshot();
         await bc.loadFrom(twoUpdates);
         randVset();
         await controller.sendUpdateHash(vSender);
@@ -1247,7 +1261,7 @@ describe('Cotroller mock', () => {
        });
       });
       it('Recover stake ok message should only be accepted from elector', async () => {
-        await bc.loadFrom(recoverReady);
+        await bc.loadFrom(expectRecoverMsg);
 
         const notElector  = differentAddress(electorAddress);
         const borrowed    = (await controller.getControllerData()).borrowedAmount;
@@ -1261,7 +1275,7 @@ describe('Cotroller mock', () => {
         expect(await getControllerState()).toEqualCell(stateBefore);
       });
       it('Successfull stake recovery  should trigger debt repay', async () => {
-        await bc.loadFrom(recoverReady);
+        await bc.loadFrom(expectRecoverMsg);
         const stateBefore = await controller.getControllerData();
         // We don't want to trigger loan repayment bounce, so have to use receiveMessage
         const controllerSmc = await bc.getContract(controller.address);
@@ -1288,7 +1302,7 @@ describe('Cotroller mock', () => {
         expect(dataAfter.borrowingTime).toEqual(0);
       });
       it('Controller should halt If not enough balance to repay debt on recovery', async () => {
-        await bc.loadFrom(recoverReady);
+        await bc.loadFrom(expectRecoverMsg);
         const dataBefore = await controller.getControllerData();
         // We don't want to trigger loan repayment bounce, so have to use receiveMessage
         const controllerSmc = await bc.getContract(controller.address);
