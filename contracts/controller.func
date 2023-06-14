@@ -194,9 +194,24 @@ int check_new_stake_msg(slice cs);
                 process_set_sudo_request(sender_address, in_msg_body);
             }  elseif (op == governor::unhalt) {
                 process_unhalt_request(sender_address);
-            } elseif (op == halter::halt) {
+            }  elseif (op == governor::return_available_funds) {
+                assert_state!(state::INSOLVENT);
+                assert_sender!(sender_address, governor);
+                int available_funds = balance - MIN_TONS_FOR_STORAGE - WITHDRAWAL_FEE;
+                available_funds = min( available_funds, borrowed_amount);
+                send_msg(pool,
+                        available_funds,
+                        begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),
+                        msgflag::BOUNCEABLE,
+                        sendmode::PAY_FEES_SEPARETELY); ;; remaining inbound message amount, fee deducted from
+                borrowed_amount -= available_funds;
+                if(borrowed_amount == 0) {
+                    borrowing_time = 0;
+                    state = state::REST;
+                }
+            }  elseif (op == halter::halt) {
                 process_halt_request(sender_address);
-            } else {
+            }  else {
                 ;; actions above considered safe or critical enough to be processed in halted regime
                 ;; actions below are only allowed for not halted controller
                 assert_not_halted!();
