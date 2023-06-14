@@ -261,11 +261,7 @@ int current_round_index();
             ifnot (closed) {
               ;; lets check other side
               (int closed, last_one) = current_round_borrowers~close_loan(sender_address, msg_value);
-              if(closed) {
-                  ;; we got return in unexpected round
-                  ;; it is possible that round mixed up, stop crediting
-                  state = state::REPAYMENT_ONLY;
-              } else {
+              ifnot(closed) {
                 ;; TODO, send to governance ????
               }
             }
