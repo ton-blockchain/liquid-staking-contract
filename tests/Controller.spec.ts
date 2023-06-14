@@ -1,4 +1,4 @@
-import { Blockchain,BlockchainSnapshot, createShardAccount,internal,SandboxContract,SendMessageResult,TreasuryContract } from "@ton-community/sandbox";
+import { Blockchain,BlockchainSnapshot, createShardAccount,internal,SandboxContract,SendMessageResult,SmartContractTransaction,TreasuryContract } from "@ton-community/sandbox";
 import { Controller, controllerConfigToCell } from '../wrappers/Controller';
 import { Address, Sender, Cell, toNano, Dictionary, beginCell } from 'ton-core';
 import { keyPairFromSeed, getSecureRandomBytes, getSecureRandomWords, KeyPair } from 'ton-crypto';
@@ -6,7 +6,7 @@ import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
 import { randomAddress } from "@ton-community/test-utils";
 import { calcMaxPunishment, getElectionsConf, getValidatorsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
-import { buff2bigint, differentAddress, getMsgExcess, getRandomInt, getRandomTon } from "../utils";
+import { buff2bigint, computedGeneric, differentAddress, getMsgExcess, getRandomInt, getRandomTon, sendBulkMessage } from "../utils";
 import { Conf, ControllerState, Errors, Op } from "../PoolConstants";
 import { computeMessageForwardFees, getMsgPrices } from "../fees";
 
@@ -1214,6 +1214,43 @@ describe('Cotroller mock', () => {
          to: deployer.address,
          value: Conf.stakeRecoverFine - fwdFees.fees - fwdFees.remaining
        });
+      });
+      it('Reward for sending stake recovery should only be sent once', async () => {
+       await bc.loadFrom(recoverReady);
+
+       const stateBefore = await controller.getControllerData();
+       bc.now = stateBefore.validatorSetChangeTime + eConf.stake_held_for + Conf.gracePeriod;
+
+       const controllerSmc = await bc.getContract(controller.address);
+
+       await sendBulkMessage(internal({
+         from: deployer.address,
+         to: controller.address,
+         body: Controller.recoverStakeMessage(),
+         value: Conf.electorOpValue,
+       }), controllerSmc, 5, async (res: SmartContractTransaction, n: number) => {
+         if (n > 0) {
+           const comp = computedGeneric(res);
+           expect(res.outMessagesCount).toEqual(1); // bounced
+           expect(comp.success).toBe(false);
+           expect(comp.exitCode).toEqual(Errors.wrong_state);
+           const bounceMsg = res.outMessages.get(0)!;
+           if(bounceMsg.info.type !== "internal")
+             throw(Error("Internal expected!"));
+           expect(bounceMsg.info.bounced).toBe(true);
+           expect(bounceMsg.info.value.coins).toBeLessThan(Conf.electorOpValue);
+
+         }
+         else {
+           expect(res.outMessagesCount).toEqual(2);
+           const rewardMsg = res.outMessages.get(1)!;
+           if(rewardMsg.info.type !== "internal")
+             throw(Error("Internal expected!"));
+
+           const fwdFees   = computeMessageForwardFees(msgConfMc, rewardMsg);
+           expect(rewardMsg.info.value.coins).toEqual(Conf.stakeRecoverFine - fwdFees.fees - fwdFees.remaining)
+         }
+       }, {now: bc.now})
       });
       it('Reward should not be sent if less than minimal storage is left after', async () => {
        await bc.loadFrom(recoverReady);
