@@ -1068,10 +1068,14 @@ describe('Cotroller mock', () => {
       let recoverReady: BlockchainSnapshot;
       let expectRecoverMsg: BlockchainSnapshot;
       let recoverStakeOk: Cell;
+      let recoverStakeError : Cell;
       beforeAll(() => {
         recoverStakeOk = beginCell().storeUint(Op.elector.recover_stake_ok, 32)
                                     .storeUint(1, 64)
                          .endCell();
+        recoverStakeError = beginCell().storeUint(Op.elector.recover_stake_error, 32)
+                                       .storeUint(1, 64)
+                            .endCell();
       });
       it('At least 2 validators set changes and stake_held_for time is required to trigger recover stake', async () => {
         await loadSnapshot('staken');
@@ -1356,6 +1360,20 @@ describe('Cotroller mock', () => {
         // Should not change borrow related info just in case
         expect(dataAfter.borrowedAmount).toEqual(dataBefore.borrowedAmount);
         expect(dataAfter.borrowingTime).toEqual(dataBefore.borrowingTime);
+      });
+      it('Controller should become insolvent and halted on elector recover_stake_error', async () => {
+        await bc.loadFrom(expectRecoverMsg);
+        const controllerSmc = await bc.getContract(controller.address);
+        await controllerSmc.receiveMessage(internal({
+          from: electorAddress,
+          to: controller.address,
+          body: recoverStakeError,
+          value: toNano('1')
+        }),{now: bc.now});
+
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.state).toEqual(ControllerState.INSOLVENT);
+        expect(dataAfter.halted).toBe(true);
       });
     });
     describe('Hash update', () => {
