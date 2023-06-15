@@ -297,6 +297,7 @@ export class Controller implements Contract {
         const {stack} = await provider.get('get_validator_controller_data', []);
         return {
             state: stack.readNumber(),
+            halted: stack.readBoolean(),
             approved: stack.readBoolean(),
             stakeSent: stack.readBigNumber(),
             stakeAt: stack.readNumber(),
