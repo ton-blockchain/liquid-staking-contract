@@ -51,12 +51,13 @@ const int sudo::upgrade = 0x96e7f528;
 const int governor::set_sudoer = 0x79e7c016;
 const int governor::set_roles = 0x7a756db8; ;; TODO
 const int governor::unhalt = 0x7247e7a5; ;;TODO
-const int governor::operation_fee = 0x93a; ;; TODO
 const int governor::set_deposit_settings = 0x2233ff55; ;;TODO
 const int governor::return_available_funds = 0x67855098; ;;TODO
 
 const int halter::halt = 0x139a1b4e;
 
+
+const int interest_manager::operation_fee = 0x93a; ;; TODO
 const int interest_manager::request_notification = 0x1234; ;; TODO
 const int interest_manager::stats = 0x7776; ;; TODO
 const int interest_manager::set_interest = 0x448866; ;;TODO
