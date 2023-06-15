@@ -3,6 +3,12 @@ import { JettonWalletConfig, JettonData, DaoData, jettonWalletConfigToCell, Jett
 
 
 export class JettonWallet extends BasicJettonWallet {
+    constructor(readonly address: Address, readonly init?: { code: Cell; data: Cell }) {
+        super(address, init);
+    }
+    static createFromAddress(address: Address) {
+        return new JettonWallet(address);
+    }
     async sendBurnWithParams(provider: ContractProvider, via: Sender, value: bigint,
                           jetton_amount: bigint,
                           responseAddress:Address,
