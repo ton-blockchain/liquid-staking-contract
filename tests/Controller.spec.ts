@@ -780,10 +780,7 @@ describe('Cotroller mock', () => {
         const res = await bc.sendMessage(internal({
           from: differentAddress(poolAddress),
           to: controller.address,
-          body: beginCell().storeUint(0xFFFFFFFF, 32)
-                           .storeUint(Op.pool.request_loan, 32)
-                           .storeUint(0, 64)
-                .endCell(),
+          body: bouncedBody(Op.pool.request_loan, 0),
           value: toNano('1'),
           bounced: true
         }));
@@ -795,10 +792,7 @@ describe('Cotroller mock', () => {
         const res = await bc.sendMessage(internal({
           from: poolAddress,
           to: controller.address,
-          body: beginCell().storeUint(0xFFFFFFFF, 32)
-                           .storeUint(Op.pool.request_loan, 32)
-                           .storeUint(0, 64)
-                .endCell(),
+          body: bouncedBody(Op.pool.request_loan, 0),
           value: toNano('1'),
           bounced: true
         }));
@@ -949,9 +943,7 @@ describe('Cotroller mock', () => {
           to: controller.address,
           value: repay,
           bounced: true,
-          body: beginCell().storeUint(0xFFFFFFFF, 32)
-                           .storeUint(Op.pool.loan_repayment, 32)
-                           .storeUint(1, 64).endCell()
+          body: bouncedBody(Op.pool.loan_repayment, 1),
         }),{now: bc.now});
 
         expect(await getControllerState()).toEqualCell(stateBefore);
@@ -966,9 +958,7 @@ describe('Cotroller mock', () => {
           to: controller.address,
           value: repay,
           bounced: true,
-          body: beginCell().storeUint(0xFFFFFFFF, 32)
-                           .storeUint(Op.pool.loan_repayment, 32)
-                           .storeUint(1, 64).endCell()
+          body: bouncedBody(Op.pool.loan_repayment, 1),
         }),{now: bc.now});
 
         const dataAfter  = await controller.getControllerData();
@@ -1106,7 +1096,7 @@ describe('Cotroller mock', () => {
         await bc.sendMessage(internal({
           from: differentAddress(electorAddress),
           to: controller.address,
-          body: beginCell().storeUint(Op.elector.new_stake_ok, 32).storeUint(1, 64).endCell(),
+          body: simpleBody(Op.elector.new_stake_ok, 1),
           value: toNano('1')
         }));
         expect(await getContractData(controller.address)).toEqualCell(stateBefore);
@@ -1117,7 +1107,7 @@ describe('Cotroller mock', () => {
           await bc.sendMessage(internal({
             from: differentAddress(electorAddress),
             to: controller.address,
-            body: beginCell().storeUint(Op.elector.new_stake_error, 32).storeUint(1, 64).endCell(),
+            body:simpleBody(Op.elector.new_stake_error, 1),
             value: toNano('1')
           }));
           expect(await getContractData(controller.address)).toEqualCell(stateBefore);
@@ -1127,7 +1117,7 @@ describe('Cotroller mock', () => {
         await bc.sendMessage(internal({
           from: electorAddress,
           to: controller.address,
-          body: beginCell().storeUint(Op.elector.new_stake_ok, 32).storeUint(1, 64).endCell(),
+          body: simpleBody(Op.elector.new_stake_ok, 1),
           value: toNano('1')
         }));
         expect((await controller.getControllerData()).state).toEqual(ControllerState.FUNDS_STAKEN);
@@ -1138,7 +1128,7 @@ describe('Cotroller mock', () => {
         await bc.sendMessage(internal({
           from: electorAddress,
           to: controller.address,
-          body: beginCell().storeUint(Op.elector.new_stake_error, 32).storeUint(1, 64).endCell(),
+          body: simpleBody(Op.elector.new_stake_error, 1),
           value: toNano('1')
         }));
         expect((await controller.getControllerData()).state).toEqual(ControllerState.REST);
@@ -1152,9 +1142,7 @@ describe('Cotroller mock', () => {
         await controllerSmc.receiveMessage(internal({
           from: notElector,
           to: controller.address,
-          body: beginCell().storeUint(0xFFFFFFFF, 32)
-                           .storeUint(Op.elector.new_stake, 32)
-                .endCell(),
+          body: bouncedBody(Op.elector.new_stake, 1),
           value: toNano('1'),
           bounced: true
         }), {now: bc.now ?? Math.floor(Date.now() / 1000)});
@@ -1167,9 +1155,7 @@ describe('Cotroller mock', () => {
         await controllerSmc.receiveMessage(internal({
           from: electorAddress,
           to: controller.address,
-          body: beginCell().storeUint(0xFFFFFFFF, 32)
-                           .storeUint(Op.elector.new_stake, 32)
-                .endCell(),
+          body: bouncedBody(Op.elector.new_stake, 1),
           value: toNano('1'),
           bounced: true
         }), {now: bc.now ?? Math.floor(Date.now() / 1000)});
@@ -1183,12 +1169,8 @@ describe('Cotroller mock', () => {
       let recoverStakeOk: Cell;
       let recoverStakeError : Cell;
       beforeAll(() => {
-        recoverStakeOk = beginCell().storeUint(Op.elector.recover_stake_ok, 32)
-                                    .storeUint(1, 64)
-                         .endCell();
-        recoverStakeError = beginCell().storeUint(Op.elector.recover_stake_error, 32)
-                                       .storeUint(1, 64)
-                            .endCell();
+        recoverStakeOk = simpleBody(Op.elector.recover_stake_ok, 1);
+        recoverStakeError = simpleBody(Op.elector.recover_stake_error, 1);
       });
       it('At least 2 validators set changes and stake_held_for time is required to trigger recover stake', async () => {
         await loadSnapshot('staken');
@@ -1823,9 +1805,7 @@ describe('Cotroller mock', () => {
             from: electorAddress,
             to: controller.address,
             value: toNano('1'),
-            body: beginCell().storeUint(Op.elector.recover_stake_error, 32)
-                             .storeUint(1, 64)
-                  .endCell()
+            body: simpleBody(Op.elector.recover_stake_error, 1)
           }), {now: bc.now});
         };
         const cases = statesAvailable.filter(x => x !== 'sent_recover');
