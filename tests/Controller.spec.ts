@@ -1693,6 +1693,28 @@ describe('Cotroller mock', () => {
         await bc.loadFrom(InitialState);
         await testState(acceptedState, testCb);
       });
+      it('Stake recover error halts controller only in sent_recover state', async () =>{
+        const testCb = async () => {
+          const controllerSmc = await bc.getContract(controller.address);
+          return await controllerSmc.receiveMessage(internal({
+            from: electorAddress,
+            to: controller.address,
+            value: toNano('1'),
+            body: beginCell().storeUint(Op.elector.recover_stake_error, 32)
+                             .storeUint(1, 64)
+                  .endCell()
+          }), {now: bc.now});
+        };
+        const cases = statesAvailable.filter(x => x !== 'sent_recover');
+        await testStates(cases, stateNotChanged, testCb);
+        await loadSnapshot('sent_recover');
+        const dataBefore = await controller.getControllerData();
+        expect(dataBefore.state).toEqual(ControllerState.SENT_RECOVER_REQUEST);
+        expect(dataBefore.halted).toEqual(false);
+        await testCb();
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.state).toEqual(ControllerState.INSOLVENT);
+        expect(dataAfter.halted).toEqual(true);
       });
     });
     // TODO "insolvent can become solvent after via top up"
