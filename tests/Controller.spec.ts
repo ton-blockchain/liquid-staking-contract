@@ -1523,6 +1523,72 @@ describe('Cotroller mock', () => {
           value: Conf.stakeRecoverFine - fwdFees.fees - fwdFees.remaining
         });
       });
+      it('Not governor should not be able to return available funds', async () => {
+        await loadSnapshot('insolvent');
+        const notGovernor = differentAddress(deployer.address);
+        let res = await controller.sendReturnAvailableFunds(bc.sender(notGovernor));
+        expect(res.transactions).toHaveTransaction({
+          from: notGovernor,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.wrong_sender
+        });
+
+        res = await controller.sendReturnAvailableFunds(deployer.getSender());
+        expect(res.transactions).not.toHaveTransaction({
+          from: deployer.address,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.wrong_sender
+        });
+      });
+      it('Return available funds should return max funds if < borrowed_amount available', async () => {
+        await loadSnapshot('insolvent');
+        const dataBefore    = await controller.getControllerData();
+        const controllerSmc = await bc.getContract(controller.address);
+        const msgValue = toNano('0.2');
+        const availableFunds = controllerSmc.balance + msgValue - Conf.minStorage - Conf.withdrawlFee;
+        expect(availableFunds).toBeLessThan(dataBefore.borrowedAmount);
+
+        const res = await controller.sendReturnAvailableFunds(deployer.getSender(), msgValue);
+        expect(res.transactions).toHaveTransaction({
+          from: controller.address,
+          to: poolAddress,
+          op: Op.pool.loan_repayment,
+          value: availableFunds
+        });
+
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.borrowedAmount).toEqual(dataBefore.borrowedAmount - availableFunds);
+        expect(dataAfter.borrowingTime).toEqual(dataBefore.borrowingTime);
+        expect(dataAfter.state).toEqual(dataBefore.state);
+      });
+
+      it('Return available funds should return at most borrowed amount', async () => {
+        await loadSnapshot('insolvent');
+
+        let   msgValue      = toNano('0.2');
+        const dataBefore    = await controller.getControllerData();
+        const controllerSmc = await bc.getContract(controller.address);
+        const availableFunds = controllerSmc.balance + msgValue  - Conf.minStorage - Conf.withdrawlFee;
+        if(availableFunds < dataBefore.borrowedAmount) {
+          // Send the reminder among with message
+          msgValue += dataBefore.borrowedAmount - availableFunds;
+        }
+
+        const res = await controller.sendReturnAvailableFunds(deployer.getSender(), msgValue);
+        expect(res.transactions).toHaveTransaction({
+          from: controller.address,
+          to: poolAddress,
+          op: Op.pool.loan_repayment,
+          value: dataBefore.borrowedAmount
+        });
+
+        const dataAfter  = await controller.getControllerData();
+        expect(dataAfter.borrowedAmount).toEqual(0n);
+        expect(dataAfter.borrowingTime).toEqual(0)
+        expect(dataAfter.state).toEqual(ControllerState.REST);
+      });
     });
     describe('Hash update', () => {
 
@@ -1819,6 +1885,12 @@ describe('Cotroller mock', () => {
         expect(dataAfter.state).toEqual(ControllerState.INSOLVENT);
         expect(dataAfter.halted).toEqual(true);
       });
+      it('Return available funds is only possible in INSOLVENT state', async () => {
+        const testCb = async () => controller.sendReturnAvailableFunds(deployer.getSender());
+        await testStates(statesAvailable.filter(x => x !== 'insolvent'), wrongState, testCb);
+        await loadSnapshot('insolvent');
+        await testState(acceptedState, testCb);
+      })
     });
     // TODO "insolvent can become solvent after via top up"
     // TODO "after solvency another address can return_unused_stake"
