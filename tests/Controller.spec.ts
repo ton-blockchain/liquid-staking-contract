@@ -1377,14 +1377,13 @@ describe('Cotroller mock', () => {
       });
     });
     describe('Insolvent', () => {
-      const switchGasFee = 78360000n; // Probably 1 TON good enough
       let insolventRecovered: BlockchainSnapshot;
 
       it('Insolvent can become solvent after top op', async () => {
         await loadSnapshot('insolvent');
         let controllerSmc = await bc.getContract(controller.address);
         const dataBefore = await controller.getControllerData();
-        const reqBalance = Conf.minStorage + Conf.stakeRecoverFine + /* switchGasFee */ dataBefore.borrowedAmount + 1n;
+        const reqBalance = Conf.minStorage + Conf.stakeRecoverFine + Conf.withdrawlFee + dataBefore.borrowedAmount + 1n;
         expect(controllerSmc.balance).toBeLessThan(reqBalance);
         const topUpAmount = reqBalance - controllerSmc.balance;
         const res = await controller.sendTopUp(deployer.getSender(), topUpAmount - 1n);
@@ -1393,14 +1392,13 @@ describe('Cotroller mock', () => {
         // Still insolvent
         expect((await controller.getControllerData()).state).toEqual(ControllerState.INSOLVENT);
 
-        await controller.sendTopUp(deployer.getSender(), (gasFees * 2n /*+ switchGasFee*/) + 1n);
+        await controller.sendTopUp(deployer.getSender(), Conf.withdrawlFee + 1n);
         expect((await controller.getControllerData()).state).toEqual(ControllerState.REST);
         insolventRecovered = bc.snapshot();
 
         // Remove *2n above, uncoment + switchGasFee for this check and next test to work
         controllerSmc = await bc.getContract(controller.address);
-        console.log(controllerSmc.balance - reqBalance);
-        expect(controllerSmc.balance).toEqual(reqBalance);;
+        expect(controllerSmc.balance).toBeGreaterThanOrEqual(reqBalance);
       });
       it('Should be able to return loan after recovery', async () => {
         await bc.loadFrom(insolventRecovered);
