@@ -35,6 +35,8 @@ describe('Cotroller mock', () => {
     let getContractData:(smc:Address) => Promise<Cell>;
     let getControllerState:() => Promise<Cell>;
     let getCurTime:() => number;
+    let simpleBody:(op: number, query_id?: bigint | number) => Cell;
+    let bouncedBody:(op: number, query_id?: bigint | number) => Cell;
     let assertHashUpdate:(exp_hash: Buffer | bigint, exp_time:number, exp_count:number) => Promise<void>;
     let testApprove:(exp_code:number, via:Sender, approve:boolean) => Promise<SendMessageResult>;
     let testRequestLoan:(exp_code: number,
@@ -102,6 +104,18 @@ describe('Cotroller mock', () => {
         getControllerState = async () => await getContractData(controller.address);
 
         getCurTime = () => bc.now ?? Math.floor(Date.now() / 1000);
+        simpleBody = (op: number, query_id:bigint | number = 0) => {
+          return beginCell().storeUint(op, 32)
+                            .storeUint(query_id, 64)
+                 .endCell();
+        };
+
+        bouncedBody = (op: number, query_id: bigint | number = 0) => {
+          return beginCell().storeUint(0xFFFFFFFF, 32)
+                            .storeUint(op, 32)
+                            .storeUint(query_id, 64)
+                 .endCell()
+        }
 
         assertHashUpdate = async (exp_hash:Buffer | bigint, exp_time:number, exp_count:number) => {
           const curData  = await controller.getControllerData();
@@ -358,6 +372,106 @@ describe('Cotroller mock', () => {
 
         const dataAfter = await controller.getControllerData();
         expect(dataAfter.halted).toEqual(false);
+      });
+      it('Operational actions are not allowed when halted', async () => {
+        await loadSnapshot('halted');
+        const vSender = validator.wallet.getSender();
+        const haltedOps = [
+          async() => controller.sendRecoverStake(vSender),
+          async() => controller.sendUpdateHash(vSender),
+          async() => controller.sendValidatorWithdraw(vSender, toNano('1')),
+          async() => controller.sendNewStake(vSender,
+                                             toNano('100000'),
+                                             validator.keys.publicKey,
+                                             validator.keys.secretKey,
+                                             12345, // stake at
+                                            ),
+          async () => controller.sendRequestLoan(deployer.getSender(),
+                                                 toNano('100000'),
+                                                 toNano('200000'),
+                                                 Math.floor(65535 * 0.1)),
+          async () => controller.sendReturnUnusedLoan(deployer.getSender())
+        ];
+
+        const dSender = deployer.getSender();
+        const testMsg = internal({
+          from: controller.address,
+          to: randomAddress(),
+          value: toNano('0.1')
+        });
+        const notHaltedOps = [
+          async () => controller.sendTopUp(dSender),
+          async () => controller.sendCredit(bc.sender(poolAddress), toNano('12345')),
+          async () => controller.sendApprove(dSender, true),
+          async () => controller.sendApprove(dSender, false),
+          async () => controller.sendSetSudoer(dSender, randomAddress()),
+          async () => controller.sendSudoMsg(dSender, 64, testMsg),
+          async () => controller.sendReturnAvailableFunds(dSender),
+          async () => controller.sendUnhalt(dSender),
+          async () => bc.sendMessage(internal({
+            from: electorAddress,
+            to: controller.address,
+            body: simpleBody(Op.elector.recover_stake_ok),
+            value: toNano('1')
+          })),
+          async () => bc.sendMessage(internal({
+            from: electorAddress,
+            to: controller.address,
+            body: simpleBody(Op.elector.recover_stake_error),
+            value: toNano('100000')
+          })),
+          async () => bc.sendMessage(internal({
+            from: electorAddress,
+            to: controller.address,
+            body: simpleBody(Op.elector.new_stake_ok),
+            value: toNano('1')
+          })),
+          // Check bounces not impacted too
+          async () => bc.sendMessage(internal({
+            from: electorAddress,
+            to: controller.address,
+            body: bouncedBody(Op.elector.new_stake),
+            bounced: true,
+            value: toNano('100000')
+          })),
+          async () => bc.sendMessage(internal({
+            from: poolAddress,
+            to: controller.address,
+            body: bouncedBody(Op.pool.loan_repayment),
+            bounced: true,
+            value: toNano('100000')
+          })),
+          async () => bc.sendMessage(internal({
+            from: poolAddress,
+            to: controller.address,
+            body: bouncedBody(Op.pool.request_loan),
+            bounced: true,
+            value: toNano('100000')
+          }))
+
+        ];
+
+
+        const stateBefore = await getControllerState();
+
+        for (let cb of haltedOps) {
+          const res = await cb();
+          expect(res.transactions).toHaveTransaction({
+            on: controller.address,
+            success: false,
+            exitCode: Errors.halted
+          });
+          expect(await getControllerState()).toEqualCell(stateBefore);
+        }
+
+        for (let cb of notHaltedOps) {
+          const res = await cb();
+          expect(res.transactions).not.toHaveTransaction({
+            on: controller.address,
+            success: false,
+            exitCode: Errors.halted
+          });
+        }
       });
     });
     it('Controller credit should only be accepted from pool address', async() => {
@@ -666,10 +780,7 @@ describe('Cotroller mock', () => {
         const res = await bc.sendMessage(internal({
           from: differentAddress(poolAddress),
           to: controller.address,
-          body: beginCell().storeUint(0xFFFFFFFF, 32)
-                           .storeUint(Op.pool.request_loan, 32)
-                           .storeUint(0, 64)
-                .endCell(),
+          body: bouncedBody(Op.pool.request_loan, 0),
           value: toNano('1'),
           bounced: true
         }));
@@ -681,10 +792,7 @@ describe('Cotroller mock', () => {
         const res = await bc.sendMessage(internal({
           from: poolAddress,
           to: controller.address,
-          body: beginCell().storeUint(0xFFFFFFFF, 32)
-                           .storeUint(Op.pool.request_loan, 32)
-                           .storeUint(0, 64)
-                .endCell(),
+          body: bouncedBody(Op.pool.request_loan, 0),
           value: toNano('1'),
           bounced: true
         }));
@@ -835,9 +943,7 @@ describe('Cotroller mock', () => {
           to: controller.address,
           value: repay,
           bounced: true,
-          body: beginCell().storeUint(0xFFFFFFFF, 32)
-                           .storeUint(Op.pool.loan_repayment, 32)
-                           .storeUint(1, 64).endCell()
+          body: bouncedBody(Op.pool.loan_repayment, 1),
         }),{now: bc.now});
 
         expect(await getControllerState()).toEqualCell(stateBefore);
@@ -852,9 +958,7 @@ describe('Cotroller mock', () => {
           to: controller.address,
           value: repay,
           bounced: true,
-          body: beginCell().storeUint(0xFFFFFFFF, 32)
-                           .storeUint(Op.pool.loan_repayment, 32)
-                           .storeUint(1, 64).endCell()
+          body: bouncedBody(Op.pool.loan_repayment, 1),
         }),{now: bc.now});
 
         const dataAfter  = await controller.getControllerData();
@@ -992,7 +1096,7 @@ describe('Cotroller mock', () => {
         await bc.sendMessage(internal({
           from: differentAddress(electorAddress),
           to: controller.address,
-          body: beginCell().storeUint(Op.elector.new_stake_ok, 32).storeUint(1, 64).endCell(),
+          body: simpleBody(Op.elector.new_stake_ok, 1),
           value: toNano('1')
         }));
         expect(await getContractData(controller.address)).toEqualCell(stateBefore);
@@ -1003,7 +1107,7 @@ describe('Cotroller mock', () => {
           await bc.sendMessage(internal({
             from: differentAddress(electorAddress),
             to: controller.address,
-            body: beginCell().storeUint(Op.elector.new_stake_error, 32).storeUint(1, 64).endCell(),
+            body:simpleBody(Op.elector.new_stake_error, 1),
             value: toNano('1')
           }));
           expect(await getContractData(controller.address)).toEqualCell(stateBefore);
@@ -1013,7 +1117,7 @@ describe('Cotroller mock', () => {
         await bc.sendMessage(internal({
           from: electorAddress,
           to: controller.address,
-          body: beginCell().storeUint(Op.elector.new_stake_ok, 32).storeUint(1, 64).endCell(),
+          body: simpleBody(Op.elector.new_stake_ok, 1),
           value: toNano('1')
         }));
         expect((await controller.getControllerData()).state).toEqual(ControllerState.FUNDS_STAKEN);
@@ -1024,7 +1128,7 @@ describe('Cotroller mock', () => {
         await bc.sendMessage(internal({
           from: electorAddress,
           to: controller.address,
-          body: beginCell().storeUint(Op.elector.new_stake_error, 32).storeUint(1, 64).endCell(),
+          body: simpleBody(Op.elector.new_stake_error, 1),
           value: toNano('1')
         }));
         expect((await controller.getControllerData()).state).toEqual(ControllerState.REST);
@@ -1038,9 +1142,7 @@ describe('Cotroller mock', () => {
         await controllerSmc.receiveMessage(internal({
           from: notElector,
           to: controller.address,
-          body: beginCell().storeUint(0xFFFFFFFF, 32)
-                           .storeUint(Op.elector.new_stake, 32)
-                .endCell(),
+          body: bouncedBody(Op.elector.new_stake, 1),
           value: toNano('1'),
           bounced: true
         }), {now: bc.now ?? Math.floor(Date.now() / 1000)});
@@ -1053,9 +1155,7 @@ describe('Cotroller mock', () => {
         await controllerSmc.receiveMessage(internal({
           from: electorAddress,
           to: controller.address,
-          body: beginCell().storeUint(0xFFFFFFFF, 32)
-                           .storeUint(Op.elector.new_stake, 32)
-                .endCell(),
+          body: bouncedBody(Op.elector.new_stake, 1),
           value: toNano('1'),
           bounced: true
         }), {now: bc.now ?? Math.floor(Date.now() / 1000)});
@@ -1066,12 +1166,11 @@ describe('Cotroller mock', () => {
 
     describe('Recover stake', () => {
       let recoverReady: BlockchainSnapshot;
-      let expectRecoverMsg: BlockchainSnapshot;
       let recoverStakeOk: Cell;
+      let recoverStakeError : Cell;
       beforeAll(() => {
-        recoverStakeOk = beginCell().storeUint(Op.elector.recover_stake_ok, 32)
-                                    .storeUint(1, 64)
-                         .endCell();
+        recoverStakeOk = simpleBody(Op.elector.recover_stake_ok, 1);
+        recoverStakeError = simpleBody(Op.elector.recover_stake_error, 1);
       });
       it('At least 2 validators set changes and stake_held_for time is required to trigger recover stake', async () => {
         await loadSnapshot('staken');
@@ -1120,7 +1219,8 @@ describe('Cotroller mock', () => {
         });
         expect(res.transactions).toHaveTransaction(recTrans);
 
-        expectRecoverMsg = bc.snapshot();
+        expect((await controller.getControllerData()).state).toEqual(ControllerState.SENT_RECOVER_REQUEST);
+        snapStates.set('sent_recover', bc.snapshot());
         await bc.loadFrom(twoUpdates);
         randVset();
         await controller.sendUpdateHash(vSender);
@@ -1293,7 +1393,7 @@ describe('Cotroller mock', () => {
        });
       });
       it('Recover stake ok message should only be accepted from elector', async () => {
-        await bc.loadFrom(expectRecoverMsg);
+        await loadSnapshot('sent_recover');
 
         const notElector  = differentAddress(electorAddress);
         const borrowed    = (await controller.getControllerData()).borrowedAmount;
@@ -1307,7 +1407,7 @@ describe('Cotroller mock', () => {
         expect(await getControllerState()).toEqualCell(stateBefore);
       });
       it('Successfull stake recovery  should trigger debt repay', async () => {
-        await bc.loadFrom(expectRecoverMsg);
+        await loadSnapshot('sent_recover');
         const stateBefore = await controller.getControllerData();
         // We don't want to trigger loan repayment bounce, so have to use receiveMessage
         const controllerSmc = await bc.getContract(controller.address);
@@ -1334,7 +1434,7 @@ describe('Cotroller mock', () => {
         expect(dataAfter.borrowingTime).toEqual(0);
       });
       it('Controller should halt If not enough balance to repay debt on recovery', async () => {
-        await bc.loadFrom(expectRecoverMsg);
+        await loadSnapshot('sent_recover');
         const dataBefore = await controller.getControllerData();
         // We don't want to trigger loan repayment bounce, so have to use receiveMessage
         const controllerSmc = await bc.getContract(controller.address);
@@ -1356,6 +1456,138 @@ describe('Cotroller mock', () => {
         // Should not change borrow related info just in case
         expect(dataAfter.borrowedAmount).toEqual(dataBefore.borrowedAmount);
         expect(dataAfter.borrowingTime).toEqual(dataBefore.borrowingTime);
+      });
+      it('Controller should become insolvent and halted on elector recover_stake_error', async () => {
+        await loadSnapshot('sent_recover');
+        const controllerSmc = await bc.getContract(controller.address);
+        await controllerSmc.receiveMessage(internal({
+          from: electorAddress,
+          to: controller.address,
+          body: recoverStakeError,
+          value: toNano('1')
+        }),{now: bc.now});
+
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.state).toEqual(ControllerState.INSOLVENT);
+        expect(dataAfter.halted).toBe(true);
+      });
+    });
+    describe('Insolvent', () => {
+      let insolventRecovered: BlockchainSnapshot;
+
+      it('Insolvent can become solvent after top op', async () => {
+        await loadSnapshot('insolvent');
+        let controllerSmc = await bc.getContract(controller.address);
+        const dataBefore = await controller.getControllerData();
+        const reqBalance = Conf.minStorage + Conf.stakeRecoverFine + Conf.withdrawlFee + dataBefore.borrowedAmount + 1n;
+        expect(controllerSmc.balance).toBeLessThan(reqBalance);
+        const topUpAmount = reqBalance - controllerSmc.balance;
+        const res = await controller.sendTopUp(deployer.getSender(), topUpAmount - 1n);
+        const gasFees = computedGeneric(res.transactions[1]).gasFees;
+        controllerSmc = await bc.getContract(controller.address);
+        // Still insolvent
+        expect((await controller.getControllerData()).state).toEqual(ControllerState.INSOLVENT);
+
+        await controller.sendTopUp(deployer.getSender(), Conf.withdrawlFee + 1n);
+        expect((await controller.getControllerData()).state).toEqual(ControllerState.REST);
+        insolventRecovered = bc.snapshot();
+
+        // Remove *2n above, uncoment + switchGasFee for this check and next test to work
+        controllerSmc = await bc.getContract(controller.address);
+        expect(controllerSmc.balance).toBeGreaterThanOrEqual(reqBalance);
+      });
+      it('Should be able to return loan after recovery', async () => {
+        await bc.loadFrom(insolventRecovered);
+
+        const dataBefore = await controller.getControllerData();
+        const res = await controller.sendReturnUnusedLoan(deployer.getSender());
+        expect(res.transactions).toHaveTransaction({
+          from: controller.address,
+          to: poolAddress,
+          op: Op.pool.loan_repayment,
+          value: dataBefore.borrowedAmount
+        });
+        
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.state).toEqual(ControllerState.REST);
+        expect(dataAfter.borrowedAmount).toEqual(0n);
+        expect(dataAfter.borrowingTime).toEqual(0);
+
+        const trans = res.transactions[1];
+        expect(trans.outMessagesCount).toEqual(2);
+        const rewardMsg = trans.outMessages.get(1)!;
+        const fwdFees = computeMessageForwardFees(msgConfMc, rewardMsg);
+        expect(res.transactions).toHaveTransaction({
+          from: controller.address,
+          to: deployer.address,
+          value: Conf.stakeRecoverFine - fwdFees.fees - fwdFees.remaining
+        });
+      });
+      it('Not governor should not be able to return available funds', async () => {
+        await loadSnapshot('insolvent');
+        const notGovernor = differentAddress(deployer.address);
+        let res = await controller.sendReturnAvailableFunds(bc.sender(notGovernor));
+        expect(res.transactions).toHaveTransaction({
+          from: notGovernor,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.wrong_sender
+        });
+
+        res = await controller.sendReturnAvailableFunds(deployer.getSender());
+        expect(res.transactions).not.toHaveTransaction({
+          from: deployer.address,
+          to: controller.address,
+          success: false,
+          exitCode: Errors.wrong_sender
+        });
+      });
+      it('Return available funds should return max funds if < borrowed_amount available', async () => {
+        await loadSnapshot('insolvent');
+        const dataBefore    = await controller.getControllerData();
+        const controllerSmc = await bc.getContract(controller.address);
+        const msgValue = toNano('0.2');
+        const availableFunds = controllerSmc.balance + msgValue - Conf.minStorage - Conf.withdrawlFee;
+        expect(availableFunds).toBeLessThan(dataBefore.borrowedAmount);
+
+        const res = await controller.sendReturnAvailableFunds(deployer.getSender(), msgValue);
+        expect(res.transactions).toHaveTransaction({
+          from: controller.address,
+          to: poolAddress,
+          op: Op.pool.loan_repayment,
+          value: availableFunds
+        });
+
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.borrowedAmount).toEqual(dataBefore.borrowedAmount - availableFunds);
+        expect(dataAfter.borrowingTime).toEqual(dataBefore.borrowingTime);
+        expect(dataAfter.state).toEqual(dataBefore.state);
+      });
+
+      it('Return available funds should return at most borrowed amount', async () => {
+        await loadSnapshot('insolvent');
+
+        let   msgValue      = toNano('0.2');
+        const dataBefore    = await controller.getControllerData();
+        const controllerSmc = await bc.getContract(controller.address);
+        const availableFunds = controllerSmc.balance + msgValue  - Conf.minStorage - Conf.withdrawlFee;
+        if(availableFunds < dataBefore.borrowedAmount) {
+          // Send the reminder among with message
+          msgValue += dataBefore.borrowedAmount - availableFunds;
+        }
+
+        const res = await controller.sendReturnAvailableFunds(deployer.getSender(), msgValue);
+        expect(res.transactions).toHaveTransaction({
+          from: controller.address,
+          to: poolAddress,
+          op: Op.pool.loan_repayment,
+          value: dataBefore.borrowedAmount
+        });
+
+        const dataAfter  = await controller.getControllerData();
+        expect(dataAfter.borrowedAmount).toEqual(0n);
+        expect(dataAfter.borrowingTime).toEqual(0)
+        expect(dataAfter.state).toEqual(ControllerState.REST);
       });
     });
     describe('Hash update', () => {
@@ -1542,21 +1774,28 @@ describe('Cotroller mock', () => {
     });
     // Goes last to have all states available
     describe('State checks', () => {
-      type testCb = () => Promise<SendMessageResult>;
-      let testStates: (states: (BlockchainSnapshot | string) [] , wrong: boolean, cb: testCb) => Promise<void>;
-      let testState: (wrong_state: boolean, cb: testCb) => Promise<void>;
+      // Meh
+      type setupCb  = () => Promise<unknown>;
+      type expCb    = (res: any, stateBefore: Cell) => Promise<void>;
+      const wrongStateTrans = {
+            success: false,
+            exitCode: Errors.wrong_state
+      };
+      let statesAvailable: (string | BlockchainSnapshot)[];
+      let testState : (expCb: expCb, setupCb: setupCb) => Promise<void>;
+      let testStates: (states: (BlockchainSnapshot | string) [] , expCb: expCb, cb: setupCb) => Promise<void>;
+      let wrongState: expCb;
+      let stateNotChanged: expCb;
+      let acceptedState: expCb;
+      // let testState: (wrong_state: boolean, cb: testCb) => Promise<void>;
       beforeAll(() => {
-        testState = async (wrong_state: boolean, cb: () => Promise<SendMessageResult>) => {
+        statesAvailable = [InitialState, 'stake_sent', 'staken', 'insolvent', 'sent_recover', 'borrowing_req'];
+
+        testState  = async (expCb: expCb, setupCb: setupCb) => {
           const stateBefore = await getControllerState();
-          const res = await cb();
-          if(wrong_state)
-            expect(res.transactions).toHaveTransaction({
-              success: false,
-              exitCode: Errors.wrong_state
-            });
-            expect(await getControllerState()).toEqualCell(stateBefore);
+          await expCb(await setupCb(), stateBefore);
         };
-        testStates = async (states: (BlockchainSnapshot | string)[], wrong:boolean, cb: testCb) => {
+        testStates = async (states: (BlockchainSnapshot | string)[], expCb: expCb, setupCb: setupCb) => {
           for (let state of states) {
             if(typeof state == "string") {
               await loadSnapshot(state);
@@ -1564,29 +1803,39 @@ describe('Cotroller mock', () => {
             else {
               await bc.loadFrom(state);
             }
-            await testState(wrong, cb);
+            await testState(expCb, setupCb);
           }
-        }; 
+        };
+        wrongState = async (res: SendMessageResult, stateBefore: Cell) => {
+          expect(res.transactions).toHaveTransaction(wrongStateTrans);
+          expect(stateBefore).toEqualCell(await getControllerState());
+        };
+        stateNotChanged = async (res: SendMessageResult, stateBefore: Cell) => {
+          expect(stateBefore).toEqualCell(await getControllerState());
+        };
+        acceptedState = async (res: SendMessageResult, stateBefore: Cell) => {
+          expect(res.transactions).not.toHaveTransaction(wrongStateTrans);
+        };
       });
       it('Update validator hash only allowed in "staken" state', async () => {
         const vSender = validator.wallet.getSender();
         const testCb = async () => await controller.sendUpdateHash(vSender);
-        await testStates([InitialState, 'stake_sent', 'insolvent', 'borrowing_req'], true, testCb);
+        await testStates(statesAvailable.filter(x => x !== 'staken'), wrongState, testCb);
         await loadSnapshot('staken');
-        await testState(false, testCb);
+        await testState(acceptedState, testCb);
       });
       it('Stake recovery only allowed in "staken" state', async () => {
         const vSender = validator.wallet.getSender();
         const testCb  = async () => await controller.sendRecoverStake(vSender);
-        await testStates([InitialState, 'stake_sent', 'insolvent', 'borrowing_req'], true, testCb);
+        await testStates(statesAvailable.filter(x => x !== 'staken'), wrongState, testCb);
         await loadSnapshot('staken');
-        await testState(false, testCb);
+        await testState(acceptedState, testCb);
       });
       it('Withdraw validator is only allowed in REST state', async () => {
         const testCb = async () => await controller.sendValidatorWithdraw(validator.wallet.getSender(), 1n);
-        await testStates(['borrowing_req', 'stake_sent', 'staken', 'insolvent'], true, testCb);
+        await testStates(statesAvailable.filter(x => x !== InitialState), wrongState, testCb);
         await bc.loadFrom(InitialState);
-        await testState(false, testCb);
+        await testState(acceptedState, testCb);
       });
       it('New stake is only allowed in REST state', async () => {
         const testCb = async () => {
@@ -1596,25 +1845,52 @@ describe('Cotroller mock', () => {
                                                validator.keys.secretKey,
                                                12345);
         };
-        await testStates(['borrowing_req', 'stake_sent', 'staken', 'insolvent'], true, testCb);
+        await testStates(statesAvailable.filter(x => x !== InitialState), wrongState, testCb);
         await bc.loadFrom(InitialState);
-        await testState(false, testCb);
+        await testState(acceptedState, testCb);
       });
       it('Request loan is only allowed in REST state', async () => {
         const minLoan = toNano('100000');
         const maxLoan = toNano('200000');
         const interest = Math.floor(0.1 * 65535);
         const testCb = async () => controller.sendRequestLoan(validator.wallet.getSender(), minLoan, maxLoan, interest);
-        await testStates(['borrowing_req', 'stake_sent', 'staken', 'insolvent'], true, testCb);
+        await testStates(statesAvailable.filter(x => x !== InitialState), wrongState, testCb);
         await bc.loadFrom(InitialState);
-        await testState(false, testCb);
+        await testState(acceptedState, testCb);
       });
       it('Return unused loan is only allowed in REST state', async () => {
         const testCb = async () => controller.sendReturnUnusedLoan(validator.wallet.getSender());
-        await testStates(['borrowing_req', 'stake_sent', 'staken', 'insolvent'], true, testCb);
+        await testStates(statesAvailable.filter(x => x !== InitialState), wrongState, testCb);
         await bc.loadFrom(InitialState);
-        await testState(false, testCb);
+        await testState(acceptedState, testCb);
       });
+      it('Stake recover error halts controller only in sent_recover state', async () =>{
+        const testCb = async () => {
+          const controllerSmc = await bc.getContract(controller.address);
+          return await controllerSmc.receiveMessage(internal({
+            from: electorAddress,
+            to: controller.address,
+            value: toNano('1'),
+            body: simpleBody(Op.elector.recover_stake_error, 1)
+          }), {now: bc.now});
+        };
+        const cases = statesAvailable.filter(x => x !== 'sent_recover');
+        await testStates(cases, stateNotChanged, testCb);
+        await loadSnapshot('sent_recover');
+        const dataBefore = await controller.getControllerData();
+        expect(dataBefore.state).toEqual(ControllerState.SENT_RECOVER_REQUEST);
+        expect(dataBefore.halted).toEqual(false);
+        await testCb();
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.state).toEqual(ControllerState.INSOLVENT);
+        expect(dataAfter.halted).toEqual(true);
+      });
+      it('Return available funds is only possible in INSOLVENT state', async () => {
+        const testCb = async () => controller.sendReturnAvailableFunds(deployer.getSender());
+        await testStates(statesAvailable.filter(x => x !== 'insolvent'), wrongState, testCb);
+        await loadSnapshot('insolvent');
+        await testState(acceptedState, testCb);
+      })
     });
     // TODO "insolvent can become solvent after via top up"
     // TODO "after solvency another address can return_unused_stake"
