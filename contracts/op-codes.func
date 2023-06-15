@@ -37,7 +37,7 @@ const int controller::send_request_loan = 0x452f7112;
 
 {- ======== Validator Pool OPCODES ========== -}
 const int pool::request_loan = 0x7ccd46e9;
-const int pool::repay_loan = 0xdfdca27b;
+const int pool::loan_repayment = 0xdfdca27b;
 const int pool::deposit = 0x47d54391;
 const int pool::withdraw = 0x319b0cdc; ;;TODO
 const int pool::withdrawal = 0x31777cdc; ;;TODO

@@ -205,7 +205,7 @@ int current_round_index();
     } else {
         assert_not_halted!();
         update_round();
-        ;; it is ok, controller knew how to process repay_loan/request_loan bounces
+        ;; it is ok, controller knew how to process loan_repayment/request_loan bounces
         {- ========== Pool operations ========== -}
         if (op == pool::request_loan) {
 
@@ -260,7 +260,7 @@ int current_round_index();
                                 .store_uint(max_interest, 16),
                         msgflag::NON_BOUNCEABLE, sendmode::PAY_FEES_SEPARETELY);
 
-        } elseif (op == pool::repay_loan) {
+        } elseif (op == pool::loan_repayment) {
             ;; we expect loans from previous round only
             ;; note, close_loan finalize round if last loan is closed
             (int closed, int last_one) = prev_round_borrowers~close_loan(sender_address, msg_value);

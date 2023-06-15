@@ -861,7 +861,7 @@ describe('Cotroller mock', () => {
         expect(res.transactions).toHaveTransaction({
           from: controller.address,
           to: poolAddress,
-          op: Op.pool.repay_loan,
+          op: Op.pool.loan_repayment,
           value: dataBefore.borrowedAmount /*- fwdFees.fees - fwdFees.remaining*/
         });
         expect(res.transactions).toHaveTransaction({
@@ -894,7 +894,7 @@ describe('Cotroller mock', () => {
         expect(res.transactions).toHaveTransaction({
           from: controller.address,
           to: poolAddress,
-          op: Op.pool.repay_loan,
+          op: Op.pool.loan_repayment,
           value: dataBefore.borrowedAmount
         });
 
@@ -920,7 +920,7 @@ describe('Cotroller mock', () => {
         expect(res.transactions).toHaveTransaction({
           from: controller.address,
           to: poolAddress,
-          op: Op.pool.repay_loan,
+          op: Op.pool.loan_repayment,
           value: dataBefore.borrowedAmount
         });
         // No reward message
@@ -1425,7 +1425,7 @@ describe('Cotroller mock', () => {
 
         expect(repayMsg.info.dest).toEqualAddress(poolAddress);
         expect(repayMsg.info.value.coins).toEqual(stateBefore.borrowedAmount);
-        expect(repayMsg.body.beginParse().preloadUint(32)).toEqual(Op.pool.repay_loan);
+        expect(repayMsg.body.beginParse().preloadUint(32)).toEqual(Op.pool.loan_repayment);
 
         // Should revert to rest state
         const dataAfter = await controller.getControllerData();

@@ -56,8 +56,6 @@ describe('Controller & Pool', () => {
     let poolConfig: PoolConfig;
     let controllerConfig: ControllerConfig;
 
-    jest.setTimeout(60000);
-
     const readState = async (addr: Address) => {
         const cSmc = await blockchain.getContract(addr);
         let state = -1; // no account
