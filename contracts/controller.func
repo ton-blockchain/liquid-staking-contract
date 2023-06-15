@@ -169,7 +169,9 @@ int check_new_stake_msg(slice cs);
 
             if (op == controller::top_up) {
                 if(state == state::INSOLVENT) {
-                    if (balance > MIN_TONS_FOR_STORAGE + STAKE_RECOVER_FINE + borrowed_amount) {
+                    ;; we add WITHDRAWAL_FEE below to ensure there is enough money to process
+                    ;; and send bounty in return_unused_loan
+                    if (balance > MIN_TONS_FOR_STORAGE + STAKE_RECOVER_FINE + borrowed_amount + WITHDRAWAL_FEE) {
                         state = state::REST;
                     }
                 }
