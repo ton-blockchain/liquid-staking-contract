@@ -6,7 +6,10 @@ export const compile: CompilerConfig = {
     lang: 'func',
     preCompileHook: async () => {
         await compileFunc('DAOJettonWallet');
+        await compileFunc('VotingResults');
     },
-    targets: ['contracts/auto/dao-jetton-wallet-code.func',
+    targets: ['contracts/auto/voting-results-code.func',
+              'contracts/auto/dao-jetton-wallet-code.func',
+              'contracts/jetton_dao/contracts/dao-decisions-filter.func',
               'contracts/jetton_dao/contracts/jetton-minter.func'],
 };

@@ -4,15 +4,10 @@ import path from 'path';
 
 export const compile: CompilerConfig = {
     lang: 'func',
-    preCompileHook: async () => {
-        await compileFunc('DAOVoteKeeper');
-    },
-    targets: ['contracts/auto/dao-vote-keeper-code.func',
-              'contracts/jetton_dao/contracts/jetton-wallet.func'],
-
+    targets: ['contracts/jetton_dao/contracts/voting-results.func'],
     postCompileHook: async (code) => {
         const auto = path.join(__dirname, '..', 'contracts', 'auto');
         await mkdir(auto, { recursive: true });
-        await writeFile(path.join(auto, 'dao-jetton-wallet-code.func'), `cell jetton_wallet_code() asm "B{${code.toBoc().toString('hex')}} B>boc PUSHREF";`);
+        await writeFile(path.join(auto, 'voting-results-code.func'), `cell voting_results_code() asm "B{${code.toBoc().toString('hex')}} B>boc PUSHREF";`);
     }
 };
