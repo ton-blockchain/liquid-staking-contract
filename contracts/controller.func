@@ -535,3 +535,12 @@ int get_max_punishment(int stake) method_id {
     return (MIN_TONS_FOR_STORAGE + overdue_fine + elector_fine + interest_payment,
             validator_amount);
 }
+
+
+(int, int) request_window_time() method_id { ;; TODO: put it in recv_internal in request_loan operation
+    ;; get time window (since, until) when controller may request loan
+    (int elections_start_before, _, int elections_end_before) = get_validator_config();
+    (int utime_since, int utime_until, _) = get_current_validator_set();
+    return (utime_until - elections_start_before,
+            utime_until - elections_end_before);
+}

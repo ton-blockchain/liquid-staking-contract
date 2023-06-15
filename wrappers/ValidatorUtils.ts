@@ -59,6 +59,23 @@ export const ValidatorDescriptionValue:DictionaryValue<ValidatorDescription> = {
 	}
 };
 
+export const genRandomValidators = (count:number) => {
+    const validators:ValidatorDescription[] = [];
+
+    for(let i = 0; i < count; i++) {
+        const pk = Buffer.alloc(32);
+        for(let j = 0; j < 32; j++) {
+            pk[j] = Math.floor(Math.random() * 256);
+        }
+        validators.push({
+            type: "simple",
+            public_key: pk,
+            weight: BigInt(1)
+        });
+    }
+    return validators;
+}
+
 type ValidatorSetData = {
 	total:number,
 	main:number,

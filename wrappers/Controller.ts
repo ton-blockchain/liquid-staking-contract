@@ -1,11 +1,10 @@
 import { Address, toNano, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, Message, storeMessage } from 'ton-core';
 import { buff2bigint } from '../utils';
 import { signData } from "./ValidatorUtils";
-import { Conf, ControllerState, Op } from "../PoolConstants";
+import { Conf, Op } from "../PoolConstants";
 
 
 export type ControllerConfig = {
-
   controllerId: number;
   validator: Address;
   pool: Address;
@@ -126,11 +125,13 @@ export class Controller implements Contract {
             body: Controller.requestLoanMessage(min_loan, max_loan, max_interest, query_id)
         });
     }
-    async sendApprove(provider: ContractProvider, via: Sender, approve: boolean = true) {
+
+    async sendApprove(provider: ContractProvider, via: Sender, approve: boolean = true, amount: bigint = toNano('0.1')) {
         // dissaprove support
         const op = approve ? Op.controller.approve : Op.controller.disapprove;
+
         await provider.internal(via, {
-            value: toNano('0.1'),
+            value: amount,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
                      .storeUint(op, 32) // op
@@ -156,19 +157,6 @@ export class Controller implements Contract {
         });
     }
 
-    async sendLoanRequest(provider: ContractProvider, via: Sender, minLoan: bigint, maxLoan: bigint, maxInterest: bigint) {
-        await provider.internal(via, {
-            value: toNano('0.5'),
-            sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: beginCell()
-                     .storeUint(Op.controller.send_request_loan, 32) // op
-                     .storeUint(1, 64) // query id
-                     .storeCoins(minLoan)
-                     .storeCoins(maxLoan)
-                     .storeUint(maxInterest, 16)
-                  .endCell(),
-        });
-    }
     async sendReturnUnusedLoan(provider: ContractProvider, via: Sender, value:bigint = toNano('0.5')) {
         await provider.internal(via, {
             value,
@@ -313,8 +301,6 @@ export class Controller implements Contract {
         });
     }
 
-
-
     // Get methods
     async getControllerData(provider: ContractProvider) {
         const {stack} = await provider.get('get_validator_controller_data', []);
@@ -352,5 +338,13 @@ export class Controller implements Contract {
             {type: "int", value: BigInt(interest)}
         ]);
         return stack.readBigNumber();
+    }
+  
+    async getRequestWindow(provider: ContractProvider) {
+        const { stack } = await provider.get("request_window_time", [])
+        return {
+            since: stack.readNumber(),
+            until: stack.readNumber()
+        };
     }
 }

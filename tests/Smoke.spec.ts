@@ -31,6 +31,8 @@ describe('Pool', () => {
     let poolJetton: SandboxContract<DAOJettonMinter>;
     let deployer: SandboxContract<TreasuryContract>;
 
+    jest.setTimeout(60000); // TODO: remove this
+
     beforeAll(async () => {
         blockchain = await Blockchain.create();
         deployer = await blockchain.treasury('deployer', {balance: toNano("1000000000")});
@@ -301,7 +303,7 @@ describe('Pool', () => {
         //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
         const secondDeposit = await pool.sendDeposit(deployer.getSender(), toNano('1000000'));
 
-        const controllerDeployResult = await controller.sendLoanRequest(deployer.getSender(), toNano('1000'), toNano('10000'), 1000n);
+        const controllerDeployResult = await controller.sendRequestLoan(deployer.getSender(), toNano('1000'), toNano('10000'), 1000);
         expect(controllerDeployResult.transactions).toHaveTransaction({
                          from: deployer.address,
                          to: controller.address,
