@@ -1066,7 +1066,6 @@ describe('Cotroller mock', () => {
 
     describe('Recover stake', () => {
       let recoverReady: BlockchainSnapshot;
-      let expectRecoverMsg: BlockchainSnapshot;
       let recoverStakeOk: Cell;
       let recoverStakeError : Cell;
       beforeAll(() => {
@@ -1124,7 +1123,8 @@ describe('Cotroller mock', () => {
         });
         expect(res.transactions).toHaveTransaction(recTrans);
 
-        expectRecoverMsg = bc.snapshot();
+        expect((await controller.getControllerData()).state).toEqual(ControllerState.SENT_RECOVER_REQUEST);
+        snapStates.set('sent_recover', bc.snapshot());
         await bc.loadFrom(twoUpdates);
         randVset();
         await controller.sendUpdateHash(vSender);
@@ -1297,7 +1297,7 @@ describe('Cotroller mock', () => {
        });
       });
       it('Recover stake ok message should only be accepted from elector', async () => {
-        await bc.loadFrom(expectRecoverMsg);
+        await loadSnapshot('sent_recover');
 
         const notElector  = differentAddress(electorAddress);
         const borrowed    = (await controller.getControllerData()).borrowedAmount;
@@ -1311,7 +1311,7 @@ describe('Cotroller mock', () => {
         expect(await getControllerState()).toEqualCell(stateBefore);
       });
       it('Successfull stake recovery  should trigger debt repay', async () => {
-        await bc.loadFrom(expectRecoverMsg);
+        await loadSnapshot('sent_recover');
         const stateBefore = await controller.getControllerData();
         // We don't want to trigger loan repayment bounce, so have to use receiveMessage
         const controllerSmc = await bc.getContract(controller.address);
@@ -1338,7 +1338,7 @@ describe('Cotroller mock', () => {
         expect(dataAfter.borrowingTime).toEqual(0);
       });
       it('Controller should halt If not enough balance to repay debt on recovery', async () => {
-        await bc.loadFrom(expectRecoverMsg);
+        await loadSnapshot('sent_recover');
         const dataBefore = await controller.getControllerData();
         // We don't want to trigger loan repayment bounce, so have to use receiveMessage
         const controllerSmc = await bc.getContract(controller.address);
@@ -1362,7 +1362,7 @@ describe('Cotroller mock', () => {
         expect(dataAfter.borrowingTime).toEqual(dataBefore.borrowingTime);
       });
       it('Controller should become insolvent and halted on elector recover_stake_error', async () => {
-        await bc.loadFrom(expectRecoverMsg);
+        await loadSnapshot('sent_recover');
         const controllerSmc = await bc.getContract(controller.address);
         await controllerSmc.receiveMessage(internal({
           from: electorAddress,
