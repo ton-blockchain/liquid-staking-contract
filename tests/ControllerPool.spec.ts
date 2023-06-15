@@ -3,6 +3,9 @@ import { Cell, toNano, beginCell, Address } from 'ton-core';
 import { Pool, PoolConfig } from '../wrappers/Pool';
 import { Controller, ControllerConfig } from '../wrappers/Controller';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
+import {JettonWallet as PoolJettonWallet } from '../wrappers/JettonWallet';
+import {JettonWallet as DepositWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
+import {JettonWallet as WithdrawalWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
 import { setConsigliere } from '../wrappers/PayoutMinter.compile';
 import { getElectionsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
 import '@ton-community/test-utils';
@@ -52,8 +55,6 @@ describe('Controller & Pool', () => {
     let normalState: BlockchainSnapshot;
     let poolConfig: PoolConfig;
     let controllerConfig: ControllerConfig;
-
-    jest.setTimeout(60000);
 
     const readState = async (addr: Address) => {
         const cSmc = await blockchain.getContract(addr);

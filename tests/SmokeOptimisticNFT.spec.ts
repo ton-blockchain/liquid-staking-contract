@@ -3,7 +3,7 @@ import { Cell, toNano, Dictionary, beginCell } from 'ton-core';
 import { Pool } from '../wrappers/Pool';
 import { Controller } from '../wrappers/Controller';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
-import { JettonWallet as PoolJettonWallet } from '../contracts/jetton_dao/wrappers/JettonWallet';
+import { JettonWallet as PoolJettonWallet } from '../wrappers/JettonWallet';
 import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
 
@@ -139,7 +139,7 @@ describe('Pool', () => {
         let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
         const jettonAmount = await myPoolJettonWallet.getJettonBalance();
 
-        const burnResult = await myPoolJettonWallet.sendBurn(deployer.getSender(), toNano('1.0'), jettonAmount, deployer.address, beginCell().storeInt(0n, 1).storeInt(0n, 1).endCell());
+        const burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.0'), jettonAmount, deployer.address, false, false);
 
 
         expect(burnResult.transactions).toHaveTransaction({

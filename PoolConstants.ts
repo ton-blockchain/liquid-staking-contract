@@ -35,7 +35,7 @@ export abstract class Op {
     }
     static readonly pool = {
         request_loan   : 0x7ccd46e9,
-        repay_loan : 0xdfdca27b,
+        loan_repayment : 0xdfdca27b,
         deposit        : 0x47d54391,
         withdraw       : 0x319b0cdc, //TODO
         withdrawal     : 0x31777cdc, //TODO
@@ -46,6 +46,7 @@ export abstract class Op {
         set_roles  : 0x7a756db8, // TODO
         unhalt  : 0x7247e7a5,
         operation_fee : 0x93a, // TODO
+        return_available_funds: 0x67855098,
         set_deposit_settings : 0x2233ff55
     }
     static readonly sudo = {
@@ -97,6 +98,7 @@ export abstract class Errors {
 
  static readonly withdrawal_while_credited = 0xf800;
  static readonly incorrect_withdrawal_amount = 0xf801;
+ static readonly halted = 0x9285;
 
 
  static readonly newStake = {

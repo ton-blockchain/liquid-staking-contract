@@ -167,7 +167,16 @@ export class Controller implements Contract {
                   .endCell(),
         });
     }
-    
+    async sendReturnAvailableFunds(provider: ContractProvider, via: Sender, value:bigint = toNano('0.2')) {
+        await provider.internal(via, {
+            value,
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                    .storeUint(Op.governor.return_available_funds, 32)
+                    .storeUint(0, 64)
+                  .endCell()
+        });
+    }
     static validatorWithdrawMessage(amount: bigint, query_id: bigint | number = 0) {
         return beginCell().storeUint(Op.controller.withdraw_validator, 32)
                           .storeUint(query_id, 64)

@@ -108,7 +108,7 @@ int check_new_stake_msg(slice cs);
                     state = state::REST;
                 }
             } elseif (equal_slice_bits(sender_address, pool)) {
-              if(op == pool::repay_loan) {
+              if(op == pool::loan_repayment) {
                 borrowed_amount += msg_value;
                 borrowing_time = now();
               } elseif (op == pool::request_loan) {
@@ -135,7 +135,7 @@ int check_new_stake_msg(slice cs);
                 if(balance >= MIN_TONS_FOR_STORAGE + borrowed_amount) {
                   send_msg(pool,
                            borrowed_amount, ;; TODO add fee???
-                           begin_cell().store_body_header(pool::repay_loan, query_id).end_cell(),
+                           begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),
                            msgflag::BOUNCEABLE,
                            sendmode::PAY_FEES_SEPARETELY); ;; remaining inbound message amount, fee deducted from
                   borrowed_amount = 0;
@@ -169,7 +169,9 @@ int check_new_stake_msg(slice cs);
 
             if (op == controller::top_up) {
                 if(state == state::INSOLVENT) {
-                    if (balance > MIN_TONS_FOR_STORAGE + STAKE_RECOVER_FINE + borrowed_amount) {
+                    ;; we add WITHDRAWAL_FEE below to ensure there is enough money to process
+                    ;; and send bounty in return_unused_loan
+                    if (balance > MIN_TONS_FOR_STORAGE + STAKE_RECOVER_FINE + borrowed_amount + WITHDRAWAL_FEE) {
                         state = state::REST;
                     }
                 }
@@ -201,7 +203,7 @@ int check_new_stake_msg(slice cs);
                 available_funds = min( available_funds, borrowed_amount);
                 send_msg(pool,
                         available_funds,
-                        begin_cell().store_body_header(pool::repay_loan, query_id).end_cell(),
+                        begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),
                         msgflag::BOUNCEABLE,
                         sendmode::PAY_FEES_SEPARETELY); ;; remaining inbound message amount, fee deducted from
                 borrowed_amount -= available_funds;
@@ -389,7 +391,7 @@ int check_new_stake_msg(slice cs);
                     if(balance >= MIN_TONS_FOR_STORAGE + borrowed_amount) {
                       send_msg(pool,
                                borrowed_amount, ;; TODO add fee???
-                               begin_cell().store_body_header(pool::repay_loan, query_id).end_cell(),
+                               begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),
                                msgflag::BOUNCEABLE,
                                sendmode::PAY_FEES_SEPARETELY); ;; remaining inbound message amount, fee deducted from
                       borrowed_amount = 0;
