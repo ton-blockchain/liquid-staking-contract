@@ -1376,6 +1376,49 @@ describe('Cotroller mock', () => {
         expect(dataAfter.halted).toBe(true);
       });
     });
+    describe('Insolvent', () => {
+      const switchGasFee = 78360000n; // Probably 1 TON good enough
+      let insolventRecovered: BlockchainSnapshot;
+
+      it('Insolvent can become solvent after top op', async () => {
+        await loadSnapshot('insolvent');
+        let controllerSmc = await bc.getContract(controller.address);
+        const dataBefore = await controller.getControllerData();
+        const reqBalance = Conf.minStorage + Conf.stakeRecoverFine + /* switchGasFee */ dataBefore.borrowedAmount + 1n;
+        expect(controllerSmc.balance).toBeLessThan(reqBalance);
+        const topUpAmount = reqBalance - controllerSmc.balance;
+        const res = await controller.sendTopUp(deployer.getSender(), topUpAmount - 1n);
+        const gasFees = computedGeneric(res.transactions[1]).gasFees;
+        controllerSmc = await bc.getContract(controller.address);
+        // Still insolvent
+        expect((await controller.getControllerData()).state).toEqual(ControllerState.INSOLVENT);
+
+        await controller.sendTopUp(deployer.getSender(), (gasFees * 2n /*+ switchGasFee*/) + 1n);
+        expect((await controller.getControllerData()).state).toEqual(ControllerState.REST);
+        insolventRecovered = bc.snapshot();
+
+        // Remove *2n above, uncoment + switchGasFee for this check and next test to work
+        controllerSmc = await bc.getContract(controller.address);
+        expect(controllerSmc.balance).toEqual(reqBalance);;
+      });
+      it('Should be able to return loan after recovery', async () => {
+        await bc.loadFrom(insolventRecovered);
+
+        const dataBefore = await controller.getControllerData();
+        const res = await controller.sendReturnUnusedLoan(deployer.getSender());
+        expect(res.transactions).toHaveTransaction({
+          from: controller.address,
+          to: poolAddress,
+          op: Op.pool.loan_repayment,
+          value: dataBefore.borrowedAmount
+        });
+        
+        const dataAfter = await controller.getControllerData();
+        expect(dataAfter.state).toEqual(ControllerState.REST);
+        expect(dataAfter.borrowedAmount).toEqual(0n);
+        expect(dataAfter.borrowingTime).toEqual(0);
+      });
+    });
     describe('Hash update', () => {
 
       let threeSetState:BlockchainSnapshot;
