@@ -170,6 +170,8 @@ int current_round_index();
         } catch (exc_arg, exc_num) {
             request_to_mint_pool_jettons(from_address, jetton_amount, query_id, begin_cell(), true);
         }
+        
+    {- ========== Governance operations ========== -}
     } elseif (op == sudo::send_message) {
                 process_sudo_request(sender_address, in_msg_body);
     } elseif (op == sudo::upgrade) {
@@ -203,7 +205,7 @@ int current_round_index();
     } else {
         assert_not_halted!();
         update_round();
-        ;; it is ok, controller knew how to process loan_repayment/request_loan bounces
+        ;; it is ok, controller knew how to process repay_loan/request_loan bounces
         {- ========== Pool operations ========== -}
         if (op == pool::request_loan) {
 
@@ -258,7 +260,7 @@ int current_round_index();
                                 .store_uint(max_interest, 16),
                         msgflag::NON_BOUNCEABLE, sendmode::PAY_FEES_SEPARETELY);
 
-        } elseif (op == pool::loan_repayment) {
+        } elseif (op == pool::repay_loan) {
             ;; we expect loans from previous round only
             ;; note, close_loan finalize round if last loan is closed
             (int closed, int last_one) = prev_round_borrowers~close_loan(sender_address, msg_value);
@@ -457,9 +459,8 @@ int current_round_index();
       if((~ borrowers_dict.null?()) | (active_borrowers > 0)) {
         current_round_closed? = true;
         return ();
-      } else {
-        prev_round_borrowers~finalize_lending_round();
-      }
+      } 
+      prev_round_borrowers~finalize_lending_round();
 
       saved_validator_set_hash = current_hash;
       int round_index = current_round_index() + 1;
@@ -650,18 +651,25 @@ int current_round_index() {
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = current_round_borrowers;
     return round_id;
 }
+
+int get_round_index() method_id {
+    load_data();
+    return current_round_index();
+}
+
 slice get_current_round_deposit_payout() method_id {
     load_data();
     return deposit_payout;
 }
+
 slice get_current_round_withdrawal_payout() method_id {
     load_data();
     return withdrawal_payout;
 }
 
-(int, int, int, int, slice) get_finance_data() method_id {
+(int, int, int, int, slice, int) get_finance_data() method_id {
     load_data();
-    return (total_balance, supply, requested_for_deposit, requested_for_withdrawal, jetton_minter);
+    return (total_balance, supply, requested_for_deposit, requested_for_withdrawal, jetton_minter, interest_rate);
 }
 
 (slice) _get_controller_address(int controller_id, slice validator) inline {
@@ -699,4 +707,33 @@ slice get_current_round_withdrawal_payout() method_id {
     return (min_loan_per_validator, max_loan_per_validator,
             interest_rate, governance_fee,
             interest_manager);
+}
+
+cell get_borrowers_dict(int prev?) method_id {
+    load_data();
+    var round_borrowers = prev? ? prev_round_borrowers
+                            : current_round_borrowers;
+    var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = round_borrowers;
+    return borrowers_dict;
+}
+
+(int, int) get_loan(int controller_id, slice validator_address, int prev?) method_id {
+    load_data();
+    var round_borrowers = prev? ? prev_round_borrowers
+                            : current_round_borrowers;
+    var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = round_borrowers;
+    (slice controller_address, _) = build_controller_address(controller_id, validator_address);
+    (int wc, int addr_hash) = parse_std_addr(controller_address);
+    (slice loan_data, int found?) = borrowers_dict.udict_get?(ADDR_SIZE, addr_hash);
+    ifnot (found?) {
+        return (0, 0);
+    }
+    int borrowed_amount = loan_data~load_coins();
+    int accounted_interest = loan_data~load_coins();
+    return (borrowed_amount, accounted_interest);
+}
+
+(int, int) get_min_max_loan_per_validator() method_id {
+    load_data();
+    return (min_loan_per_validator, max_loan_per_validator);
 }

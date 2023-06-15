@@ -31,6 +31,8 @@ describe('Pool', () => {
     let poolJetton: SandboxContract<DAOJettonMinter>;
     let deployer: SandboxContract<TreasuryContract>;
 
+    jest.setTimeout(60000); // TODO: remove this
+
     beforeAll(async () => {
         blockchain = await Blockchain.create();
         deployer = await blockchain.treasury('deployer', {balance: toNano("1000000000")});

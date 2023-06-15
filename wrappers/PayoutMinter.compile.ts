@@ -9,7 +9,7 @@ import { Address } from 'ton-core';
 export const compile: CompilerConfig = {
     preCompileHook: async () => {
         await compileFunc('PayoutWallet');
-        const consigliere_address = path.join(__dirname, '..', 'contracts', 'awaited_minter', 'contracts', 'auto', 'consigliere_address.func');
+        const consigliere_address = path.join(__dirname, '..', 'contracts', 'auto', 'consigliere_address.func');
         if (!fs.existsSync(consigliere_address)) {
           throw new Error('Consigliere address not defined in contracts/auto/consigliere_address.func, use setConsigliere');
         }
