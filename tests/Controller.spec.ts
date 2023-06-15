@@ -1399,6 +1399,7 @@ describe('Cotroller mock', () => {
 
         // Remove *2n above, uncoment + switchGasFee for this check and next test to work
         controllerSmc = await bc.getContract(controller.address);
+        console.log(controllerSmc.balance - reqBalance);
         expect(controllerSmc.balance).toEqual(reqBalance);;
       });
       it('Should be able to return loan after recovery', async () => {
@@ -1417,6 +1418,16 @@ describe('Cotroller mock', () => {
         expect(dataAfter.state).toEqual(ControllerState.REST);
         expect(dataAfter.borrowedAmount).toEqual(0n);
         expect(dataAfter.borrowingTime).toEqual(0);
+
+        const trans = res.transactions[1];
+        expect(trans.outMessagesCount).toEqual(2);
+        const rewardMsg = trans.outMessages.get(1)!;
+        const fwdFees = computeMessageForwardFees(msgConfMc, rewardMsg);
+        expect(res.transactions).toHaveTransaction({
+          from: controller.address,
+          to: deployer.address,
+          value: Conf.stakeRecoverFine - fwdFees.fees - fwdFees.remaining
+        });
       });
     });
     describe('Hash update', () => {
