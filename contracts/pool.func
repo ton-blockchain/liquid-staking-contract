@@ -168,7 +168,7 @@ int current_round_index();
                 requested_for_withdrawal += jetton_amount;
             }
         } catch (exc_arg, exc_num) {
-            request_to_mint_pool_jettons(sender_address, jetton_amount, query_id, begin_cell(), true);
+            request_to_mint_pool_jettons(from_address, jetton_amount, query_id, begin_cell(), true);
         }
     } elseif (op == sudo::send_message) {
                 process_sudo_request(sender_address, in_msg_body);
