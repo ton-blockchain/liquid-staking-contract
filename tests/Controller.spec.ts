@@ -373,7 +373,7 @@ describe('Cotroller mock', () => {
         const dataAfter = await controller.getControllerData();
         expect(dataAfter.halted).toEqual(false);
       });
-      it('Critical actions are not allowed when halted', async () => {
+      it('Operational actions are not allowed when halted', async () => {
         await loadSnapshot('halted');
         const vSender = validator.wallet.getSender();
         const haltedOps = [
