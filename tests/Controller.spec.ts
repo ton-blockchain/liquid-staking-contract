@@ -35,6 +35,8 @@ describe('Cotroller mock', () => {
     let getContractData:(smc:Address) => Promise<Cell>;
     let getControllerState:() => Promise<Cell>;
     let getCurTime:() => number;
+    let simpleBody:(op: number, query_id?: bigint | number) => Cell;
+    let bouncedBody:(op: number, query_id?: bigint | number) => Cell;
     let assertHashUpdate:(exp_hash: Buffer | bigint, exp_time:number, exp_count:number) => Promise<void>;
     let testApprove:(exp_code:number, via:Sender, approve:boolean) => Promise<SendMessageResult>;
     let testRequestLoan:(exp_code: number,
@@ -102,6 +104,18 @@ describe('Cotroller mock', () => {
         getControllerState = async () => await getContractData(controller.address);
 
         getCurTime = () => bc.now ?? Math.floor(Date.now() / 1000);
+        simpleBody = (op: number, query_id:bigint | number = 0) => {
+          return beginCell().storeUint(op, 32)
+                            .storeUint(query_id, 64)
+                 .endCell();
+        };
+
+        bouncedBody = (op: number, query_id: bigint | number = 0) => {
+          return beginCell().storeUint(0xFFFFFFFF, 32)
+                            .storeUint(op, 32)
+                            .storeUint(query_id, 64)
+                 .endCell()
+        }
 
         assertHashUpdate = async (exp_hash:Buffer | bigint, exp_time:number, exp_count:number) => {
           const curData  = await controller.getControllerData();
@@ -358,6 +372,106 @@ describe('Cotroller mock', () => {
 
         const dataAfter = await controller.getControllerData();
         expect(dataAfter.halted).toEqual(false);
+      });
+      it('Critical actions are not allowed when halted', async () => {
+        await loadSnapshot('halted');
+        const vSender = validator.wallet.getSender();
+        const haltedOps = [
+          async() => controller.sendRecoverStake(vSender),
+          async() => controller.sendUpdateHash(vSender),
+          async() => controller.sendValidatorWithdraw(vSender, toNano('1')),
+          async() => controller.sendNewStake(vSender,
+                                             toNano('100000'),
+                                             validator.keys.publicKey,
+                                             validator.keys.secretKey,
+                                             12345, // stake at
+                                            ),
+          async () => controller.sendRequestLoan(deployer.getSender(),
+                                                 toNano('100000'),
+                                                 toNano('200000'),
+                                                 Math.floor(65535 * 0.1)),
+          async () => controller.sendReturnUnusedLoan(deployer.getSender())
+        ];
+
+        const dSender = deployer.getSender();
+        const testMsg = internal({
+          from: controller.address,
+          to: randomAddress(),
+          value: toNano('0.1')
+        });
+        const notHaltedOps = [
+          async () => controller.sendTopUp(dSender),
+          async () => controller.sendCredit(bc.sender(poolAddress), toNano('12345')),
+          async () => controller.sendApprove(dSender, true),
+          async () => controller.sendApprove(dSender, false),
+          async () => controller.sendSetSudoer(dSender, randomAddress()),
+          async () => controller.sendSudoMsg(dSender, 64, testMsg),
+          async () => controller.sendReturnAvailableFunds(dSender),
+          async () => controller.sendUnhalt(dSender),
+          async () => bc.sendMessage(internal({
+            from: electorAddress,
+            to: controller.address,
+            body: simpleBody(Op.elector.recover_stake_ok),
+            value: toNano('1')
+          })),
+          async () => bc.sendMessage(internal({
+            from: electorAddress,
+            to: controller.address,
+            body: simpleBody(Op.elector.recover_stake_error),
+            value: toNano('100000')
+          })),
+          async () => bc.sendMessage(internal({
+            from: electorAddress,
+            to: controller.address,
+            body: simpleBody(Op.elector.new_stake_ok),
+            value: toNano('1')
+          })),
+          // Check bounces not impacted too
+          async () => bc.sendMessage(internal({
+            from: electorAddress,
+            to: controller.address,
+            body: bouncedBody(Op.elector.new_stake),
+            bounced: true,
+            value: toNano('100000')
+          })),
+          async () => bc.sendMessage(internal({
+            from: poolAddress,
+            to: controller.address,
+            body: bouncedBody(Op.pool.loan_repayment),
+            bounced: true,
+            value: toNano('100000')
+          })),
+          async () => bc.sendMessage(internal({
+            from: poolAddress,
+            to: controller.address,
+            body: bouncedBody(Op.pool.request_loan),
+            bounced: true,
+            value: toNano('100000')
+          }))
+
+        ];
+
+
+        const stateBefore = await getControllerState();
+
+        for (let cb of haltedOps) {
+          const res = await cb();
+          expect(res.transactions).toHaveTransaction({
+            on: controller.address,
+            success: false,
+            exitCode: Errors.halted
+          });
+          expect(await getControllerState()).toEqualCell(stateBefore);
+        }
+
+        for (let cb of notHaltedOps) {
+          const res = await cb();
+          expect(res.transactions).not.toHaveTransaction({
+            on: controller.address,
+            success: false,
+            exitCode: Errors.halted
+          });
+        }
       });
     });
     it('Controller credit should only be accepted from pool address', async() => {
