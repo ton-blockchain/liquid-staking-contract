@@ -1,6 +1,5 @@
-import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from 'ton-core';
+import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano, TupleBuilder, Dictionary, DictionaryValue } from 'ton-core';
 
-import { JettonMinter as DAOJettonMinter } from '../contracts/jetton_dao/wrappers/JettonMinter';
 import { JettonMinter as AwaitedJettonMinter} from '../contracts/awaited_minter/wrappers/JettonMinter';
 
 
@@ -22,24 +21,6 @@ export type PoolConfig = {
   payout_minter_code: Cell;
   vote_keeper_code: Cell;
 };
-
-export type BorrowerDiscription = {
-    borrowed: bigint,
-    accounted_interest: bigint
-}
-
-export const BorrowerDiscriptionValue: DictionaryValue<BorrowerDiscription> = {
-	serialize: (src, builder) => {
-        builder.storeCoins(src.borrowed);
-        builder.storeCoins(src.accounted_interest);
-	},
-	parse: (src) => {
-        return {
-            borrowed: src.loadCoins(),
-            accounted_interest: src.loadCoins()
-        }
-	}
-}
 
 export function poolConfigToCell(config: PoolConfig): Cell {
     let emptyRoundData = beginCell()
@@ -97,6 +78,24 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeRef(roles)
               .storeRef(codes)
            .endCell();
+}
+
+export type BorrowerDiscription = {
+    borrowed: bigint,
+    accounted_interest: bigint
+}
+
+export const BorrowerDiscriptionValue: DictionaryValue<BorrowerDiscription> = {
+	serialize: (src, builder) => {
+        builder.storeCoins(src.borrowed);
+        builder.storeCoins(src.accounted_interest);
+	},
+	parse: (src) => {
+        return {
+            borrowed: src.loadCoins(),
+            accounted_interest: src.loadCoins()
+        }
+	}
 }
 
 export class Pool implements Contract {
@@ -171,12 +170,7 @@ export class Pool implements Contract {
     }
 
 
-
-
-
-
-
-
+    // Get methods
     async getDepositPayout(provider: ContractProvider) {
         let res = await provider.get('get_current_round_deposit_payout', []);
         let minter = res.stack.readAddress();

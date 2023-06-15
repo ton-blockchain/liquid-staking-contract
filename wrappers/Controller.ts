@@ -1,11 +1,10 @@
 import { Address, toNano, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, Message, storeMessage } from 'ton-core';
 import { buff2bigint } from '../utils';
 import { signData } from "./ValidatorUtils";
-import { Conf, ControllerState, Op } from "../PoolConstants";
+import { Conf, Op } from "../PoolConstants";
 
 
 export type ControllerConfig = {
-
   controllerId: number;
   validator: Address;
   pool: Address;
@@ -126,12 +125,13 @@ export class Controller implements Contract {
             body: Controller.requestLoanMessage(min_loan, max_loan, max_interest, query_id)
         });
     }
-    async sendApprove(provider: ContractProvider, via: Sender, approve: boolean = true) {
+
+    async sendApprove(provider: ContractProvider, via: Sender, approve: boolean = true, amount: bigint = toNano('0.1')) {
         // dissaprove support
         const op = approve ? Op.controller.approve : Op.controller.disapprove;
 
         await provider.internal(via, {
-            value: amount || toNano('0.1'),
+            value: amount,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
                      .storeUint(op, 32) // op
@@ -154,24 +154,6 @@ export class Controller implements Contract {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: Controller.updateHashMessage()
-        });
-    }
-
-    static loanRequestBody(minLoan: bigint, maxLoan: bigint, maxInterest: number | bigint) {
-        return beginCell()
-            .storeUint(0x452f7112, 32) // op = controller::send_request_loan
-            .storeUint(1, 64) // query id
-            .storeCoins(minLoan)
-            .storeCoins(maxLoan)
-            .storeUint(maxInterest, 16)
-            .endCell();
-    }
-
-    async sendLoanRequest(provider: ContractProvider, via: Sender, minLoan: bigint, maxLoan: bigint, maxInterest: number | bigint) {
-        await provider.internal(via, {
-            value: toNano('0.5'),
-            sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: Controller.loanRequestBody(minLoan, maxLoan, maxInterest),
         });
     }
 
@@ -315,6 +297,7 @@ export class Controller implements Contract {
         const {stack} = await provider.get('get_validator_controller_data', []);
         return {
             state: stack.readNumber(),
+            halted: stack.readBoolean(),
             approved: stack.readBoolean(),
             stakeSent: stack.readBigNumber(),
             stakeAt: stack.readNumber(),
