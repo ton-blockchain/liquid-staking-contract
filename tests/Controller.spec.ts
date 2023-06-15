@@ -1603,21 +1603,28 @@ describe('Cotroller mock', () => {
     });
     // Goes last to have all states available
     describe('State checks', () => {
-      type testCb = () => Promise<SendMessageResult>;
-      let testStates: (states: (BlockchainSnapshot | string) [] , wrong: boolean, cb: testCb) => Promise<void>;
-      let testState: (wrong_state: boolean, cb: testCb) => Promise<void>;
+      // Meh
+      type setupCb  = () => Promise<unknown>;
+      type expCb    = (res: any, stateBefore: Cell) => Promise<void>;
+      const wrongStateTrans = {
+            success: false,
+            exitCode: Errors.wrong_state
+      };
+      let statesAvailable: (string | BlockchainSnapshot)[];
+      let testState : (expCb: expCb, setupCb: setupCb) => Promise<void>;
+      let testStates: (states: (BlockchainSnapshot | string) [] , expCb: expCb, cb: setupCb) => Promise<void>;
+      let wrongState: expCb;
+      let stateNotChanged: expCb;
+      let acceptedState: expCb;
+      // let testState: (wrong_state: boolean, cb: testCb) => Promise<void>;
       beforeAll(() => {
-        testState = async (wrong_state: boolean, cb: () => Promise<SendMessageResult>) => {
+        statesAvailable = [InitialState, 'stake_sent', 'staken', 'insolvent', 'sent_recover', 'borrowing_req'];
+
+        testState  = async (expCb: expCb, setupCb: setupCb) => {
           const stateBefore = await getControllerState();
-          const res = await cb();
-          if(wrong_state)
-            expect(res.transactions).toHaveTransaction({
-              success: false,
-              exitCode: Errors.wrong_state
-            });
-            expect(await getControllerState()).toEqualCell(stateBefore);
+          await expCb(await setupCb(), stateBefore);
         };
-        testStates = async (states: (BlockchainSnapshot | string)[], wrong:boolean, cb: testCb) => {
+        testStates = async (states: (BlockchainSnapshot | string)[], expCb: expCb, setupCb: setupCb) => {
           for (let state of states) {
             if(typeof state == "string") {
               await loadSnapshot(state);
@@ -1625,29 +1632,39 @@ describe('Cotroller mock', () => {
             else {
               await bc.loadFrom(state);
             }
-            await testState(wrong, cb);
+            await testState(expCb, setupCb);
           }
-        }; 
+        };
+        wrongState = async (res: SendMessageResult, stateBefore: Cell) => {
+          expect(res.transactions).toHaveTransaction(wrongStateTrans);
+          expect(stateBefore).toEqualCell(await getControllerState());
+        };
+        stateNotChanged = async (res: SendMessageResult, stateBefore: Cell) => {
+          expect(stateBefore).toEqualCell(await getControllerState());
+        };
+        acceptedState = async (res: SendMessageResult, stateBefore: Cell) => {
+          expect(res.transactions).not.toHaveTransaction(wrongStateTrans);
+        };
       });
       it('Update validator hash only allowed in "staken" state', async () => {
         const vSender = validator.wallet.getSender();
         const testCb = async () => await controller.sendUpdateHash(vSender);
-        await testStates([InitialState, 'stake_sent', 'insolvent', 'borrowing_req'], true, testCb);
+        await testStates(statesAvailable.filter(x => x !== 'staken'), wrongState, testCb);
         await loadSnapshot('staken');
-        await testState(false, testCb);
+        await testState(acceptedState, testCb);
       });
       it('Stake recovery only allowed in "staken" state', async () => {
         const vSender = validator.wallet.getSender();
         const testCb  = async () => await controller.sendRecoverStake(vSender);
-        await testStates([InitialState, 'stake_sent', 'insolvent', 'borrowing_req'], true, testCb);
+        await testStates(statesAvailable.filter(x => x !== 'staken'), wrongState, testCb);
         await loadSnapshot('staken');
-        await testState(false, testCb);
+        await testState(acceptedState, testCb);
       });
       it('Withdraw validator is only allowed in REST state', async () => {
         const testCb = async () => await controller.sendValidatorWithdraw(validator.wallet.getSender(), 1n);
-        await testStates(['borrowing_req', 'stake_sent', 'staken', 'insolvent'], true, testCb);
+        await testStates(statesAvailable.filter(x => x !== InitialState), wrongState, testCb);
         await bc.loadFrom(InitialState);
-        await testState(false, testCb);
+        await testState(acceptedState, testCb);
       });
       it('New stake is only allowed in REST state', async () => {
         const testCb = async () => {
@@ -1657,24 +1674,25 @@ describe('Cotroller mock', () => {
                                                validator.keys.secretKey,
                                                12345);
         };
-        await testStates(['borrowing_req', 'stake_sent', 'staken', 'insolvent'], true, testCb);
+        await testStates(statesAvailable.filter(x => x !== InitialState), wrongState, testCb);
         await bc.loadFrom(InitialState);
-        await testState(false, testCb);
+        await testState(acceptedState, testCb);
       });
       it('Request loan is only allowed in REST state', async () => {
         const minLoan = toNano('100000');
         const maxLoan = toNano('200000');
         const interest = Math.floor(0.1 * 65535);
         const testCb = async () => controller.sendRequestLoan(validator.wallet.getSender(), minLoan, maxLoan, interest);
-        await testStates(['borrowing_req', 'stake_sent', 'staken', 'insolvent'], true, testCb);
+        await testStates(statesAvailable.filter(x => x !== InitialState), wrongState, testCb);
         await bc.loadFrom(InitialState);
-        await testState(false, testCb);
+        await testState(acceptedState, testCb);
       });
       it('Return unused loan is only allowed in REST state', async () => {
         const testCb = async () => controller.sendReturnUnusedLoan(validator.wallet.getSender());
-        await testStates(['borrowing_req', 'stake_sent', 'staken', 'insolvent'], true, testCb);
+        await testStates(statesAvailable.filter(x => x !== InitialState), wrongState, testCb);
         await bc.loadFrom(InitialState);
-        await testState(false, testCb);
+        await testState(acceptedState, testCb);
+      });
       });
     });
     // TODO "insolvent can become solvent after via top up"
