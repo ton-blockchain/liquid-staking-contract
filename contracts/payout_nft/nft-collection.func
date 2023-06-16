@@ -117,7 +117,7 @@ slice calculate_nft_item_address(cell state_init) {
     throw_unless(error::need_init, ~ cell_null?(distribution));
 
     if (op == op::mint_nft) {
-      throw_unless(error::unauthorized_init, equal_slice_bits(sender, admin));
+      throw_unless(error::unauthorized_mint_request, equal_slice_bits(sender, admin));
        
       slice owner = in_msg_body~load_msg_addr();
       int amount = in_msg_body~load_coins();
