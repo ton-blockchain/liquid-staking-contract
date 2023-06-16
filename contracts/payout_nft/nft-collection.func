@@ -1,4 +1,8 @@
-;; NFT collection smart contract
+;; Distributor NFT collection smart contract
+;; Every minted token has its bill value.
+;; When distribution of some asset (TON or Jetton) started,
+;; every burned token gets a share from this asset in proportion
+;; of its bill value to total.
 
 #include "stdlib.func";
 #include "op-codes.func";
@@ -277,6 +281,11 @@ slice calculate_nft_item_address(cell state_init) {
 (int, cell, slice) get_collection_data() method_id {
   var (issued_bills, admin, distribution, collection_content, next_item_index, prev, current, next, next_state_init) = load_data();
   return (next_item_index, collection_content, admin);
+}
+
+cell get_distribution_data() method_id {
+  var (issued_bills, admin, distribution, collection_content, next_item_index, prev, current, next, next_state_init) = load_data();
+  return distribution;
 }
 
 slice get_nft_address_by_index(int index) method_id {
