@@ -1,8 +1,8 @@
 ;; common functions in all contracts
 global slice halter;
-global int state;
+global int halted?;
 
-() process_halt_request(slice sender, slice in_msg) impure inline_ref {
+() process_halt_request(slice sender) impure inline_ref {
     assert_sender!(sender, halter);
-    state = state::HALTED;
+    halted? = true;
 }

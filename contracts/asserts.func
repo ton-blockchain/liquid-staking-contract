@@ -5,10 +5,11 @@
 }
 
 global int state;
+global int halted?;
 const int state::HALTED = 0xff;
 
 () assert_not_halted!() impure inline {
-  throw_if(error::wrong_state, state == state::HALTED);
+  throw_if(error::halted, halted?);
 }
 
 () assert_state!(int expected) impure inline {

@@ -3,7 +3,7 @@ import { Cell, toNano, Dictionary, beginCell } from 'ton-core';
 import { Pool } from '../wrappers/Pool';
 import { Controller } from '../wrappers/Controller';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
-import { JettonWallet as PoolJettonWallet } from '../contracts/jetton_dao/wrappers/JettonWallet';
+import { JettonWallet as PoolJettonWallet } from '../wrappers/JettonWallet';
 import { JettonWallet as DepositWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
 import { JettonWallet as WithdrawalWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
 import { setConsigliere } from '../wrappers/PayoutMinter.compile';
@@ -30,6 +30,8 @@ describe('Pool', () => {
     let controller: SandboxContract<Controller>;
     let poolJetton: SandboxContract<DAOJettonMinter>;
     let deployer: SandboxContract<TreasuryContract>;
+
+    jest.setTimeout(60000); // TODO: remove this
 
     beforeAll(async () => {
         blockchain = await Blockchain.create();
@@ -244,7 +246,7 @@ describe('Pool', () => {
         let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
         const jettonAmount = await myPoolJettonWallet.getJettonBalance();
 
-        const burnResult = await myPoolJettonWallet.sendBurn(deployer.getSender(), toNano('1.0'), jettonAmount, deployer.address, beginCell().storeInt(0n, 1).storeInt(0n, 1).endCell());
+        const burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.0'), jettonAmount, deployer.address, false, false);
 
         const withdrawalMinter = blockchain.openContract(await pool.getWithdrawalMinter());
         const myWithdrawWalletAddress = await withdrawalMinter.getWalletAddress(deployer.address);
@@ -301,7 +303,7 @@ describe('Pool', () => {
         //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
         const secondDeposit = await pool.sendDeposit(deployer.getSender(), toNano('1000000'));
 
-        const controllerDeployResult = await controller.sendLoanRequest(deployer.getSender(), toNano('1000'), toNano('10000'), 1000n);
+        const controllerDeployResult = await controller.sendRequestLoan(deployer.getSender(), toNano('1000'), toNano('10000'), 1000);
         expect(controllerDeployResult.transactions).toHaveTransaction({
                          from: deployer.address,
                          to: controller.address,

@@ -10,6 +10,7 @@ cell controller_init_data (cell static_data) {
   ;; TODO optimize with store_zeros
   return begin_cell()
             .store_uint(0, 8) ;; state
+            .store_int(0, 1)  ;; halted
             .store_int(0, 1)  ;; approved
             .store_coins(0) ;; stake_amount_sent
             .store_timestamp(0) ;; stake_at
