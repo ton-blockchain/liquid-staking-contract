@@ -101,8 +101,8 @@ slice calculate_nft_item_address(cell state_init) {
     int query_id = in_msg_body~load_uint(64);
 
     var (issued_bills, admin, distribution, collection_content, next_item_index, prev, current, next, next_state_init) = load_data();
-    
-   
+
+
 
     if (op == op::init_collection) {
       throw_unless(error::unauthorized_init, equal_slice_bits(sender, admin));
@@ -285,6 +285,14 @@ slice get_nft_address_by_index(int index) method_id {
 }
 
 cell get_nft_content(int index, cell individual_nft_content) method_id {
+;; individual_nft_content has only share amount for this token in it.
+;; This function generates onchain metadata containing (in dict):
+;; {
+;;  sha256(name): "Bill for {amount} TON/Pool Jetton in Withdrawal/Deposit Payout #{collection_no}",
+;;  sha256(description): "DO NOT SEND ON CONTRACTS: Automatically converts deposited TON to Pool Jettons when ready
+;;                   or  "DO NOT SEND ON CONTRACTS: Converts burned Pool Jettons to TON when ready"
+;; }
+
   var (issued_bills, admin, distribution, collection_content, next_item_index, prev, current, next, next_state_init) = load_data();
   slice cs = individual_nft_content.begin_parse();
   int amount = cs~load_coins();
