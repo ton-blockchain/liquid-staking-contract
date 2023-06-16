@@ -288,6 +288,11 @@ cell get_distribution_data() method_id {
   return distribution;
 }
 
+int get_issued_bills() method_id {
+  var (issued_bills, admin, distribution, collection_content, next_item_index, prev, current, next, next_state_init) = load_data();
+  return issued_bills;
+}
+
 slice get_nft_address_by_index(int index) method_id {
     cell state_init = calculate_nft_item_state_init(index, nft_item_code());
     return calculate_nft_item_address(state_init);

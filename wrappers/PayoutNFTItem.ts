@@ -1,11 +1,5 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from 'ton-core';
-
-export const Op = {
-    nft_transfer: 0x5fcc3d14,
-    jetton_transfer: 0xf8a7ea5,
-    ownership_assigned: 0x05138d91,
-    excesses: 0xd53276db,
-};
+import { Op } from './PayoutNFTCollection';
 
 export type PayoutItemConfig = {
     index: bigint
@@ -40,13 +34,31 @@ export class PayoutItem implements Contract {
         });
     }
 
+    async sendBurn(provider: ContractProvider, via: Sender, value: bigint) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            value: value,
+            body: beginCell()
+                    .storeUint(Op.burn, 32)
+                    .storeUint(0, 64) // op, queryId
+                  .endCell()
+        });
+    }
+
     async getNFTData(provider: ContractProvider) {
         const { stack } = await provider.get('get_nft_data', []);
         const inited = stack.readBoolean();
         const index = stack.readNumber();
         const collection = stack.readAddress();
         const owner = stack.readAddress();
-        return { inited, index, collection, owner };
+        const content = stack.readCell();
+        return { inited, index, collection, owner, content };
     }
 
+    async getBillAmount(provider: ContractProvider) {
+        // bill amount stored in a content cell like coins
+        const { content } = await this.getNFTData(provider);
+        const cs = content.beginParse();
+        return cs.loadCoins();
+    }
 }

@@ -167,6 +167,33 @@ describe('Distributor NFT Collection', () => {
             const nftData = await nftItem.getNFTData();
             expect(nftData.inited).toEqual(true);
         });
+
         // TODO: test with minimal mint amount. Now collection doesn't check it and mint may fail on NFT side.
+
+        it('nft may not be burned by owner or someONE else', async () => {
+            await loadSnapshot("minted");
+            const deployerNFTAddr = await collection.getNFTAddress(0n);
+            const deployerNFT = blockchain.openContract(PayoutItem.createFromAddress(deployerNFTAddr));
+            const { owner } = await deployerNFT.getNFTData();
+            expect(owner.equals(deployer.address)).toEqual(true);
+            const sendResult1 = await deployerNFT.sendBurn(deployer.getSender(), toNano('0.1'));
+            const sendResult2 = await deployerNFT.sendBurn(notDeployer.getSender(), toNano('0.1'));
+            for (let res of [sendResult1, sendResult2])
+              expect(res.transactions).toHaveTransaction({ // burn notification
+                  to: deployerNFTAddr,
+                  success: false,
+                  exitCode: Errors.unauthorized
+              });
+        });
+        it('should not start distribution from not admin', async () => {
+            await loadSnapshot("minted");
+            const sendStartResult = await collection.sendStartDistribution(notDeployer.getSender(), toNano(1000));
+            expect(sendStartResult.transactions).toHaveTransaction({
+                from: notDeployer.address,
+                to: collection.address,
+                success: false,
+                exitCode: 80  // error::unauthorized_start_request
+            });
+        });
     });
 });

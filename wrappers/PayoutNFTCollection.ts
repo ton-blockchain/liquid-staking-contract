@@ -179,4 +179,8 @@ export class PayoutCollection implements Contract {
         const { stack } = await provider.get('get_nft_address_by_index', args.build());
         return stack.readAddress();
     }
+    async getTotalBill(provider: ContractProvider) {
+        const { stack } = await provider.get('get_issued_bills', []);
+        return stack.readBigNumber();
+    }
 }
