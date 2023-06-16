@@ -1,4 +1,4 @@
-import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano } from 'ton-core';
+import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano, TupleBuilder } from 'ton-core';
 
 // storage scheme
 // storage#_ issued_bills:Coins
@@ -163,5 +163,20 @@ export class PayoutCollection implements Contract {
             volume: distribution.loadCoins(),
             myJettonWallet: isJetton ? distribution.loadAddress() : undefined,
         }
+    }
+
+    async getCollectionData(provider: ContractProvider) {
+        let { stack } = await provider.get('get_collection_data', []);
+        let nextItemIndex = stack.readBigNumber();
+        let collectionContent = stack.readCell();
+        let admin = stack.readAddress();
+        return { nextItemIndex, collectionContent, admin }
+    }
+
+    async getNFTAddress(provider: ContractProvider, index: bigint) {
+        const args = new TupleBuilder()
+        args.writeNumber(index)
+        const { stack } = await provider.get('get_nft_address_by_index', args.build());
+        return stack.readAddress();
     }
 }

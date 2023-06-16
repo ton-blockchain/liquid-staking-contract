@@ -1,6 +1,7 @@
-import { Blockchain, SandboxContract, TreasuryContract, BlockchainSnapshot } from '@ton-community/sandbox';
+import { Blockchain, SandboxContract, TreasuryContract, BlockchainSnapshot, printTransactionFees, internal } from '@ton-community/sandbox';
 import { Address, Cell, toNano, Dictionary, beginCell } from 'ton-core';
-import { PayoutCollection, Errors } from '../wrappers/PayoutNFTCollection';
+import { PayoutCollection, Errors, Op } from '../wrappers/PayoutNFTCollection';
+import { PayoutItem } from '../wrappers/PayoutNFTItem';
 import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
 import { randomAddress } from '@ton-community/test-utils';
@@ -8,6 +9,7 @@ import { getRandomInt, getRandomTon } from '../utils'
 
 describe('Distributor NFT Collection', () => {
     let collectionCode: Cell;
+    let itemCode: Cell;
     let snapshots: Map<string, BlockchainSnapshot>
     let loadSnapshot: (snap: string) => Promise<void>;
     let collection: SandboxContract<PayoutCollection>
@@ -22,6 +24,7 @@ describe('Distributor NFT Collection', () => {
         deployer = await blockchain.treasury("deployer");
         notDeployer = await blockchain.treasury("notDeployer");
         collectionCode = await compile('PayoutNFTCollection');
+        itemCode = await compile('PayoutNFTItem');
         let config = {
             admin: deployer.address,
             content: Cell.EMPTY
@@ -39,9 +42,8 @@ describe('Distributor NFT Collection', () => {
         const initDistribution = {
             active: false,
             isJetton: false,
-            volume: 0n,
+            volume: 0n
         }
-
         beforeAll(async () => {
             snapshots = new Map<string, BlockchainSnapshot>();
             shares = new Map<Address, bigint>();
@@ -52,8 +54,6 @@ describe('Distributor NFT Collection', () => {
                 shares.set(addr, share);
             }
         });
-
-
         it('should not deploy (init) not from admin', async () => {
             const deployResult = await collection.sendDeploy(notDeployer.getSender(), initDistribution, toNano("0.5"));
             expect(deployResult.transactions).toHaveTransaction({
@@ -63,7 +63,6 @@ describe('Distributor NFT Collection', () => {
             });
             snapshots.set("uninitialized", blockchain.snapshot());
         });
-
         it("should deploy collection with ton distribution", async () => {
             await loadSnapshot("uninitialized");
             const deployResult = await collection.sendDeploy(deployer.getSender(), initDistribution, toNano("1"));
@@ -76,14 +75,31 @@ describe('Distributor NFT Collection', () => {
         });
         it("should mint NFT", async () => {
             await loadSnapshot("initialized");
+            const dataBefore = await collection.getCollectionData();
+            let index = dataBefore.nextItemIndex;
             for (let [addr, share] of shares) {
                 const mintResult = await collection.sendMint(deployer.getSender(), addr, share);
+                const nftAddress = await collection.getNFTAddress(index);
                 expect(mintResult.transactions).toHaveTransaction({
                     to: collection.address,
                     success: true,
                     outMessagesCount: 1
                 });
+                expect(mintResult.transactions).toHaveTransaction({
+                    from: collection.address,
+                    to: nftAddress,
+                    success: true,
+                    deploy: true
+                });
+                expect(mintResult.transactions).toHaveTransaction({
+                    from: nftAddress,
+                    to: addr,
+                    op: Op.ownership_assigned
+                });
+                index++;
             }
+            const dataAfter = await collection.getCollectionData();
+            expect(dataAfter.nextItemIndex).toEqual(index);
             snapshots.set("minted", blockchain.snapshot());
         });
         it("should not mint not from admin", async () => {
@@ -95,5 +111,62 @@ describe('Distributor NFT Collection', () => {
                 exitCode: Errors.unauthorized_mint_request
             });
         });
+        it("should not mint if uninitialized", async () => {
+            await loadSnapshot("uninitialized");
+            const mintResult = await collection.sendMint(deployer.getSender(), randomAddress(), getRandomTon(1, 100));
+            expect(mintResult.transactions).toHaveTransaction({
+                to: collection.address,
+                success: false,
+                exitCode: Errors.need_init
+            });
+        });
+        it('should deploy item not from admin with failed init', async () => {
+            await loadSnapshot("minted");
+            const mintBody = PayoutCollection.mintMessage(notDeployer.address, getRandomTon(1, 100));
+            const collectionData = await collection.getCollectionData();
+            const index = collectionData.nextItemIndex;
+            const nftAddress = await collection.getNFTAddress(index);
+            const nftItem = blockchain.openContract(PayoutItem.createFromConfig({admin: collection.address, index}, itemCode));
+            const mintResult = await blockchain.sendMessage(internal({
+                from: notDeployer.address,
+                to: nftAddress,
+                value: toNano("0.3"),
+                bounce: false,
+                body: mintBody,
+                stateInit: nftItem.init
+            }));
+            expect(mintResult.transactions).toHaveTransaction({
+                from: notDeployer.address,
+                to: nftAddress,
+                deploy: true,
+                success: false,
+                endStatus: 'active',
+                exitCode: Errors.unauthorized_init
+            });
+
+            const nftSmc = await blockchain.getContract(nftItem.address);
+            if (nftSmc.accountState?.type === 'active') {
+                const initedBit = nftSmc.accountState?.state.data?.beginParse().loadBit();
+                expect(initedBit).toEqual(false);
+            } else throw Error(`Can't get state of ${nftItem.address}`);
+
+            snapshots.set("uninited_item", blockchain.snapshot());
+        });
+        it('should init previously deployed item', async () => {
+            await loadSnapshot("uninited_item");
+            const collectionData = await collection.getCollectionData();
+            const index = collectionData.nextItemIndex;
+            const nftAddress = await collection.getNFTAddress(index);
+            const mintResult = await collection.sendMint(deployer.getSender(), randomAddress(), getRandomTon(1, 100));
+            expect(mintResult.transactions).toHaveTransaction({
+                from: collection.address,
+                to: nftAddress,
+                success: true,
+            });
+            const nftItem = blockchain.openContract(PayoutItem.createFromAddress(nftAddress));
+            const nftData = await nftItem.getNFTData();
+            expect(nftData.inited).toEqual(true);
+        });
+        // TODO: test with minimal mint amount. Now collection doesn't check it and mint may fail on NFT side.
     });
 });

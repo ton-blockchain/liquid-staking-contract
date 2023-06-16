@@ -11,7 +11,7 @@ const loadConfig = (config:Cell) => {
           return config.beginParse().loadDictDirect(Dictionary.Keys.Int(32), Dictionary.Values.Cell());
         };
 
-describe('Pool', () => {
+describe('NFT Payouts', () => {
     let pool_code: Cell;
     let controller_code: Cell;
     let payout_collection: Cell;
@@ -30,8 +30,6 @@ describe('Pool', () => {
     beforeAll(async () => {
         blockchain = await Blockchain.create();
         deployer = await blockchain.treasury('deployer', {balance: toNano("1000000000")});
-
-
 
         payout_collection = await compile('PayoutNFTCollection');
 
@@ -71,7 +69,7 @@ describe('Pool', () => {
 
         pool = blockchain.openContract(Pool.createFromConfig(poolConfig, pool_code));
         let controllerConfig = {
-          controllerId:0,
+          controllerId: 0,
           validator: deployer.address,
           pool: pool.address,
           governor: deployer.address,
@@ -79,14 +77,12 @@ describe('Pool', () => {
           halter: deployer.address,
         };
         controller = blockchain.openContract(Controller.createFromConfig(controllerConfig, controller_code));
-
     });
 
     beforeEach(async () => {
     });
 
     it('should deploy', async () => {
-
         //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
         const poolDeployResult = await pool.sendDeploy(deployer.getSender(), toNano('11'));
         expect(poolDeployResult.transactions).toHaveTransaction({
