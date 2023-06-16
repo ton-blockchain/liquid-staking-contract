@@ -168,12 +168,7 @@ int current_round_index();
                 requested_for_withdrawal += jetton_amount;
             }
         } catch (exc_arg, exc_num) {
-<<<<<<< HEAD
-            raw_reserve(balance - msg_value - sent_during_rotation, 0);
             request_to_mint_pool_jettons(sender_address, jetton_amount, query_id, begin_cell(), true);
-=======
-            request_to_mint_pool_jettons(from_address, jetton_amount, query_id, begin_cell(), true);
->>>>>>> 77b1268d8d533e47c07a538bf76c74796b470e01
         }
         
     {- ========== Governance operations ========== -}
