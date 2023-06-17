@@ -168,7 +168,7 @@ int current_round_index();
                 requested_for_withdrawal += jetton_amount;
             }
         } catch (exc_arg, exc_num) {
-            request_to_mint_pool_jettons(from_address, jetton_amount, query_id, begin_cell(), true);
+            request_to_mint_pool_jettons(sender_address, jetton_amount, query_id, begin_cell(), true);
         }
         
     {- ========== Governance operations ========== -}
@@ -403,11 +403,14 @@ int current_round_index();
 
     ;;int effective_supply = supply + requested_for_withdrawal;
 
-    if (fee > SERVICE_NOTIFICATION_AMOUNT) { ;; otherwise it is less than msg value
-      send_msg_builder(interest_manager, fee,
+    if (fee > SERVICE_NOTIFICATION_AMOUNT) { ;; otherwise it is less than msg cost
+      sent_during_rotation += fee;
+      send_msg_builder(governor, fee,
                begin_cell().store_body_header(interest_manager::operation_fee, cur_lt()),
                msgflag::NON_BOUNCEABLE, sendmode::REGULAR);
+      
     }
+    sent_during_rotation += SERVICE_NOTIFICATION_AMOUNT;
     send_msg_builder(interest_manager, SERVICE_NOTIFICATION_AMOUNT,
              begin_cell()
                .store_body_header(interest_manager::stats, cur_lt())
@@ -617,6 +620,7 @@ int current_round_index();
     }
 
     total_balance -= ton_withdrawal;
+    sent_during_rotation += ton_withdrawal;
     var msg = begin_cell()
             .store_msg_flags(msgflag::BOUNCEABLE)
             .store_slice(prev_withdrawal_payout)
@@ -624,7 +628,6 @@ int current_round_index();
             .store_msgbody_prefix_slice()
             .store_body_header(payouts::start_distribution, cur_lt());
     send_raw_message(msg.end_cell(), sendmode::REGULAR);
-    sent_during_rotation += ton_withdrawal;
 }
 
 () initiate_distribution_of_pool_jettons(round_id) impure {
@@ -634,6 +637,7 @@ int current_round_index();
         return ();
     }
     int jetton_mint = muldiv_extra(requested_for_deposit, supply, total_balance);
+    sent_during_rotation += TRANSFER_NOTIFICATION_AMOUNT + POOL_JETTON_WALLET_FEE + POOL_JETTON_MINT_FEE;
     request_to_mint_pool_jettons(deposit_payout,
                                  jetton_mint,
                                  cur_lt(),
