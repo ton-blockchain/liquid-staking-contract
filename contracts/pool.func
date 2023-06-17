@@ -737,3 +737,32 @@ cell get_borrowers_dict(int prev?) method_id {
     load_data();
     return (min_loan_per_validator, max_loan_per_validator);
 }
+
+var get_pool_full_data() method_id {
+    load_data();
+    return (state, halted?,
+            total_balance,
+            interest_rate,
+            optimistic_deposit_withdrawals, deposits_open?,
+            saved_validator_set_hash,
+
+            prev_round_borrowers, current_round_borrowers,
+            min_loan_per_validator, max_loan_per_validator,
+            governance_fee,
+
+            jetton_minter, supply,
+
+            deposit_payout, requested_for_deposit,
+            withdrawal_payout, requested_for_withdrawal,
+
+            sudoer, sudoer_set_at,
+            governor,
+            interest_manager,
+            halter,
+            approver,
+
+            controller_code,
+            pool_jetton_wallet_code,
+            payout_minter_code
+    );
+}

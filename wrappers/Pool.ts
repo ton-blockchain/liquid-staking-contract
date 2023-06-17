@@ -171,38 +171,31 @@ export class Pool implements Contract {
 
 
     // Get methods
+    /*
     async getDepositPayout(provider: ContractProvider) {
         let res = await provider.get('get_current_round_deposit_payout', []);
         let minter = res.stack.readAddress();
         return AwaitedJettonMinter.createFromAddress(minter);
-    }
-    async getDepositMinter(provider: ContractProvider) {
-        return this.getDepositPayout(provider);
     }
     async getWithdrawalPayout(provider: ContractProvider) {
         let res = await provider.get('get_current_round_withdrawal_payout', []);
         let minter = res.stack.readAddress();
         return AwaitedJettonMinter.createFromAddress(minter);
     }
+    */
+    async getDepositMinter(provider: ContractProvider) {
+        let res = await this.getFullData(provider);
+        return AwaitedJettonMinter.createFromAddress(res.depositPayout!);
+    }
+
     async getWithdrawalMinter(provider: ContractProvider) {
-        return this.getWithdrawalPayout(provider);
+        let res = await this.getFullData(provider);
+        return AwaitedJettonMinter.createFromAddress(res.withdrawalPayout!);
     }
     async getFinanceData(provider: ContractProvider) {
-        let { stack } = await provider.get('get_finance_data', []);
-        let totalBalance = stack.readBigNumber();
-        let supply = stack.readBigNumber();
-        let requestedForDeposit = stack.readBigNumber();
-        let requestedForWithdrawal = stack.readBigNumber();
-        stack.readCell();
-        let interestRate = stack.readNumber();
-        return {totalBalance, supply, requestedForDeposit, requestedForWithdrawal, interestRate};
+        return await this.getFullData(provider);
     }
-    async getMinMaxLoanPerValidator(provider: ContractProvider) {
-        let { stack } = await provider.get('get_min_max_loan_per_validator', []);
-        let min = stack.readBigNumber();
-        let max = stack.readBigNumber();
-        return {min, max};
-    }
+
     async getLoan(provider: ContractProvider, controllerId: number, validator: Address, previous=false) {
         const args = new TupleBuilder();
         args.writeNumber(controllerId);
@@ -215,16 +208,125 @@ export class Pool implements Contract {
         }
     }
     async getRoundId(provider: ContractProvider) {
-        let { stack } = await provider.get('get_round_index', []);
-        return stack.readNumber();
+        let res = await this.getFullData(provider);
+        return res.currentRound.roundId;
     }
     async getBorrowersDict(provider: ContractProvider, previous=false) {
-        const args = new TupleBuilder();
-        args.writeBoolean(previous);
-        let { stack } = await provider.get('get_borrowers_dict', args.build());
-        if (stack.peek().type == 'null')
+       let res = await this.getFullData(provider);
+       let borrowers = res.currentRound.borrowers;
+        if(previous) {
+           borrowers = res.previousRound.borrowers;
+        }
+        if (borrowers == null) {
             return Dictionary.empty();
-        const dict = Dictionary.loadDirect(Dictionary.Keys.BigInt(256), BorrowerDiscriptionValue, stack.readCell().asSlice());
+        }
+        const dict = Dictionary.loadDirect(Dictionary.Keys.BigInt(256), BorrowerDiscriptionValue, borrowers.asSlice());
         return dict;
     }
+
+    async getMinMaxLoanPerValidator(provider: ContractProvider) {
+        let res = await this.getFullData(provider);
+        return {min: res.minLoan, max: res.maxLoan};
+    }
+
+
+    async getFullData(provider: ContractProvider) {
+        let { stack } = await provider.get('get_pool_full_data', []);
+        let state = Number(stack.readBigNumber());
+        let halted = Number(stack.readBigNumber());
+        let totalBalance = stack.readBigNumber();
+        let interestRate = Number(stack.readBigNumber());
+        let optimisticDepositWithdrawals = Number(stack.readBigNumber());
+        let depositsOpen = Number(stack.readBigNumber());
+        let savedValidatorSetHash = stack.readBigNumber();
+
+        let prv = stack.readTuple();
+        let prvBorrowers = prv.readCellOpt();
+        let prvRoundId = Number(prv.readBigNumber());
+        let prvActiveBorrowers = prv.readBigNumber();
+        let prvBorrowed = prv.readBigNumber();
+        let prvExpected = prv.readBigNumber();
+        let prvReturned = prv.readBigNumber();
+        let prvProfit = prv.readBigNumber();
+        let previousRound = {
+          borrowers: prvBorrowers,
+          roundId: prvRoundId,
+          activeBorrowers: prvActiveBorrowers,
+          borrowed: prvBorrowed,
+          expected: prvExpected,
+          returned: prvReturned,
+          profit: prvProfit
+        };
+
+        let cur = stack.readTuple();
+        let curBorrowers = cur.readCellOpt();
+        let curRoundId = Number(cur.readBigNumber());
+        let curActiveBorrowers = cur.readBigNumber();
+        let curBorrowed = cur.readBigNumber();
+        let curExpected = cur.readBigNumber();
+        let curReturned = cur.readBigNumber();
+        let curProfit = cur.readBigNumber();
+        let currentRound = {
+          borrowers: curBorrowers,
+          roundId: curRoundId,
+          activeBorrowers: curActiveBorrowers,
+          borrowed: curBorrowed,
+          expected: curExpected,
+          returned: curReturned,
+          profit: curProfit
+        };
+
+        let minLoan = stack.readBigNumber();
+        let maxLoan = stack.readBigNumber();
+        let governanceFee = Number(stack.readBigNumber());
+
+
+        let poolJettonMinter = stack.readAddress();
+        let poolJettonSupply = stack.readBigNumber();
+
+        let depositPayout = stack.readAddressOpt();
+        let requestedForDeposit = stack.readBigNumber();
+
+        let withdrawalPayout = stack.readAddressOpt();
+        let requestedForWithdrawal = stack.readBigNumber();
+
+        let sudoer = stack.readAddress();
+        let sudoerSetAt = Number(stack.readBigNumber());
+
+        let governor = stack.readAddress();
+        let interestManager = stack.readAddress();
+        let halter = stack.readAddress();
+        let approver = stack.readAddress();
+
+        let controllerCode = stack.readCell();
+        let jettonWalletCode = stack.readCell();
+        let payoutMinterCode = stack.readCell();
+
+        return {
+            state, halted,
+            totalBalance, interestRate,
+            optimisticDepositWithdrawals, depositsOpen,
+            savedValidatorSetHash,
+
+            previousRound, currentRound,
+
+            minLoan, maxLoan,
+            governanceFee,
+
+            poolJettonMinter, poolJettonSupply, supply:poolJettonSupply,
+            depositPayout, requestedForDeposit,
+            withdrawalPayout, requestedForWithdrawal,
+
+            sudoer, sudoerSetAt,
+            governor,
+            interestManager,
+            halter,
+            approver,
+
+            controllerCode,
+            jettonWalletCode,
+            payoutMinterCode
+        };
+    }
+
 }
