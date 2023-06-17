@@ -115,6 +115,8 @@ describe('Distributor NFT Collection', () => {
             }
             const dataAfter = await collection.getCollectionData();
             expect(dataAfter.nextItemIndex).toEqual(index);
+            const bill = await collection.getTotalBill();
+            expect(bill).toEqual(totalBill);
             snapshots.set("minted", blockchain.snapshot());
         });
         it("should not mint not from admin", async () => {
@@ -236,15 +238,35 @@ describe('Distributor NFT Collection', () => {
                 exitCode: Errors.cannot_distribute_jettons
             });
         });
-        it("should start distribution", async () => {
+        it("should distribute", async () => {
             await loadSnapshot("minted");
-            const sendStartResult = await collection.sendStartDistribution(deployer.getSender(), toNano(1000));
-            // TODO: check all transactions in this chain
+            const assetAmount = getRandomTon(100, 10000);
+            const billBefore = await collection.getTotalBill();
+            const sendStartResult = await collection.sendStartDistribution(deployer.getSender(), assetAmount);
             expect(sendStartResult.transactions).toHaveTransaction({
                 from: deployer.address,
                 to: collection.address,
                 success: true,
             });
+            let i = 0n;
+            for (let [addr, share] of shares) {
+                const expectedBillShare = assetAmount * share / billBefore;
+                const nftAddr = await collection.getNFTAddress(i);
+                expect(sendStartResult.transactions).toHaveTransaction({
+                    from: nftAddr,
+                    to: collection.address,
+                    success: true,
+                    op: Op.burn_notification
+                });
+                expect(sendStartResult.transactions).toHaveTransaction({
+                    from: collection.address,
+                    to: addr,
+                    op: Op.distributed_asset,
+                    value: (x) => x! >= expectedBillShare - toNano("0.1")
+                });
+                i++;
+            }
+            const billAfter = await collection.getTotalBill();
             const collectionData = await collection.getDistribution();
             expect(collectionData.active).toEqual(true);
             snapshots.set("distribution_started", blockchain.snapshot());
