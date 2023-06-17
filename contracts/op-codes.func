@@ -53,6 +53,7 @@ const int governor::set_roles = 0x7a756db8; ;; TODO
 const int governor::unhalt = 0x7247e7a5; ;;TODO
 const int governor::set_deposit_settings = 0x2233ff55; ;;TODO
 const int governor::return_available_funds = 0x67855098; ;;TODO
+const int governor::prepare_governance_migration = 0x33768620; ;;TODO
 
 const int halter::halt = 0x139a1b4e;
 

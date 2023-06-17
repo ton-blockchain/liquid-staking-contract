@@ -1,14 +1,23 @@
 ;; common functions in all contracts
 global slice governor;
+global int governor_update_after;
 global slice sudoer;
 global int sudoer_set_at;
 global int state;
 global int halted?;
 
+const int GOVERNOR_QUARANTINE = 86400;
+
 () process_set_sudo_request(slice sender, slice in_msg) impure inline_ref {
     assert_sender!(sender, governor);
     sudoer_set_at = now();
     sudoer = in_msg~load_msg_addr();
+}
+
+() process_prepare_governance_migration(slice sender, slice in_msg) impure inline_ref {
+    assert_sender!(sender, governor);
+    governor_update_after = in_msg~load_uint(48);
+    throw_unless(error::governor_update_too_soon, governor_update_after - now() > GOVERNOR_QUARANTINE );
 }
 
 () process_unhalt_request(slice sender) impure inline_ref {

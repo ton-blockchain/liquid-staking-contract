@@ -44,6 +44,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
                    .storeAddress(config.sudoer)
                    .storeUint(0, 48) // sudoer set at
                    .storeAddress(config.governor)
+                   .storeUint(0xffffffffffff, 48) // givernor update after
                    .storeAddress(config.interest_manager)
                    .storeRef(
                        beginCell()
