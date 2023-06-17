@@ -2,22 +2,28 @@ import { Blockchain, SandboxContract, TreasuryContract, BlockchainSnapshot, prin
 import { Address, Cell, toNano, Dictionary, beginCell } from 'ton-core';
 import { PayoutCollection, Errors, Op } from '../wrappers/PayoutNFTCollection';
 import { PayoutItem } from '../wrappers/PayoutNFTItem';
+import { JettonMinter as DAOJettonMinter } from '../contracts/jetton_dao/wrappers/JettonMinter';
+import { JettonWallet as PoolJettonWallet } from '../wrappers/JettonWallet';
 import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
 import { randomAddress } from '@ton-community/test-utils';
 import { getRandomInt, getRandomTon } from '../utils'
 
 describe('Distributor NFT Collection', () => {
-    let collectionCode: Cell;
-    let itemCode: Cell;
+    let blockchain: Blockchain;
     let snapshots: Map<string, BlockchainSnapshot>
     let loadSnapshot: (snap: string) => Promise<void>;
+    let shares: Map<Address, bigint>;
     let collection: SandboxContract<PayoutCollection>
     let deployer: SandboxContract<TreasuryContract>;
     let notDeployer: SandboxContract<TreasuryContract>;
-    let blockchain: Blockchain;
+    let poolJetton: SandboxContract<DAOJettonMinter>;
+    let collectionCode: Cell;
+    let itemCode: Cell;
+    let dao_voting_code: Cell;
+    let dao_minter_code: Cell;
+    let dao_wallet_code: Cell;
     let totalBill: bigint;
-    let shares: Map<Address, bigint>;
 
     beforeAll(async () => {
         blockchain = await Blockchain.create();
@@ -36,6 +42,15 @@ describe('Distributor NFT Collection', () => {
             throw(Error(`Can't find snapshot ${name}\nCheck tests execution order`));
           await blockchain.loadFrom(shot);
         }
+
+        dao_minter_code = await compile('DAOJettonMinter');
+        dao_wallet_code = await compile('DAOJettonWallet');
+        dao_voting_code = await compile('DAOVoting');
+        poolJetton  = blockchain.openContract(DAOJettonMinter.createFromConfig({
+                                                  admin: deployer.address,
+                                                  content: Cell.EMPTY,
+                                                  voting_code: dao_voting_code},
+                                                  dao_minter_code));
     });
 
     describe("Distributing TONs", () => {
@@ -179,20 +194,68 @@ describe('Distributor NFT Collection', () => {
             const sendResult1 = await deployerNFT.sendBurn(deployer.getSender(), toNano('0.1'));
             const sendResult2 = await deployerNFT.sendBurn(notDeployer.getSender(), toNano('0.1'));
             for (let res of [sendResult1, sendResult2])
-              expect(res.transactions).toHaveTransaction({ // burn notification
+              expect(res.transactions).toHaveTransaction({
                   to: deployerNFTAddr,
                   success: false,
                   exitCode: Errors.unauthorized
               });
         });
-        it('should not start distribution from not admin', async () => {
+        it('should not start distribution not from admin', async () => {
             await loadSnapshot("minted");
             const sendStartResult = await collection.sendStartDistribution(notDeployer.getSender(), toNano(1000));
             expect(sendStartResult.transactions).toHaveTransaction({
                 from: notDeployer.address,
                 to: collection.address,
                 success: false,
-                exitCode: 80  // error::unauthorized_start_request
+                exitCode: Errors.unauthorized_start_request
+            });
+        });
+        it("should not start distribution if uninitialized", async () => {
+            await loadSnapshot("uninitialized");
+            const sendStartResult = await collection.sendStartDistribution(deployer.getSender(), toNano(1000));
+            expect(sendStartResult.transactions).toHaveTransaction({
+                to: collection.address,
+                success: false,
+                exitCode: Errors.need_init
+            });
+        });
+        it("should not start distribution of jettons", async () => {
+            await loadSnapshot("minted");
+            const mintAssetResult = await poolJetton.sendMint(deployer.getSender(), collection.address, toNano(1000), toNano("0.1"), toNano("0.5"))
+            const jwalletAddr = await poolJetton.getWalletAddress(collection.address);
+            expect(mintAssetResult.transactions).toHaveTransaction({ // internal transfer
+                from: poolJetton.address,
+                to: jwalletAddr,
+                success: true
+            });
+            expect(mintAssetResult.transactions).toHaveTransaction({
+                from: jwalletAddr,
+                to: collection.address,
+                op: Op.transfer_notification,
+                success: false,
+                exitCode: Errors.cannot_distribute_jettons
+            });
+        });
+        it("should start distribution", async () => {
+            await loadSnapshot("minted");
+            const sendStartResult = await collection.sendStartDistribution(deployer.getSender(), toNano(1000));
+            // TODO: check all transactions in this chain
+            expect(sendStartResult.transactions).toHaveTransaction({
+                from: deployer.address,
+                to: collection.address,
+                success: true,
+            });
+            const collectionData = await collection.getDistribution();
+            expect(collectionData.active).toEqual(true);
+            snapshots.set("distribution_started", blockchain.snapshot());
+        });
+        it("should not start distribution if already started", async () => {
+            await loadSnapshot("distribution_started");
+            const sendStartResult = await collection.sendStartDistribution(deployer.getSender(), toNano(1000));
+            expect(sendStartResult.transactions).toHaveTransaction({
+                to: collection.address,
+                success: false,
+                exitCode: Errors.distribution_already_started
             });
         });
     });
