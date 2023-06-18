@@ -290,7 +290,7 @@ int check_new_stake_msg(slice cs);
                     raw_reserve(MIN_TONS_FOR_STORAGE, 2);
                     send_msg(validator,
                              request_amount,
-                             null(), ;; payload
+                             begin_cell().store_body_header(controller::validator_withdrawal, query_id).end_cell(),
                              msgflag::NON_BOUNCEABLE,
                              sendmode::REGULAR);
 

@@ -196,9 +196,6 @@ int current_round_index();
                 if(in_msg_body~load_int(1)) {
                     interest_manager = in_msg_body~load_msg_addr();
                 }
-                if(in_msg_body.slice_refs()) {
-                    in_msg_body = in_msg_body~load_ref().begin_parse();
-                }
                 if(in_msg_body~load_int(1)) {
                     halter = in_msg_body~load_msg_addr();
                 }
@@ -206,6 +203,9 @@ int current_round_index();
                 assert_sender!(sender_address, governor);
                 optimistic_deposit_withdrawals = in_msg_body~load_int(1);
                 deposits_open?  = in_msg_body~load_int(1);
+    } elseif(op == governor::set_governance_fee) {
+                assert_sender!(sender_address, governor);
+                governance_fee = in_msg_body~load_uint(16);
     } elseif (op == interest_manager::set_interest) {
                 assert_state!(state::NORMAL);
                 assert_sender!(sender_address, interest_manager);
@@ -423,8 +423,10 @@ int current_round_index();
              begin_cell()
                .store_body_header(interest_manager::stats, cur_lt())
                .store_coins(borrowed)
+               .store_coins(expected)
                .store_coins(returned)
-               .store_signed_coins(profit), ;; duplication at this point?
+               .store_signed_coins(profit)
+               .store_coins(total_balance), ;; duplication at this point?
              msgflag::NON_BOUNCEABLE, sendmode::PAY_FEES_SEPARETELY);
     log_round_completion(round_id, borrowed, returned, profit);
 
@@ -490,7 +492,7 @@ int current_round_index();
 
 () send_mint_message(slice minter, int query_id, slice destination, int amount, builder payload, int notification_ton, int forward_ton, int total_ton, int mode) impure {
     builder mint_request = begin_cell()
-                .store_body_header(minter::mint, query_id)
+                .store_body_header(payout::mint, query_id)
                 .store_slice(destination)
                 .store_coins(amount) ;; max 124 bit
                 .store_coins(notification_ton)
