@@ -143,12 +143,15 @@ export class PayoutCollection implements Contract {
         });
     }
 
+    static startDistributionMessage(queryId: bigint = 0n) {
+        return beginCell().storeUint(0x1140a64f, 32).storeUint(queryId, 64) // op, queryId
+                                .endCell()
+    }
     async sendStartDistribution(provider: ContractProvider, via: Sender, value: bigint) {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: beginCell().storeUint(0x1140a64f, 32).storeUint(0, 64) // op, queryId
-                                .endCell()
+            body: PayoutCollection.startDistributionMessage()
         });
     }
 

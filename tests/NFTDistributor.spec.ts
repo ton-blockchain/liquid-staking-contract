@@ -294,6 +294,66 @@ describe('Distributor NFT Collection', () => {
                 exitCode: Errors.distribution_already_started
             });
         });
+        it("should start distribution and take a snapshot before chain end", async () => {
+            await loadSnapshot("minted");
+            const assetAmount = getRandomTon(100, 10000);
+            const collectionData = await collection.getCollectionData();
+            const collectionSmc = await blockchain.getContract(collection.address);
+            let res = collectionSmc.receiveMessage(internal({
+                from: deployer.address,
+                to: collection.address,
+                body: PayoutCollection.startDistributionMessage(),
+                value: assetAmount
+            }));
+            const distribution = await collection.getDistribution();
+            expect(distribution.active).toEqual(true);
+            expect(distribution.volume).toEqual(assetAmount - toNano("0.01"));
+            snapshots.set("distribution", blockchain.snapshot());
+        });
+        const burnNotification = (amount: bigint, from: Address, index: bigint) => {
+            return beginCell()
+                .storeUint(Op.burn_notification, 32)
+                .storeUint(0, 64)
+                .storeCoins(amount)
+                .storeAddress(from)
+                .storeUint(index, 64)
+               .endCell();
+        }
+        it('should accept burn messages only from NFTs', async () => {
+            await loadSnapshot("distribution");
+            const burnAmount = toNano(1000);
+            const from = randomAddress();
+            const fakeRes = await blockchain.sendMessage(internal({
+                from, to: collection.address,
+                body: burnNotification(burnAmount, deployer.address, 0n),
+                value: toNano('0.1')
+            }));
+            expect(fakeRes.transactions).toHaveTransaction({
+                from, to: collection.address,
+                aborted: true,
+                exitCode: Errors.unauthorized_burn_notification,
+                outMessagesCount: 1
+            });
+            const nftAddr = await collection.getNFTAddress(0n);
+            const normalRes = await blockchain.sendMessage(internal({
+                from: nftAddr,
+                to: collection.address,
+                body: burnNotification(burnAmount, deployer.address, 0n),
+                value: toNano('0.1')
+            }));
+            expect(normalRes.transactions).toHaveTransaction({
+                from: nftAddr,
+                to: collection.address,
+                op: Op.burn_notification,
+                success: true
+            });
+            expect(normalRes.transactions).toHaveTransaction({
+                from: collection.address,
+                to: deployer.address,
+                op: Op.distributed_asset,
+                success: true
+            });
+       });
     });
     describe("Distributing Jettons", () => {
         beforeAll(async () => {
@@ -342,6 +402,16 @@ describe('Distributor NFT Collection', () => {
                     }
                 });
             }
+        });
+        it("should not distribute again", async () => {
+            const mintAssetResult = await poolJetton.sendMint(deployer.getSender(), collection.address, toNano("1000"), toNano("0.1"), toNano("0.5"))
+            expect(mintAssetResult.transactions).toHaveTransaction({
+                from: jwalletAddr,
+                to: collection.address,
+                op: Op.transfer_notification,
+                success: false,
+                exitCode: Errors.distribution_already_started
+            });
         });
     });
 });
