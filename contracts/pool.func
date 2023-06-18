@@ -664,26 +664,6 @@ int current_round_index() {
     return round_id;
 }
 
-int get_round_index() method_id {
-    load_data();
-    return current_round_index();
-}
-
-slice get_current_round_deposit_payout() method_id {
-    load_data();
-    return deposit_payout;
-}
-
-slice get_current_round_withdrawal_payout() method_id {
-    load_data();
-    return withdrawal_payout;
-}
-
-(int, int, int, int, slice, int) get_finance_data() method_id {
-    load_data();
-    return (total_balance, supply, requested_for_deposit, requested_for_withdrawal, jetton_minter, interest_rate);
-}
-
 (slice) _get_controller_address(int controller_id, slice validator) inline {
     var (controller_address, _) = build_controller_address(controller_id, validator);
     return controller_address;
@@ -694,11 +674,6 @@ slice get_current_round_withdrawal_payout() method_id {
     return (expected - borrowed + total_balance, supply);
 }
 
-
-(int, int) get_projected_conversion_ratio () method_id {
-  load_data();
-  return _get_projected_conversion_ratio();
-}
 
 (slice) get_controller_address(int controller_id, slice validator) method_id {
     load_data();
@@ -714,20 +689,6 @@ slice get_current_round_withdrawal_payout() method_id {
     return parse_std_addr(controller_address);
 }
 
-(int, int, int, int, slice) get_pool_credit_params() method_id {
-    load_data();
-    return (min_loan_per_validator, max_loan_per_validator,
-            interest_rate, governance_fee,
-            interest_manager);
-}
-
-cell get_borrowers_dict(int prev?) method_id {
-    load_data();
-    var round_borrowers = prev? ? prev_round_borrowers
-                            : current_round_borrowers;
-    var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = round_borrowers;
-    return borrowers_dict;
-}
 
 (int, int) get_loan(int controller_id, slice validator_address, int prev?) method_id {
     load_data();
@@ -743,11 +704,6 @@ cell get_borrowers_dict(int prev?) method_id {
     int borrowed_amount = loan_data~load_coins();
     int accounted_interest = loan_data~load_coins();
     return (borrowed_amount, accounted_interest);
-}
-
-(int, int) get_min_max_loan_per_validator() method_id {
-    load_data();
-    return (min_loan_per_validator, max_loan_per_validator);
 }
 
 var get_pool_full_data() method_id {
@@ -775,6 +731,8 @@ var get_pool_full_data() method_id {
 
             controller_code,
             pool_jetton_wallet_code,
-            payout_minter_code
+            payout_minter_code,
+
+            (_get_projected_conversion_ratio())
     );
 }
