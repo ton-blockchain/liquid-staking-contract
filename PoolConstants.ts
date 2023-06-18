@@ -64,6 +64,19 @@ export abstract class Op {
         request_notification : 0xb1ebae06,
         stats : 0xc1344900,
     }
+    static readonly jetton = {
+        excesses: 0xd53276db,
+        transfer_notification: 0x7362d09c
+    }
+    static readonly payout = {
+        init: 0xf5aa8943,
+        mint: 0x1674b0a0,
+        start_distribution: 0x1140a64f,
+        distributed_asset: 0xdb3b8abd
+    }
+    static readonly nft = {
+        ownership_assigned: 0x05138d91
+    }
 }
 
 export abstract class ControllerState {

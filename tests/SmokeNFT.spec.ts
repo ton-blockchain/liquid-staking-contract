@@ -6,6 +6,7 @@ import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contrac
 import { JettonWallet as PoolJettonWallet } from '../wrappers/JettonWallet';
 import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
+import { Conf, Op } from "../PoolConstants";
 
 const loadConfig = (config:Cell) => {
           return config.beginParse().loadDictDirect(Dictionary.Keys.Int(32), Dictionary.Values.Cell());
@@ -132,7 +133,7 @@ describe('Pool', () => {
         });
         expect(depositResult.transactions).toHaveTransaction({
             on: deployer.address,
-            op: 0x05138d91, // ownership assigned
+            op: Op.nft.ownership_assigned, // ownership assigned
             success: true,
         });
 
@@ -140,11 +141,11 @@ describe('Pool', () => {
         const deposit2Result = await pool.sendDeposit(deployer.getSender(), toNano('10'));
         expect(deposit2Result.transactions).not.toHaveTransaction({
             on: depositPayout.address,
-            op: 0xf5aa8943, // init
+            op: Op.payout.init, // init
         });
         expect(deposit2Result.transactions).toHaveTransaction({
             on: deployer.address,
-            op: 0x05138d91, // transfer notification
+            op: Op.nft.ownership_assigned,
             success: true,
         });
     });
@@ -177,7 +178,7 @@ describe('Pool', () => {
         expect(depositResult.transactions).toHaveTransaction({
             on: poolJetton.address,
             success: true,
-            op:0x1674b0a0 //mint
+            op:Op.payout.mint //mint
         });
         let payoutJettonWalletAddress = await poolJetton.getWalletAddress(prevDepositPayout.address);
 
@@ -188,7 +189,7 @@ describe('Pool', () => {
         });
         expect(depositResult.transactions).toHaveTransaction({
             on: deployer.address,
-            op: 0x7362d09c, // transfer_notification
+            op: Op.jetton.transfer_notification, // transfer_notification
             success: true,
         });
     });
@@ -204,7 +205,7 @@ describe('Pool', () => {
 
         expect(burnResult.transactions).toHaveTransaction({
             on: deployer.address,
-            op: 0x05138d91, // excesses
+            op: Op.nft.ownership_assigned,
             success: true,
         });
 
@@ -224,14 +225,14 @@ describe('Pool', () => {
 
         expect(roundRotateResult.transactions).toHaveTransaction({
             from: pool.address,
-            op: 0x1140a64f, // start_distribution (new)
+            op: Op.payout.start_distribution, // start_distribution (new)
             success: true,
         });
 
         expect(roundRotateResult.transactions).toHaveTransaction({
             from: payout.address,
             on: deployer.address,
-            op: 0xdb3b8abd, // distribution
+            op: Op.payout.distributed_asset, // distribution
             success: true,
         });
 

@@ -39,7 +39,7 @@ const int controller::send_request_loan = 0x6335b11a;
 const int pool::request_loan = 0xe642c965;
 const int pool::loan_repayment = 0xdfdca27b;
 const int pool::deposit = 0x47d54391;
-const int pool::withdraw = 0xf34b091c;
+const int pool::withdraw = 0x319B0CDC;
 const int pool::withdrawal = 0x0a77535c;
 const int pool::touch = 0x4bc7c2df;
 

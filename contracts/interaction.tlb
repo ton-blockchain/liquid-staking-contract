@@ -48,7 +48,8 @@ loan_repayment#dfdca27b query_id:uint64 = InternalMsgBody;
 touch#4bc7c2df query_id:uint64 = InternalMsgBody;
 set_governance_fee#2aaa96a0 query_id:uint64 governance_fee:uint16 = InternalMsgBody;
 deposit#47d54391 query_id:uint64 = InternalMsgBody;
-withdraw#f34b091c query_id:uint64 jetton_amount:Coins from_address:MsgAddress response_address:MsgAddress wait_till_round_end:Bool fill_or_kill:Bool = InternalMsgBody;
+//opcode from jetton dao
+withdraw#319b0cdc query_id:uint64 jetton_amount:Coins from_address:MsgAddress response_address:MsgAddress wait_till_round_end:Bool fill_or_kill:Bool = InternalMsgBody;
 withdrawal#0a77535c query_id:uint64 = InternalMsgBody;
 
 set_roles#5e517f36 query_id:uint64 governor:(Maybe MsgAddress) interest_manager:(Maybe MsgAddress) halter:(Maybe MsgAddress) = InternalMsgBody;

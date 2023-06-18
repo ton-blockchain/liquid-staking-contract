@@ -2,6 +2,7 @@ import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, 
 
 import { JettonMinter as AwaitedJettonMinter} from '../contracts/awaited_minter/wrappers/JettonMinter';
 
+import { Conf, Op } from "../PoolConstants";
 
 export type PoolConfig = {
   pool_jetton: Address;
@@ -118,7 +119,7 @@ export class Pool implements Contract {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
             //TODO make proper init message
-                     .storeUint(0x65430987, 32) // op = touch
+                     .storeUint(Op.pool.touch, 32) // op = touch
                      .storeUint(0, 64) // query id
                   .endCell(),
         });
@@ -129,7 +130,7 @@ export class Pool implements Contract {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0xdf108122, 32) // op = pool::deploy_controller
+                     .storeUint(Op.pool.deploy_controller, 32) // op = pool::deploy_controller
                      .storeUint(0, 64) // query id
                      .storeUint(controllerId, 32) // controller_id
                   .endCell(),
@@ -141,7 +142,7 @@ export class Pool implements Contract {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0x47d54391, 32) // op = pool::deposit
+                     .storeUint(Op.pool.deposit, 32) // op = pool::deposit
                      .storeUint(1, 64) // query id
                   .endCell(),
         });
@@ -151,7 +152,7 @@ export class Pool implements Contract {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0x2233ff55, 32) // op = setDepositSettings
+                     .storeUint(Op.governor.set_deposit_settings, 32) // op = setDepositSettings
                      .storeUint(1, 64) // query id
                      .storeUint(Number(optimistic), 1)
                      .storeUint(Number(depositOpen), 1)
@@ -164,7 +165,7 @@ export class Pool implements Contract {
             value: toNano('0.1'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: beginCell()
-                     .storeUint(0x65430987, 32) // op = touch
+                     .storeUint(Op.pool.touch, 32) // op = touch
                      .storeUint(1, 64) // query id
                   .endCell(),
         });

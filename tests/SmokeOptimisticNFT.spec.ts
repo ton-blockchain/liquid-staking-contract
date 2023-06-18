@@ -6,6 +6,7 @@ import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contrac
 import { JettonWallet as PoolJettonWallet } from '../wrappers/JettonWallet';
 import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
+import { Conf, Op } from "../PoolConstants";
 
 const loadConfig = (config:Cell) => {
           return config.beginParse().loadDictDirect(Dictionary.Keys.Int(32), Dictionary.Values.Cell());
@@ -128,7 +129,7 @@ describe('Pool', () => {
         expect(depositResult.transactions).toHaveTransaction({
             from: myPoolJettonWallet.address,
             on: deployer.address,
-            op: 0x7362d09c, // excesses
+            op: Op.jetton.transfer_notification,
             success: true,
         });
     });
@@ -144,7 +145,7 @@ describe('Pool', () => {
         expect(burnResult.transactions).toHaveTransaction({
             from: pool.address,
             on: deployer.address,
-            op: 0x31777cdc, // excesses
+            op: Op.pool.withdrawal,
             success: true,
         });
 
