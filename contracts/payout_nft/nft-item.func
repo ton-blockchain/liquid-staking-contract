@@ -13,7 +13,7 @@
 
 
 const int ONE_COIN = 1000000000;
-const int min_tons_for_storage = 9 * ONE_COIN / 100; ;; 0.05 TON
+const int min_tons_for_storage = 9 * ONE_COIN / 100; ;; 0.09 TON
 const int burn_notification_amount = ONE_COIN / 100; ;; 0.01 TON
 
 ;;
