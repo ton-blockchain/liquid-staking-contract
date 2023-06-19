@@ -673,7 +673,7 @@ int current_round_index() {
 
 (int, int) _get_projected_conversion_ratio () inline {
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = prev_round_borrowers;
-    return (expected - borrowed + total_balance, supply);
+    return (expected - borrowed + total_balance - FINALIZE_ROUND_FEE, supply);
 }
 
 
