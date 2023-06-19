@@ -119,7 +119,7 @@ export function computeExternalMessageFees(msgPrices: MsgPrices, cell: Cell) {
     return computeFwdFees(msgPrices, BigInt(storageStats.cells), BigInt(storageStats.bits));
 }
 
-export function computeMessageForwardFees(msgPrices: MsgPrices, msg: Message) {
+export function computeMessageForwardFees(msgPrices: MsgPrices, msg: Message, bodyRef: boolean = false) {
     // let msg = loadMessageRelaxed(cell.beginParse());
     let storageStats: { bits: number, cells: number } = { bits: 0, cells: 0 };
 
@@ -132,7 +132,7 @@ export function computeMessageForwardFees(msgPrices: MsgPrices, msg: Message) {
     }
 
     // Body
-    let bc    = collectCellStats(msg.body, true);
+    let bc    = collectCellStats(msg.body, !bodyRef);
     storageStats.bits += bc.bits;
     storageStats.cells += bc.cells;
 
