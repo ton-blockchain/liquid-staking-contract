@@ -12,5 +12,5 @@ $# dup 1 < swap 2 > or ' usage if
 $1 $>GR =: amount
 $2 "withdraw_request.boc" replace-if-null =: file-base
 
-<b 0xcefaaefd 32 u, now 64 u, amount Gram, b> 2 boc+>B 
+<b 0x8efed779 32 u, now 64 u, amount Gram, b> 2 boc+>B 
 file-base B>file
