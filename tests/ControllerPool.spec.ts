@@ -8,6 +8,7 @@ import { getElectionsConf, getVset, loadConfig, packValidatorsSet } from "../wra
 import '@ton-community/test-utils';
 import { randomAddress } from "@ton-community/test-utils";
 import { compile } from '@ton-community/blueprint';
+import { Conf, Op } from "../PoolConstants";
 import { findCommon, computedGeneric } from '../utils';
 
 const errors = {
@@ -200,7 +201,7 @@ describe('Controller & Pool', () => {
         const loanRequestControllerIntoPool: (reqBody: Cell, controllerId: number, valik: Address) => Cell =
             (reqBody, controllerId, valik) => {
                     return beginCell()
-                    .storeUint(0x7ccd46e9, 32) // op pool::request_loan
+                    .storeUint(Op.pool.request_loan, 32) // op pool::request_loan
                     // skip part with requesting to send a request to pool from controller
                     // send request to pool directly
                     .storeSlice(
@@ -448,7 +449,7 @@ describe('Controller & Pool', () => {
             expect(newRoundLoanResult.transactions).toHaveTransaction({
                 from: pool.address,
                 to: poolConfig.interest_manager,
-                op: 0x7776, // interest_manager::stats
+                op: Op.interestManager.stats, // interest_manager::stats
                 body: (x: Cell) => {
                     let s = x.beginParse();
                     s.loadUint(32 + 64); // op, query id
@@ -488,7 +489,7 @@ describe('Controller & Pool', () => {
             expect(regularRequestResult.transactions).not.toHaveTransaction({
                 from: pool.address,
                 to: poolConfig.interest_manager,
-                op: 0x7776, // interest_manager::stats
+                op: Op.interestManager.stats, // interest_manager::stats
             });
             const currLoan1 = await pool.getLoan(0, deployer.address);
             const currLoan2 = await pool.getLoan(1, deployer.address);
@@ -535,7 +536,7 @@ describe('Controller & Pool', () => {
             expect(repayLoanResult.transactions).toHaveTransaction({
                 from: pool.address,
                 to: poolConfig.interest_manager,
-                op: 0x7776, // interest_manager::stats
+                op: Op.interestManager.stats, // interest_manager::stats
             });
             let newRoundId = await pool.getRoundId();
             expect(newRoundId).toEqual(roundId + 1);

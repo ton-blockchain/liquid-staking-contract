@@ -33,16 +33,13 @@ export const Op = {
     report_static_data: 0x8b771735,
     get_royalty_params: 0x693d3950,
     report_royalty_params: 0xa8cb00ad,
-
-    burn: 0x8a8a8a8a,
-    burn_notification: 0x7a8a8a8a,
-    init_nft: 0x1145,
+    burn: 0xf127fe4e,
+    burn_notification: 0xed58b0b2,
+    init_nft: 0x132f9a45,
     init_collection: 0xf5aa8943,
-
     distributed_asset: 0xdb3b8abd,
     start_distribution: 0x1140a64f,
     transfer_notification: 0x7362d09c,
-
     mint_nft: 0x1674b0a0
 };
 

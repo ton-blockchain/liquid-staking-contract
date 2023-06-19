@@ -9,6 +9,7 @@ import { JettonWallet as WithdrawalWallet} from '../contracts/awaited_minter/wra
 import { setConsigliere } from '../wrappers/PayoutMinter.compile';
 import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
+import { Conf, Op } from "../PoolConstants";
 
 const loadConfig = (config:Cell) => {
           return config.beginParse().loadDictDirect(Dictionary.Keys.Int(32), Dictionary.Values.Cell());
@@ -148,12 +149,12 @@ describe('Pool', () => {
         expect(depositResult.transactions).toHaveTransaction({
             from: myDepositWallet,
             on: deployer.address,
-            op: 0x7362d09c, // transfer notification
+            op: Op.jetton.transfer_notification, // transfer notification
             success: true,
         });
         expect(depositResult.transactions).toHaveTransaction({
             on: awaitedJettonMinter.address,
-            op: 0xf5aa8943, // init
+            op: Op.payout.init, // init
             deploy: true,
             success: true,
         });
@@ -161,12 +162,12 @@ describe('Pool', () => {
         const deposit2Result = await pool.sendDeposit(deployer.getSender(), toNano('10'));
         expect(deposit2Result.transactions).not.toHaveTransaction({
             on: awaitedJettonMinter.address,
-            op: 0xf5aa8943, // init
+            op: Op.payout.init, // init
         });
         expect(deposit2Result.transactions).toHaveTransaction({
             from: myDepositWallet,
             on: deployer.address,
-            op: 0x7362d09c, // transfer notification
+            op: Op.jetton.transfer_notification, // transfer notification
             success: true,
         });
     });
@@ -197,19 +198,19 @@ describe('Pool', () => {
         expect(depositResult.transactions).toHaveTransaction({
             from: myDepositWallet,
             on: deployer.address,
-            op: 0x7362d09c, // transfer notification
+            op: Op.jetton.transfer_notification, // transfer notification
             success: true,
         });
         expect(depositResult.transactions).toHaveTransaction({
             on: awaitedJettonMinter.address,
-            op: 0xf5aa8943, // init
+            op: Op.payout.init, // init
             deploy: true,
             success: true,
         });
         expect(depositResult.transactions).toHaveTransaction({
             on: poolJetton.address,
             success: true,
-            op:0x1674b0a0 //mint
+            op: Op.payout.mint //mint
         });
         let payoutJettonWalletAddress = await poolJetton.getWalletAddress(prevAwaitedJettonMinter.address);
 
@@ -231,7 +232,7 @@ describe('Pool', () => {
         expect(burnResult.transactions).toHaveTransaction({
             from: myPoolJettonWallet.address,
             on: deployer.address,
-            op: 0xd53276db, // excesses
+            op: Op.jetton.excesses,
             success: true,
         });
 
@@ -243,7 +244,7 @@ describe('Pool', () => {
         let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
         const jettonAmount = await myPoolJettonWallet.getJettonBalance();
 
-        const burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.0'), jettonAmount, deployer.address, false, false);
+        const burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.05'), jettonAmount, deployer.address, false, false);
 
         const withdrawalMinter = blockchain.openContract(await pool.getWithdrawalMinter());
         const myWithdrawWalletAddress = await withdrawalMinter.getWalletAddress(deployer.address);
@@ -251,7 +252,7 @@ describe('Pool', () => {
         expect(burnResult.transactions).toHaveTransaction({
             from: myWithdrawWalletAddress,
             on: deployer.address,
-            op: 0x7362d09c, // excesses
+            op: Op.jetton.transfer_notification,
             success: true,
         });
 
@@ -274,7 +275,7 @@ describe('Pool', () => {
         expect(roundRotateResult.transactions).toHaveTransaction({
             from: pool.address,
             on: awaitedTonMinter.address,
-            op: 0x1140a64f, // start_distribution
+            op: Op.payout.start_distribution, // start_distribution
             success: true,
         });
 
@@ -285,7 +286,7 @@ describe('Pool', () => {
         expect(burnResult.transactions).toHaveTransaction({
             //from: myWithdrawalWallet.address,
             on: deployer.address,
-            op: 0xdb3b8abd, // distribution
+            op: Op.payout.distributed_asset, // distribution
             success: true,
         });
 
@@ -315,7 +316,7 @@ describe('Pool', () => {
                          from: pool.address,
                          to: controller.address,
                          success: true,
-                         op:0x1690c604
+                         op: Op.controller.credit
         });
 
     });
@@ -340,7 +341,7 @@ describe('Pool', () => {
         expect(controllerDeployResult.transactions).toHaveTransaction({
                          from: controller.address,
                          to: pool.address,
-                         op:0xdfdca27b,
+                         op:Op.pool.loan_repayment,
                          success: true,
         });
 

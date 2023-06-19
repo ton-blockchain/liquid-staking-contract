@@ -14,5 +14,5 @@ $2 $>GR =: max_loan
 $3 parse-int =: max_interest
 $4 "loan_request.boc" replace-if-null =: file-base
 
-<b 0x452f7112 32 u, now 64 u, min_loan Gram, max_loan Gram, max_interest 16 u, b> 2 boc+>B 
+<b 0x6335b11a 32 u, now 64 u, min_loan Gram, max_loan Gram, max_interest 16 u, b> 2 boc+>B 
 file-base B>file

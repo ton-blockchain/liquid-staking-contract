@@ -21,45 +21,48 @@ const int elector::recover_stake_ok = 0xf96f7324;
 {- ========  Validator Controller OPCODES ======== -}
 ;; IN
 const int controller::top_up = 0xd372158c;
-const int controller::update_validator_hash = 0xf0fd2250; ;; TODO
+const int controller::update_validator_hash = 0xf0fd2250;
 const int controller::approve = 0x7b4b42e6;
 const int controller::disapprove = 0xe8a0abfe;
 const int controller::recover_stake = 0xeb373a05;
 const int controller::new_stake = elector::new_stake;
 const int controller::credit = 0x1690c604;
-const int controller::withdraw_validator = 0xcefaaefd;
+const int controller::withdraw_validator = 0x8efed779;
 const int controller::return_unused_loan = 0xed7378a6;
 
 ;; OUT
-const int controller::withdrawal = 0x8; ;;TODO
-const int controller::send_request_loan = 0x452f7112;
+const int controller::validator_withdrawal = 0x30026327;
+const int controller::send_request_loan = 0x6335b11a;
 
 
 {- ======== Validator Pool OPCODES ========== -}
-const int pool::request_loan = 0x7ccd46e9;
+const int pool::request_loan = 0xe642c965;
 const int pool::loan_repayment = 0xdfdca27b;
 const int pool::deposit = 0x47d54391;
-const int pool::withdraw = 0x319b0cdc; ;;TODO
-const int pool::withdrawal = 0x31777cdc; ;;TODO
-const int pool::touch = 0x65430987; ;;TODO
+const int pool::withdraw = 0x319B0CDC;
+const int pool::withdrawal = 0x0a77535c;
+const int pool::touch = 0x4bc7c2df;
 
-const int pool::deploy_controller = 0xdf108122;
+const int pool::deploy_controller = 0xb27edcad;
 
 
 const int sudo::send_message = 0x270695fb;
 const int sudo::upgrade = 0x96e7f528;
 const int governor::set_sudoer = 0x79e7c016;
-const int governor::set_roles = 0x7a756db8; ;; TODO
-const int governor::unhalt = 0x7247e7a5; ;;TODO
-const int governor::operation_fee = 0x93a; ;; TODO
-const int governor::set_deposit_settings = 0x2233ff55; ;;TODO
-const int governor::return_available_funds = 0x67855098; ;;TODO
+const int governor::set_governance_fee = 0x2aaa96a0;
+const int governor::set_roles = 0x5e517f36;
+const int governor::unhalt = 0x7247e7a5;
+const int governor::set_deposit_settings = 0x9bf5561c;
+const int governor::return_available_funds = 0x55c26cd5;
+const int governor::prepare_governance_migration = 0x9971881c;
 
 const int halter::halt = 0x139a1b4e;
 
-const int interest_manager::request_notification = 0x1234; ;; TODO
-const int interest_manager::stats = 0x7776; ;; TODO
-const int interest_manager::set_interest = 0x448866; ;;TODO
+
+const int interest_manager::operation_fee = 0x54d37487;
+const int interest_manager::request_notification = 0xb1ebae06;
+const int interest_manager::stats = 0xc1344900;
+const int interest_manager::set_interest = 0xc9f04485;
 
 {- ========== Jetton OPCODES ========== -}
 const int jetton::transfer = 0xf8a7ea5;
@@ -75,8 +78,8 @@ const int jetton::provide_wallet_address = 0x2c76b973;
 const int jetton::take_wallet_address = 0xd1735400;
 const int jetton::change_content = 0x5773d1f5;
 
-const int minter::mint = 0x1674b0a0;
-const int minter::burn_notification = pool::withdraw;
+const int payout::mint = 0x1674b0a0;
+const int payout::burn_notification = pool::withdraw;
 const int payout::init = 0xf5aa8943;
 
 

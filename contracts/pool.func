@@ -42,6 +42,7 @@ global int requested_for_withdrawal; ;; in jettons
 global slice sudoer;            ;; hav right to send any message on behalf of any contract
 global int sudoer_set_at;
 global slice governor;          ;; set roles, unhalt and get reward
+global int governor_update_after;
 global slice interest_manager;  ;; get round stats and update interest
 global slice halter;            ;; halts operation
 global slice approver;          ;; approves controllers to ask for credit
@@ -137,7 +138,7 @@ int current_round_index();
         slice from_address = in_msg_body~load_msg_addr();
         ;; response will be ignored
         slice response_address = in_msg_body~load_msg_addr();
-        int request_immediate_withdrawal = ~ in_msg_body~load_int(1);
+        int request_immediate_withdrawal_if_possible = ~ in_msg_body~load_int(1);
         int fill_or_kill = in_msg_body~load_int(1);
         ;; after that point we should not revert because jettons should not be lost
         try {
@@ -148,7 +149,7 @@ int current_round_index();
             int available_funds = balance - msg_value - MIN_TONS_FOR_STORAGE;
 
             if(optimistic_deposit_withdrawals &
-                    request_immediate_withdrawal &
+                    request_immediate_withdrawal_if_possible &
                     (state == state::NORMAL) &
                     (balance - msg_value - MIN_TONS_FOR_STORAGE > approximate_amount)) {
                 total_balance -= approximate_amount;
@@ -168,7 +169,10 @@ int current_round_index();
                 requested_for_withdrawal += jetton_amount;
             }
         } catch (exc_arg, exc_num) {
-            request_to_mint_pool_jettons(sender_address, jetton_amount, query_id, begin_cell(), true);
+            ;; note that sent_during_rotation is null because
+            ;; effect of update_round is reverted in catch
+            raw_reserve(balance - msg_value, 0);
+            request_to_mint_pool_jettons(from_address, jetton_amount, query_id, begin_cell(), true);
         }
         
     {- ========== Governance operations ========== -}
@@ -179,17 +183,18 @@ int current_round_index();
     } elseif (op == governor::set_sudoer) {
                 process_set_sudo_request(sender_address, in_msg_body);
     } elseif (op == governor::unhalt) {
-                process_unhalt_request(sender_address);
+        process_unhalt_request(sender_address);
+    } elseif (op == governor::prepare_governance_migration) {
+        process_prepare_governance_migration(sender_address, in_msg_body);
     } elseif (op == governor::set_roles) {
                 assert_sender!(sender_address, governor);
                 if(in_msg_body~load_int(1)) {
                     governor = in_msg_body~load_msg_addr();
+                    throw_unless(error::governor_update_not_matured, governor_update_after > now());
+                    governor_update_after = 0xffffffffffff;
                 }
                 if(in_msg_body~load_int(1)) {
                     interest_manager = in_msg_body~load_msg_addr();
-                }
-                if(in_msg_body.slice_refs()) {
-                    in_msg_body = in_msg_body~load_ref().begin_parse();
                 }
                 if(in_msg_body~load_int(1)) {
                     halter = in_msg_body~load_msg_addr();
@@ -198,6 +203,9 @@ int current_round_index();
                 assert_sender!(sender_address, governor);
                 optimistic_deposit_withdrawals = in_msg_body~load_int(1);
                 deposits_open?  = in_msg_body~load_int(1);
+    } elseif(op == governor::set_governance_fee) {
+                assert_sender!(sender_address, governor);
+                governance_fee = in_msg_body~load_uint(16);
     } elseif (op == interest_manager::set_interest) {
                 assert_state!(state::NORMAL);
                 assert_sender!(sender_address, interest_manager);
@@ -354,7 +362,7 @@ int current_round_index();
 
     throw_unless(error::credit_book_too_deep, cell_depth(borrowers_dict) < MAX_LOAN_DICT_DEPTH);
 
-    return ([borrowers_dict, round_id, active_borrowers, expected, borrowed, returned, profit], already_borrowed);
+    return ([borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit], already_borrowed);
 }
 
 ([cell, int, int, int, int, int, int], (int, int)) ~close_loan([cell, int, int, int, int, int, int] borrowers_data, slice borrower, int amount) {
@@ -406,7 +414,7 @@ int current_round_index();
     if (fee > SERVICE_NOTIFICATION_AMOUNT) { ;; otherwise it is less than msg cost
       sent_during_rotation += fee;
       send_msg_builder(governor, fee,
-               begin_cell().store_body_header(governor::operation_fee, cur_lt()),
+               begin_cell().store_body_header(interest_manager::operation_fee, cur_lt()),
                msgflag::NON_BOUNCEABLE, sendmode::REGULAR);
       
     }
@@ -415,8 +423,10 @@ int current_round_index();
              begin_cell()
                .store_body_header(interest_manager::stats, cur_lt())
                .store_coins(borrowed)
+               .store_coins(expected)
                .store_coins(returned)
-               .store_signed_coins(profit), ;; duplication at this point?
+               .store_signed_coins(profit)
+               .store_coins(total_balance), ;; duplication at this point?
              msgflag::NON_BOUNCEABLE, sendmode::PAY_FEES_SEPARETELY);
     log_round_completion(round_id, borrowed, returned, profit);
 
@@ -482,7 +492,7 @@ int current_round_index();
 
 () send_mint_message(slice minter, int query_id, slice destination, int amount, builder payload, int notification_ton, int forward_ton, int total_ton, int mode) impure {
     builder mint_request = begin_cell()
-                .store_body_header(minter::mint, query_id)
+                .store_body_header(payout::mint, query_id)
                 .store_slice(destination)
                 .store_coins(amount) ;; max 124 bit
                 .store_coins(notification_ton)
@@ -656,26 +666,6 @@ int current_round_index() {
     return round_id;
 }
 
-int get_round_index() method_id {
-    load_data();
-    return current_round_index();
-}
-
-slice get_current_round_deposit_payout() method_id {
-    load_data();
-    return deposit_payout;
-}
-
-slice get_current_round_withdrawal_payout() method_id {
-    load_data();
-    return withdrawal_payout;
-}
-
-(int, int, int, int, slice, int) get_finance_data() method_id {
-    load_data();
-    return (total_balance, supply, requested_for_deposit, requested_for_withdrawal, jetton_minter, interest_rate);
-}
-
 (slice) _get_controller_address(int controller_id, slice validator) inline {
     var (controller_address, _) = build_controller_address(controller_id, validator);
     return controller_address;
@@ -683,14 +673,9 @@ slice get_current_round_withdrawal_payout() method_id {
 
 (int, int) _get_projected_conversion_ratio () inline {
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = prev_round_borrowers;
-    return (expected - borrowed + total_balance, supply);
+    return (expected - borrowed + total_balance - FINALIZE_ROUND_FEE, supply);
 }
 
-
-(int, int) get_projected_conversion_ratio () method_id {
-  load_data();
-  return _get_projected_conversion_ratio();
-}
 
 (slice) get_controller_address(int controller_id, slice validator) method_id {
     load_data();
@@ -706,20 +691,6 @@ slice get_current_round_withdrawal_payout() method_id {
     return parse_std_addr(controller_address);
 }
 
-(int, int, int, int, slice) get_pool_credit_params() method_id {
-    load_data();
-    return (min_loan_per_validator, max_loan_per_validator,
-            interest_rate, governance_fee,
-            interest_manager);
-}
-
-cell get_borrowers_dict(int prev?) method_id {
-    load_data();
-    var round_borrowers = prev? ? prev_round_borrowers
-                            : current_round_borrowers;
-    var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = round_borrowers;
-    return borrowers_dict;
-}
 
 (int, int) get_loan(int controller_id, slice validator_address, int prev?) method_id {
     load_data();
@@ -737,7 +708,33 @@ cell get_borrowers_dict(int prev?) method_id {
     return (borrowed_amount, accounted_interest);
 }
 
-(int, int) get_min_max_loan_per_validator() method_id {
+var get_pool_full_data() method_id {
     load_data();
-    return (min_loan_per_validator, max_loan_per_validator);
+    return (state, halted?,
+            total_balance,
+            interest_rate,
+            optimistic_deposit_withdrawals, deposits_open?,
+            saved_validator_set_hash,
+
+            prev_round_borrowers, current_round_borrowers,
+            min_loan_per_validator, max_loan_per_validator,
+            governance_fee,
+
+            jetton_minter, supply,
+
+            deposit_payout, requested_for_deposit,
+            withdrawal_payout, requested_for_withdrawal,
+
+            sudoer, sudoer_set_at,
+            governor,
+            interest_manager,
+            halter,
+            approver,
+
+            controller_code,
+            pool_jetton_wallet_code,
+            payout_minter_code,
+
+            (_get_projected_conversion_ratio())
+    );
 }

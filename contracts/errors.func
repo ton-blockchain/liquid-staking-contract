@@ -5,6 +5,8 @@ const int error::wrong_state = 0x9284;
 const int error::halted = 0x9285;
 
 const int sudoer::quarantine = 0xa000;
+const int error::governor_update_too_soon = 0xa001;
+const int error::governor_update_not_matured = 0xa003;
 
 const int error::interest_too_low = 0xf100;
 const int error::contradicting_borrowing_params = 0xf101;
@@ -49,4 +51,3 @@ const int error::too_high_loan_request_amount = 0xfa04;
 
 const int error::no_credit = 0xfb00;
 const int error::too_early_loan_return = 0xfb01;
-

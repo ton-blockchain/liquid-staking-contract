@@ -20,9 +20,9 @@ export abstract class Op {
         disapprove : 0xe8a0abfe,
         recover_stake : 0xeb373a05,
         credit : 0x1690c604,
-        withdraw_validator : 0xcefaaefd,
+        withdraw_validator : 0x8efed779,
         return_unused_loan : 0xed7378a6,
-        send_request_loan: 0x452f7112,
+        send_request_loan: 0x6335b11a,
         newStake: 0x4e73744b
     }
     static readonly elector = {
@@ -34,20 +34,22 @@ export abstract class Op {
         recover_stake_error:0xfffffffe
     }
     static readonly pool = {
-        request_loan   : 0x7ccd46e9,
+        request_loan   : 0xe642c965,
         loan_repayment : 0xdfdca27b,
         deposit        : 0x47d54391,
-        withdraw       : 0x319b0cdc, //TODO
-        withdrawal     : 0x31777cdc, //TODO
-        deploy_controller : 0xdf108122
+        withdraw       : 0xf34b091c,
+        withdrawal     : 0x0a77535c,
+        deploy_controller : 0xb27edcad,
+        touch: 0x4bc7c2df
     }
     static readonly governor = {
         set_sudoer : 0x79e7c016,
-        set_roles  : 0x7a756db8, // TODO
+        prepare_governance_migration: 0x9971881c,
+        set_roles  : 0x5e517f36,
         unhalt  : 0x7247e7a5,
-        operation_fee : 0x93a, // TODO
-        return_available_funds: 0x67855098,
-        set_deposit_settings : 0x2233ff55
+        return_available_funds: 0x55c26cd5,
+        set_deposit_settings : 0x9bf5561c,
+        set_governance_fee: 0x2aaa96a0
     }
     static readonly sudo = {
         send_message : 0x270695fb,
@@ -55,6 +57,25 @@ export abstract class Op {
     }
     static readonly halter = {
         halt : 0x139a1b4e
+    }
+    static readonly interestManager = {
+        set_interest : 0xc9f04485,
+        operation_fee : 0x54d37487,
+        request_notification : 0xb1ebae06,
+        stats : 0xc1344900,
+    }
+    static readonly jetton = {
+        excesses: 0xd53276db,
+        transfer_notification: 0x7362d09c
+    }
+    static readonly payout = {
+        init: 0xf5aa8943,
+        mint: 0x1674b0a0,
+        start_distribution: 0x1140a64f,
+        distributed_asset: 0xdb3b8abd
+    }
+    static readonly nft = {
+        ownership_assigned: 0x05138d91
     }
 }
 

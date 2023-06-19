@@ -6,6 +6,7 @@ import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contrac
 import { JettonWallet as PoolJettonWallet } from '../wrappers/JettonWallet';
 import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
+import { Conf, Op } from "../PoolConstants";
 
 const loadConfig = (config:Cell) => {
           return config.beginParse().loadDictDirect(Dictionary.Keys.Int(32), Dictionary.Values.Cell());
@@ -128,7 +129,7 @@ describe('Pool', () => {
         expect(depositResult.transactions).toHaveTransaction({
             from: myPoolJettonWallet.address,
             on: deployer.address,
-            op: 0x7362d09c, // excesses
+            op: Op.jetton.transfer_notification,
             success: true,
         });
     });
@@ -139,17 +140,77 @@ describe('Pool', () => {
         let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
         const jettonAmount = await myPoolJettonWallet.getJettonBalance();
 
-        const burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.0'), jettonAmount, deployer.address, false, false);
-
+        const burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.05'), jettonAmount, deployer.address, false, false);
 
         expect(burnResult.transactions).toHaveTransaction({
             from: pool.address,
             on: deployer.address,
-            op: 0x31777cdc, // excesses
+            op: Op.pool.withdrawal,
             success: true,
         });
 
     });
 
+
+    it('should withdraw with different params', async () => {
+        //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
+         const depositResult = await pool.sendDeposit(deployer.getSender(), toNano('10'));
+         let myPoolJettonWalletAddress = await poolJetton.getWalletAddress(deployer.address);
+         let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
+
+         let oldJettonAmount = await myPoolJettonWallet.getJettonBalance();
+         let withdrawalAmount = toNano('1.0');
+         let oldBalance = (await blockchain.getContract(deployer.address)).balance;
+
+         // immediate withdrawal, fill or kill = false
+         let burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.05'), withdrawalAmount, deployer.address, false, false);
+         expect(burnResult.transactions).toHaveTransaction({
+            on: pool.address,
+            success: true,
+         });
+         expect((await blockchain.getContract(deployer.address)).balance - oldBalance > toNano('0.9')).toBeTruthy();
+         expect(oldJettonAmount - await myPoolJettonWallet.getJettonBalance()).toEqual(withdrawalAmount);
+
+         oldJettonAmount = await myPoolJettonWallet.getJettonBalance();
+         oldBalance = (await blockchain.getContract(deployer.address)).balance;
+
+         // immediate withdrawal, fill or kill = true
+         burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.05'), withdrawalAmount, deployer.address, false, true);
+         expect(burnResult.transactions).toHaveTransaction({
+            on: pool.address,
+            success: true,
+         });
+         expect((await blockchain.getContract(deployer.address)).balance - oldBalance > toNano('0.9')).toBeTruthy();
+         expect(oldJettonAmount - await myPoolJettonWallet.getJettonBalance()).toEqual(withdrawalAmount);
+
+         oldJettonAmount = await myPoolJettonWallet.getJettonBalance();
+         oldBalance = (await blockchain.getContract(deployer.address)).balance;
+
+         // wait till the end withdrawal, fill or kill = false
+         burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.05'), withdrawalAmount, deployer.address, true, false);
+         expect(burnResult.transactions).toHaveTransaction({
+            on: pool.address,
+            success: true,
+         });
+         expect((await blockchain.getContract(deployer.address)).balance - oldBalance < 0n).toBeTruthy();
+         expect(oldJettonAmount - await myPoolJettonWallet.getJettonBalance()).toEqual(withdrawalAmount);
+
+         oldJettonAmount = await myPoolJettonWallet.getJettonBalance();
+         oldBalance = (await blockchain.getContract(deployer.address)).balance;
+
+         // wait till the end withdrawal, fill or kill = true
+         // contradicting options, burn should be reverted
+         burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.05'), withdrawalAmount, deployer.address, true, true);
+         expect(burnResult.transactions).toHaveTransaction({
+            on: pool.address,
+            success: true
+         });
+         expect((await blockchain.getContract(deployer.address)).balance - oldBalance < 0n).toBeTruthy();
+         expect(oldJettonAmount - await myPoolJettonWallet.getJettonBalance()).toEqual(0n);
+
+         oldJettonAmount = await myPoolJettonWallet.getJettonBalance();
+         oldBalance = (await blockchain.getContract(deployer.address)).balance;
+
+    });
 
 });

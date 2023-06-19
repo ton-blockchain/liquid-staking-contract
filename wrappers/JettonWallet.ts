@@ -12,10 +12,10 @@ export class JettonWallet extends BasicJettonWallet {
     async sendBurnWithParams(provider: ContractProvider, via: Sender, value: bigint,
                           jetton_amount: bigint,
                           responseAddress:Address,
-                          requestImmediateWithdrawal:boolean,
+                          waitTillRoundEnd:boolean, // opposite of request_immediate_withdrawal
                           fillOrKill:boolean) {
         let customPayload = beginCell()
-           .storeUint(Number(requestImmediateWithdrawal), 1)
+           .storeUint(Number(waitTillRoundEnd), 1)
            .storeUint(Number(fillOrKill), 1).endCell();
         return this.sendBurn(provider, via, value, jetton_amount, responseAddress,
                              customPayload);

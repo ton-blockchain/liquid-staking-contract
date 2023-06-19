@@ -1,0 +1,80 @@
+bool_false$0 = Bool;
+bool_true$1 = Bool;
+
+nothing$0 {X:Type} = Maybe X;
+just$1 {X:Type} value:X = Maybe X;
+
+addr_none$00 = MsgAddressExt;
+addr_extern$01 len:(## 9) external_address:(bits len) 
+             = MsgAddressExt;
+anycast_info$_ depth:(#<= 30) { depth >= 1 }
+   rewrite_pfx:(bits depth) = Anycast;
+addr_std$10 anycast:(Maybe Anycast) 
+   workchain_id:int8 address:bits256  = MsgAddressInt;
+addr_var$11 anycast:(Maybe Anycast) addr_len:(## 9) 
+   workchain_id:int32 address:(bits addr_len) = MsgAddressInt;
+_ _:MsgAddressInt = MsgAddress;
+_ _:MsgAddressExt = MsgAddress;
+
+var_uint$_ {n:#} len:(#< n) value:(uint (len * 8))
+         = VarUInteger n;
+var_int$_ {n:#} len:(#< n) value:(int (len * 8)) 
+        = VarInteger n;
+nanograms$_ amount:(VarUInteger 16) = Grams;
+
+_ grams:Grams = Coins;
+
+// Messages to controller
+
+credit#1690c604 query_id:uint64 amount:Coins = InternalMsgBody;
+
+approve#7b4b42e6 query_id:uint64 = InternalMsgBody;
+disapprove#e8a0abfe query_id:uint64 = InternalMsgBody;
+
+recover_stake#eb373a05 query_id:uint64 = InternalMsgBody;
+update_validator_hash#f0fd2250 query_id:uint64 = InternalMsgBody;
+
+withdraw_validator#8efed779 query_id:uint64 amount:Coins = InternalMsgBody;
+validator_withdrawal#30026327 query_id:uint64 amount:Coins = InternalMsgBody;
+new_stake#e0505d0e query_id:uint64 value:Coins validator_pubkey:uint256 stake_at:uint32 max_factor:uint32 adnl_addr:uint256 signature:^(bits 512) = InternalMsgBody;
+return_available_funds#55c26cd5 query_id:uint64 = InternalMsgBody;
+
+send_request_loan#6335b11a query_id:uint64  min_loan:Coins max_loan:Coins max_interest:uint16 = InternalMsgBody;
+return_unused_loan#ed7378a6 query_id:uint64 = InternalMsgBody;
+
+// Messages to pool
+request_loan#e642c965 query_id:uint64 min_loan:Coins max_loan:Coins max_interest:uint16 controller_id:uint32 validator:MsgAddress = InternalMsgBody;
+loan_repayment#dfdca27b query_id:uint64 = InternalMsgBody;
+touch#4bc7c2df query_id:uint64 = InternalMsgBody;
+set_governance_fee#2aaa96a0 query_id:uint64 governance_fee:uint16 = InternalMsgBody;
+deposit#47d54391 query_id:uint64 = InternalMsgBody;
+//opcode from jetton dao
+withdraw#319b0cdc query_id:uint64 jetton_amount:Coins from_address:MsgAddress response_address:MsgAddress wait_till_round_end:Bool fill_or_kill:Bool = InternalMsgBody;
+withdrawal#0a77535c query_id:uint64 = InternalMsgBody;
+
+set_roles#5e517f36 query_id:uint64 governor:(Maybe MsgAddress) interest_manager:(Maybe MsgAddress) halter:(Maybe MsgAddress) = InternalMsgBody;
+
+set_deposit_settings#9bf5561c query_id:uint64 optimistic_deposit_withdrawals:Bool deposits_open:Bool = InternalMsgBody;
+deploy_controller#b27edcad controller_id:uint32 query_id:uint64 = InternalMsgBody;
+
+prepare_governance_migration#9971881c query_id:uint64 governor_update_after:uint48 = InternalMsgBody;
+
+// To pool and controller
+send_message#270695fb query_id:uint64 mode:uint8 msg:^Cell = InternalMsgBody;
+upgrade#96e7f528 query_id:uint64 data:(Maybe ^Cell) code:(Maybe ^Cell) after_upgrade:(Maybe ^Cell) = InternalMsgBody;
+set_sudoer#79e7c016 query_id:uint64 sudoer:MsgAddress = InternalMsgBody;
+unhalt#7247e7a5 query_id:uint64 = InternalMsgBody;
+halt#139a1b4e query_id:uint64 = InternalMsgBody;
+top_up#d372158c query_id:uint64 = InternalMsgBody;
+
+// Interest manager
+set_interest#c9f04485 query_id:uint64 interest_rate:uint16 = InternalMsgBody;
+operation_fee#54d37487 query_id:uint64 = InternalMsgBody;
+request_notification#b1ebae06 query_id:uint64 min_loan:Coins max_loan:Coins max_interest:uint16 = InternalMsgBody;
+stats#c1344900 query_id:uint64 borrowed:Coins expected:Coins returned:Coins profit_sign:int1 profit:Coins total_balance:Coins = InternalMsgBody;
+
+
+// NFTs
+burn#f127fe4e query_id:uint64 = InternalMsgBody;
+burn_notification#ed58b0b2 query_id:uint64 amount:Coins owner:MsgAddress index:uint64 = InternalMsgBody;
+init_nft#132f9a45 query_id:uint64 owner:MsgAddress amount:Coins prev:MsgAddress next:MsgAddress = InternalMsgBody;

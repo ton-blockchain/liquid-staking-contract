@@ -9,6 +9,7 @@ import { JettonWallet as WithdrawalWallet} from '../contracts/awaited_minter/wra
 import { setConsigliere } from '../wrappers/PayoutMinter.compile';
 import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
+import { Conf, Op } from "../PoolConstants";
 
 const loadConfig = (config:Cell) => {
           return config.beginParse().loadDictDirect(Dictionary.Keys.Int(32), Dictionary.Values.Cell());
@@ -136,7 +137,7 @@ describe('Pool', () => {
         expect(depositResult.transactions).toHaveTransaction({
             from: myPoolJettonWallet.address,
             on: deployer.address,
-            op: 0x7362d09c, // excesses
+            op: Op.jetton.transfer_notification,
             success: true,
         });
     });
@@ -147,13 +148,13 @@ describe('Pool', () => {
         let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
         const jettonAmount = await myPoolJettonWallet.getJettonBalance();
 
-        const burnResult = await myPoolJettonWallet.sendBurn(deployer.getSender(), toNano('1.0'), jettonAmount, deployer.address, beginCell().storeInt(0n, 1).storeInt(0n, 1).endCell());
+        const burnResult = await myPoolJettonWallet.sendBurn(deployer.getSender(), toNano('1.05'), jettonAmount, deployer.address, beginCell().storeInt(0n, 1).storeInt(0n, 1).endCell());
 
 
         expect(burnResult.transactions).toHaveTransaction({
             from: pool.address,
             on: deployer.address,
-            op: 0x31777cdc, // excesses
+            op: Op.pool.withdrawal,
             success: true,
         });
 
