@@ -200,7 +200,7 @@ describe('Pool', () => {
         let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
         const jettonAmount = await myPoolJettonWallet.getJettonBalance();
 
-        const burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.0'), jettonAmount, deployer.address, false, false);
+        const burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.05'), jettonAmount, deployer.address, false, false);
 
 
         expect(burnResult.transactions).toHaveTransaction({
@@ -282,7 +282,7 @@ describe('Pool', () => {
          let oldBalance = (await blockchain.getContract(deployer.address)).balance;
 
          // immediate withdrawal if possible, fill or kill = false
-         let burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.0'), withdrawalAmount, deployer.address, false, false);
+         let burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.05'), withdrawalAmount, deployer.address, false, false);
          expect(burnResult.transactions).toHaveTransaction({
             on: pool.address,
             success: true,
@@ -295,7 +295,7 @@ describe('Pool', () => {
          oldBalance = (await blockchain.getContract(deployer.address)).balance;
 
          // immediate withdrawal, fill or kill = true
-         burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.0'), withdrawalAmount, deployer.address, false, true);
+         burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.05'), withdrawalAmount, deployer.address, false, true);
          expect(burnResult.transactions).toHaveTransaction({
             on: pool.address,
             success: true,
@@ -308,7 +308,7 @@ describe('Pool', () => {
          oldBalance = (await blockchain.getContract(deployer.address)).balance;
 
          // wait till the end withdrawal, fill or kill = false
-         burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.0'), withdrawalAmount, deployer.address, true, false);
+         burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.05'), withdrawalAmount, deployer.address, true, false);
          expect(burnResult.transactions).toHaveTransaction({
             on: pool.address,
             success: true,
@@ -321,7 +321,7 @@ describe('Pool', () => {
 
          // wait till the end withdrawal, fill or kill = true
          // contradicting options, burn should be reverted
-         burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.0'), withdrawalAmount, deployer.address, true, true);
+         burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.05'), withdrawalAmount, deployer.address, true, true);
          expect(burnResult.transactions).toHaveTransaction({
             on: pool.address,
             success: true

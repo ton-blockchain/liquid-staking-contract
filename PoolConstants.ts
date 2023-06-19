@@ -48,7 +48,7 @@ export abstract class Op {
         set_roles  : 0x5e517f36,
         unhalt  : 0x7247e7a5,
         return_available_funds: 0x55c26cd5,
-        set_deposit_settings : 0x2233ff55,
+        set_deposit_settings : 0x9bf5561c,
         set_governance_fee: 0x2aaa96a0
     }
     static readonly sudo = {
