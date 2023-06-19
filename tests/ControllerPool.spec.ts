@@ -3,9 +3,6 @@ import { Cell, toNano, beginCell, Address } from 'ton-core';
 import { Pool, PoolConfig } from '../wrappers/Pool';
 import { Controller, ControllerConfig } from '../wrappers/Controller';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
-import {JettonWallet as PoolJettonWallet } from '../wrappers/JettonWallet';
-import {JettonWallet as DepositWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
-import {JettonWallet as WithdrawalWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
 import { setConsigliere } from '../wrappers/PayoutMinter.compile';
 import { getElectionsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
 import '@ton-community/test-utils';
@@ -538,13 +535,6 @@ describe('Controller & Pool', () => {
                 to: poolConfig.interest_manager,
                 op: 0x7776, // interest_manager::stats
             });
-            // TODO: add governor fee test
-            // console.log(poolConfig.governor);
-            // expect(repayLoanResult.transactions).toHaveTransaction({
-            //     from: pool.address,
-            //     to: poolConfig.governor,
-            //     op: 0x93a // governor::operation_fee
-            // });
             let newRoundId = await pool.getRoundId();
             expect(newRoundId).toEqual(roundId + 1);
             roundId = newRoundId;
