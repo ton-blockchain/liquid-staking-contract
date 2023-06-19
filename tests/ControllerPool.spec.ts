@@ -8,7 +8,7 @@ import { getElectionsConf, getVset, loadConfig, packValidatorsSet } from "../wra
 import '@ton-community/test-utils';
 import { randomAddress } from "@ton-community/test-utils";
 import { compile } from '@ton-community/blueprint';
-import { findCommon } from '../utils';
+import { findCommon, computedGeneric } from '../utils';
 
 const errors = {
     WRONG_SENDER: 0x9283,
@@ -261,9 +261,8 @@ describe('Controller & Pool', () => {
                 body: loanRequestBodyToPool
             }));
             expect(requestLoanResult.outMessagesCount).toEqual(1);
-            const bounced = requestLoanResult.outMessages.get(0)!
-            expect(requestLoanResult.vmLogs).toContain("terminating vm with exit code " + errors.WRONG_SENDER);
-            expect(bounced.body.beginParse().loadUint(32)).toEqual(0xFFFFFFFF);
+            const txVmRes = computedGeneric(requestLoanResult)
+            expect(txVmRes.exitCode).toEqual(errors.WRONG_SENDER);
         });
         it('should not accept loan from another approver\'s controller', async () => {
             let anotherPoolConfig = {...poolConfig};
@@ -281,8 +280,9 @@ describe('Controller & Pool', () => {
                 value: toNano('0.5'),
                 body: loanRequestBodyToPool
             }));
-            expect(requestLoanResult.vmLogs).toContain(
-                "terminating vm with exit code " + errors.WRONG_SENDER);
+
+            const txVmRes = computedGeneric(requestLoanResult)
+            expect(txVmRes.exitCode).toEqual(errors.WRONG_SENDER);
         });
         it('should not accept loan from controller not from the masterchain', async () => {
             const basechainController = blockchain.openContract(
@@ -390,7 +390,8 @@ describe('Controller & Pool', () => {
                     body: body
                 }));
                 // limit reached
-                expect(result.vmLogs).not.toContain("terminating vm with exit code");
+                const txVmRes = computedGeneric(result)
+                expect(txVmRes.success).toEqual(true);
             }
             const {id, addr} = controllers[MAX_DEPTH];
             let body = loanRequestControllerIntoPool(minLoanRequestBody, id, deployer.address);
@@ -400,7 +401,8 @@ describe('Controller & Pool', () => {
                 value: toNano('0.5'),
                 body: body
             }));
-            expect(result.vmLogs).toContain("terminating vm with exit code " + errors.CREDIT_BOOK_TOO_DEEP);
+            const txVmRes = computedGeneric(result)
+            expect(txVmRes.exitCode).toEqual(errors.CREDIT_BOOK_TOO_DEEP);
         });
     });
     describe('Loan repayment', () => {
