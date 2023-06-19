@@ -304,6 +304,9 @@ export class Pool implements Contract {
         let jettonWalletCode = stack.readCell();
         let payoutMinterCode = stack.readCell();
 
+        let projectedPoolSupply = stack.readBigNumber();
+        let projectedTotalBalance = stack.readBigNumber();
+
         return {
             state, halted,
             totalBalance, interestRate,
@@ -327,7 +330,9 @@ export class Pool implements Contract {
 
             controllerCode,
             jettonWalletCode,
-            payoutMinterCode
+            payoutMinterCode,
+            projectedPoolSupply,
+            projectedTotalBalance
         };
     }
 
