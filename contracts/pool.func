@@ -362,7 +362,7 @@ int current_round_index();
 
     throw_unless(error::credit_book_too_deep, cell_depth(borrowers_dict) < MAX_LOAN_DICT_DEPTH);
 
-    return ([borrowers_dict, round_id, active_borrowers, expected, borrowed, returned, profit], already_borrowed);
+    return ([borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit], already_borrowed);
 }
 
 ([cell, int, int, int, int, int, int], (int, int)) ~close_loan([cell, int, int, int, int, int, int] borrowers_data, slice borrower, int amount) {
