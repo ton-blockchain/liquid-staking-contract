@@ -138,10 +138,10 @@ int current_round_index();
         slice from_address = in_msg_body~load_msg_addr();
         ;; response will be ignored
         slice response_address = in_msg_body~load_msg_addr();
-        int request_immediate_withdrawal_if_possible = ~ in_msg_body~load_int(1);
-        int fill_or_kill = in_msg_body~load_int(1);
         ;; after that point we should not revert because jettons should not be lost
         try {
+            int request_immediate_withdrawal_if_possible = ~ in_msg_body~load_int(1);
+            int fill_or_kill = in_msg_body~load_int(1);
             assert_not_halted!(); ;; otherwise mint back
             update_round();
             throw_unless(error::not_enough_TON_to_process, msg_value > WITHDRAWAL_FEE);
@@ -673,7 +673,7 @@ int current_round_index() {
 
 (int, int) _get_projected_conversion_ratio () inline {
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = prev_round_borrowers;
-    return (expected - borrowed + total_balance - FINALIZE_ROUND_FEE, supply);
+    return (max(expected - borrowed + total_balance - FINALIZE_ROUND_FEE, 0), supply);
 }
 
 
