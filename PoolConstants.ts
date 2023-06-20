@@ -4,6 +4,7 @@ export abstract class Conf {
     static readonly electorOpValue = toNano('1.03');
     static readonly minStorage     = toNano('2');
     static readonly depositFee     = toNano('0.25');
+    static readonly poolDepositFee = toNano('1');
     static readonly withdrawlFee   = toNano('0.25');
     static readonly minStake       = toNano('50000');
     static readonly hashUpdateFine = toNano('10');
