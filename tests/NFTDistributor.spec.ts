@@ -336,6 +336,22 @@ describe('Distributor NFT Collection', () => {
                 exitCode: Errors.cannot_distribute_jettons
             });
         });
+        it("should not start distribution if funds are not enough for fees", async () => {
+            await loadSnapshot("minted");
+            const start_distribution_gas_usage = toNano("0.01")
+            let sendStartResult = await collection.sendStartDistribution(deployer.getSender(), start_distribution_gas_usage - 1n);
+            expect(sendStartResult.transactions).toHaveTransaction({
+                from: deployer.address,
+                to: collection.address,
+                aborted: true,
+            });
+            sendStartResult = await collection.sendStartDistribution(deployer.getSender(), start_distribution_gas_usage);
+            expect(sendStartResult.transactions).toHaveTransaction({
+                from: deployer.address,
+                to: collection.address,
+                success: true,
+            });
+        });
         it("should distribute TONs", async () => {
             await loadSnapshot("minted");
             await distributeTONs(shares);
