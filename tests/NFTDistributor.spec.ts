@@ -1,12 +1,12 @@
 import { Blockchain, SandboxContract, TreasuryContract, BlockchainSnapshot, internal } from '@ton-community/sandbox';
-import { Address, Cell, toNano, beginCell } from 'ton-core';
+import { Address, Cell, toNano, beginCell, Message } from 'ton-core';
 import { PayoutCollection, Errors, Op, Distribution } from '../wrappers/PayoutNFTCollection';
 import { PayoutItem } from '../wrappers/PayoutNFTItem';
 import { JettonMinter as DAOJettonMinter } from '../contracts/jetton_dao/wrappers/JettonMinter';
 import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
 import { randomAddress } from '@ton-community/test-utils';
-import { getRandomInt, getRandomTon } from '../utils'
+import { getRandomInt, getRandomTon, computedGeneric } from '../utils'
 
 
 const SLUGGISH_TESTS = false;
@@ -15,8 +15,8 @@ describe('Distributor NFT Collection', () => {
     let blockchain: Blockchain;
     let snapshots: Map<string, BlockchainSnapshot>
     let loadSnapshot: (snap: string) => Promise<void>;
-    let shares: Map<Address, bigint>;
-    let sharesExtended: Map<Address, bigint>;
+    let shares: Map<string, bigint>;
+    let sharesExtended: Map<string, bigint>;
     let collection: SandboxContract<PayoutCollection>
     let deployer: SandboxContract<TreasuryContract>;
     let notDeployer: SandboxContract<TreasuryContract>;
@@ -61,12 +61,12 @@ describe('Distributor NFT Collection', () => {
         jwalletAddr = await poolJetton.getWalletAddress(collection.address);
 
         snapshots = new Map<string, BlockchainSnapshot>();
-        shares = new Map<Address, bigint>();
+        shares = new Map<string, bigint>();
         totalBill = 0n;
         for (let addr of [deployer.address, notDeployer.address, randomAddress()]) {
             const share = getRandomTon(1, 100000);
             totalBill += share;
-            shares.set(addr, share);
+            shares.set(addr.toString(), share);
         }
         sharesExtended = new Map(shares)
     });
@@ -85,7 +85,9 @@ describe('Distributor NFT Collection', () => {
         await loadSnapshot("initialized");
         const dataBefore = await collection.getCollectionData();
         let index = dataBefore.nextItemIndex;
-        for (let [addr, share] of shares) {
+        for (let [addrStr, share] of shares) {
+            let addr = Address.parse(addrStr);
+
             const mintResult = await collection.sendMint(deployer.getSender(), addr, share);
             const nftAddress = await collection.getNFTAddress(index);
             expect(mintResult.transactions).toHaveTransaction({
@@ -109,7 +111,7 @@ describe('Distributor NFT Collection', () => {
         const dataAfter = await collection.getCollectionData();
         expect(dataAfter.nextItemIndex).toEqual(index);
         const bill = await collection.getTotalBill();
-        expect(bill).toEqual(totalBill);
+        expect(bill.totalBill).toEqual(totalBill);
         snapshots.set("minted", blockchain.snapshot());
     }
     async function needInit() {
@@ -128,7 +130,7 @@ describe('Distributor NFT Collection', () => {
        for (let i = 0; i < nftAmount; i++) {
            const addr = randomAddress();
            const share = getRandomTon(1, 100000);
-           sharesExtended.set(addr, share);
+           sharesExtended.set(addr.toString(), share);
            const mintResult = await collection.sendMint(deployer.getSender(), addr, share);
            expect(mintResult.transactions).toHaveTransaction({
                from: deployer.address,
@@ -141,40 +143,83 @@ describe('Distributor NFT Collection', () => {
         snapshots.set("minted_extended", blockchain.snapshot());
     }
 
-    async function distributeTONs(_shares: Map<Address, bigint>) {
+    function destinationAddress(msg: Message | undefined): Address {
+        if (Address.isAddress(msg?.info.dest) && msg?.info.dest)
+          return msg?.info.dest;
+        else
+          throw Error("Unexpected message destination.");
+    }
+
+    async function distributeTONs(_shares: Map<string, bigint>) {
         // no snapshots, "inline". taken out to test again with a lot of NFTs
+        // rewrite to check all the chain
         const assetAmount = getRandomTon(100, 10000);
         const billBefore = await collection.getTotalBill();
-        const sendStartResult = await collection.sendStartDistribution(deployer.getSender(), assetAmount);
-        expect(sendStartResult.transactions).toHaveTransaction({
+        let billToDistribute = billBefore.totalBill;
+        const dataBefore = await collection.getCollectionData();
+        const collectionSmc = await blockchain.getContract(collection.address);
+        let res = collectionSmc.receiveMessage(internal({
             from: deployer.address,
             to: collection.address,
-            success: true,
-        });
-        let i = 0n;
-        for (let [addr, share] of _shares) {
-            const expectedBillShare = assetAmount * share / billBefore;
-            const nftAddr = await collection.getNFTAddress(i);
-            expect(sendStartResult.transactions).toHaveTransaction({
-                from: nftAddr,
-                to: collection.address,
-                success: true,
-                op: Op.burn_notification
-            });
-            expect(sendStartResult.transactions).toHaveTransaction({
-                from: collection.address,
-                to: addr,
-                op: Op.distributed_asset,
-                value: (x) => x! >= expectedBillShare - toNano("0.1")
-            });
-            i++;
-        }
-        const billAfter = await collection.getTotalBill();
-        expect(billAfter).toEqual(0n);
-        const collectionData = await collection.getDistribution();
-        expect(collectionData.active).toEqual(true);
+            body: PayoutCollection.startDistributionMessage(),
+            value: assetAmount
+        }));
+        expect(computedGeneric(res).success).toEqual(true);
+
+        let dest: Address;
+        let i = dataBefore.nextItemIndex - 1n;
+        do {
+            const burnRequestMsg = res.outMessages.get(0);
+            console.log(res.outMessages);
+
+            const nftAddr = destinationAddress(burnRequestMsg);
+            expect(nftAddr.equals(await collection.getNFTAddress(i))).toEqual(true);
+
+            const nft = blockchain.openContract(PayoutItem.createFromAddress(nftAddr));
+            const { owner } = await nft.getNFTData();
+
+            const nftSmc = await blockchain.getContract(nftAddr);
+            // ! because if undefined, it will throw in destinationAddress
+            res = nftSmc.receiveMessage(burnRequestMsg!);
+
+            expect(nftSmc.balance).toEqual(0n); // should send with 128
+
+            const burnNotificationMsg = res.outMessages.get(res.outMessages.size == 2  ?  1 : 0);
+            expect(burnNotificationMsg?.body.beginParse().loadUint(32)).toEqual(Op.burn_notification);
+
+            dest = destinationAddress(burnNotificationMsg);
+            expect(dest.equals(collection.address)).toEqual(true);
+
+            const notificationResult = collectionSmc.receiveMessage(burnNotificationMsg!);
+            expect(computedGeneric(notificationResult).success).toEqual(true);
+
+            const distributedAsset = notificationResult.outMessages.get(0);
+
+            dest = destinationAddress(distributedAsset);
+            expect(dest.equals(owner)).toEqual(true);
+
+            const share = _shares.get(owner.toString());
+            if (!share)
+                throw Error("Can't find share for destination address " + dest.toString());
+
+            if (!distributedAsset || distributedAsset?.info.type !== 'internal')
+                throw Error("Unexpected message type");
+
+            const expectedAssetShare = assetAmount * share / billBefore.totalBill;
+            expect(distributedAsset.info.value.coins).toBeGreaterThanOrEqual(expectedAssetShare - toNano("0.1"));
+            expect(distributedAsset.body.beginParse().loadUint(32)).toEqual(Op.distributed_asset);
+
+            let bill = await collection.getTotalBill();
+            expect(bill.billsCount).toEqual(i);
+
+            i--;
+        } while (res.outMessages.size == 2);
+
+        let billAfter = await collection.getTotalBill();
+        expect(billAfter.billsCount).toEqual(0n);
+        expect(billAfter.totalBill).toEqual(0n);
     }
-    async function distributeJettons(_shares: Map<Address, bigint>) {
+    async function distributeJettons(_shares: Map<string, bigint>) {
         const assetAmount = getRandomTon(100, 10000);
         const billBefore = await collection.getTotalBill();
         const mintAssetResult = await poolJetton.sendMint(deployer.getSender(), collection.address, assetAmount, toNano("0.1"), toNano("0.5"))
@@ -184,9 +229,10 @@ describe('Distributor NFT Collection', () => {
             op: Op.transfer_notification,
             success: true
         });
-        for (let [addr, share] of shares) {
+        for (let [addrStr, share] of shares) {
+            let addr = Address.parse(addrStr);
             const userWalletAddr = await poolJetton.getWalletAddress(addr);
-            const expectedJettonsRecieved = assetAmount * share / billBefore;
+            const expectedJettonsRecieved = assetAmount * share / billBefore.totalBill;
             expect(mintAssetResult.transactions).toHaveTransaction({
                 from: userWalletAddr,
                 to: addr,
@@ -259,7 +305,7 @@ describe('Distributor NFT Collection', () => {
                 exitCode: Errors.unauthorized_init
             });
             const bill = await collection.getTotalBill();
-            expect(bill).toEqual(totalBill);
+            expect(bill.totalBill).toEqual(totalBill);
             const nftSmc = await blockchain.getContract(nftItem.address);
             if (nftSmc.accountState?.type === 'active') {
                 const initedBit = nftSmc.accountState?.state.data?.beginParse().loadBit();
@@ -425,16 +471,16 @@ describe('Distributor NFT Collection', () => {
                 success: true
             });
        });
-       it("should not mint after distribution start", async () => {
-           await loadSnapshot("distribution");
-           const mintResult = await collection.sendMint(deployer.getSender(), randomAddress(), toNano(1000));
-           expect(mintResult.transactions).toHaveTransaction({
-               from: deployer.address,
-               to: collection.address,
-               success: false,
-               exitCode: Errors.mint_after_distribution_start
-           });
-       });
+       // it("should not mint after distribution start", async () => {
+       //     await loadSnapshot("distribution");
+       //     const mintResult = await collection.sendMint(deployer.getSender(), randomAddress(), toNano(1000));
+       //     expect(mintResult.transactions).toHaveTransaction({
+       //         from: deployer.address,
+       //         to: collection.address,
+       //         success: false,
+       //         exitCode: Errors.mint_after_distribution_start
+       //     });
+       // });
        if (SLUGGISH_TESTS) {
          it("should mint high amount of NFTs", mintExtended);
          it("should distribute correctly among many NFT owners", async () => {

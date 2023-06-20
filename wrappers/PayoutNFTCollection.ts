@@ -182,6 +182,9 @@ export class PayoutCollection implements Contract {
 
     async getTotalBill(provider: ContractProvider) {
         const { stack } = await provider.get('get_issued_bills', []);
-        return stack.readBigNumber();
+        return {
+            totalBill: stack.readBigNumber(),
+            billsCount: stack.readBigNumber()
+        };
     }
 }
