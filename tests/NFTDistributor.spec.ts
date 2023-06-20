@@ -9,7 +9,7 @@ import { randomAddress } from '@ton-community/test-utils';
 import { getRandomInt, getRandomTon } from '../utils'
 
 
-const SLUGGISH_TESTS = true;
+const SLUGGISH_TESTS = false;
 
 describe('Distributor NFT Collection', () => {
     let blockchain: Blockchain;
@@ -408,6 +408,16 @@ describe('Distributor NFT Collection', () => {
                 op: Op.distributed_asset,
                 success: true
             });
+       });
+       it("should not mint after distribution start", async () => {
+           await loadSnapshot("distribution");
+           const mintResult = await collection.sendMint(deployer.getSender(), randomAddress(), toNano(1000));
+           expect(mintResult.transactions).toHaveTransaction({
+               from: deployer.address,
+               to: collection.address,
+               success: false,
+               exitCode: Errors.mint_after_distribution_start
+           });
        });
        if (SLUGGISH_TESTS) {
          it("should mint high amount of NFTs", mintExtended);

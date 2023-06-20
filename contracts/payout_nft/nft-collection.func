@@ -288,9 +288,10 @@ cell get_distribution_data() method_id {
   return distribution;
 }
 
-int get_issued_bills() method_id {
+(int, int) get_issued_bills() method_id {
+  ;; returns issued_bills (amount), bills_count
   var (issued_bills, admin, distribution, collection_content, next_item_index, prev, current, next, next_state_init) = load_data();
-  return issued_bills;
+  return (issued_bills, next_item_index);
 }
 
 slice get_nft_address_by_index(int index) method_id {
