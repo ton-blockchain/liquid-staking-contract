@@ -49,7 +49,6 @@ describe('Controller & Pool', () => {
     let controller: SandboxContract<Controller>;
     let poolJetton: SandboxContract<DAOJettonMinter>;
     let deployer: SandboxContract<TreasuryContract>;
-    let notDeployer: SandboxContract<TreasuryContract>;
     let normalState: BlockchainSnapshot;
     let poolConfig: PoolConfig;
     let controllerConfig: ControllerConfig;
@@ -90,7 +89,7 @@ describe('Controller & Pool', () => {
 
     beforeAll(async () => {
         blockchain = await Blockchain.create();
-        blockchain.now = 100
+        blockchain.now = 100;
 
         deployer = await blockchain.treasury('deployer', {balance: toNano("1000000000")});
 
@@ -106,8 +105,6 @@ describe('Controller & Pool', () => {
         dao_vote_keeper_code = await compile('DAOVoteKeeper');
         dao_voting_code = await compile('DAOVoting');
 
-        deployer = await blockchain.treasury('deployer', {balance: toNano("1000000000")});
-        notDeployer = await blockchain.treasury('notDeployer', {balance: toNano("1000000000")});
         const governorAddress = randomAddress(-1);
 
         const content = jettonContentToCell({type:1,uri:"https://example.com/1.json"});
