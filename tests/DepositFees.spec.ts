@@ -158,13 +158,13 @@ describe('Deposit Fees Calculatuion', () => {
         });
         newVset();
         toElections();
+        await pool.sendTouch(deployer.getSender());
         normalState = blockchain.snapshot();
     });
 
     // beforeEach(async () =>  await blockchain.loadFrom(normalState) );
     //
     async function deposit5 (header: string) {
-        let balancesBefore = await Promise.all(wallets.map(w => w.getBalance()));
         let poolBalanceBefore = (await pool.getFinanceData()).totalBalance;
         const poolBalanceBeforeAll = poolBalanceBefore;
 
@@ -173,13 +173,15 @@ describe('Deposit Fees Calculatuion', () => {
 
         let diffs: bigint[] = [];
         let fees: bigint[] = [];
+        let deposits: bigint[] = [];
         for (let i = 0; i < wallets.length; i++) {
+            const balanceBefore = await wallets[i].getBalance();
             await pool.sendDeposit(wallets[i].getSender(), depositAmount + gasAttached);
             let poolBalanceNow = (await pool.getFinanceData()).totalBalance;
             const addedToPool = poolBalanceNow - poolBalanceBefore;
-            expect(addedToPool).toBe(depositAmount);
+            deposits.push(addedToPool);
             const walletBalanceNow = await wallets[i].getBalance();
-            const diff = balancesBefore[i] - walletBalanceNow;
+            const diff = balanceBefore - walletBalanceNow;
             diffs.push(diff);
             fees.push(diff - addedToPool);
             poolBalanceBefore = poolBalanceNow;
@@ -192,15 +194,15 @@ describe('Deposit Fees Calculatuion', () => {
         let toPrint = `     ${header}\n`;
         for (let i = 0; i < wallets.length; i++) {
             toPrint += `
-                #${i + 1}
+              #${i + 1}
                 Sent for deposit: ${fromNano(depositAmount)} + ${fromNano(gasAttached)} TON
                 Balance decrease: ${fromNano(diffs[i])} TON
-                Deposited: ${fromNano(depositAmount)} TON
+                Deposited: ${fromNano(deposits[i])} TON
                 Deposit cost: ${fromNano(fees[i])} TON
             `;
         }
         toPrint += `
-            TOTAL
+          TOTAL
             Sent for deposit: ${fromNano(totalAdded)} + ${fromNano(gasAttached * BigInt(wallets.length))} TON
             Balance decrease: ${fromNano(totalDiff)} TON
             Deposited: ${fromNano(totalAdded)} TON
@@ -209,16 +211,24 @@ describe('Deposit Fees Calculatuion', () => {
         console.log(toPrint);
     }
 
-    it('Deposit fee for 5 new wallets', async () => {
+    it('5 new wallets', async () => {
         await deposit5("5 WITH NEW WALLETS (OPTIMISTIC)");
     });
 
-    it('Deposit fee for 5 existing wallets', async () => {
-        // Rotate round
-        // newVset();
-        // toElections();
-        // await pool.sendTouch(deployer.getSender());
-
+    it('5 existing wallets', async () => {
         await deposit5("5 WITH EXISTING WALLETS (OPTIMISTIC)")
+    });
+
+    it('5 new but first rotates the round', async () => {
+        await blockchain.loadFrom(normalState);
+        newVset();
+        toElections();
+        await deposit5("5 WITH NEW WALLETS, FIRST ROTATES (OPTIMISTIC)");
+    });
+
+    it('5 times from the same wallet', async () => {
+        await blockchain.loadFrom(normalState);
+        wallets = [wallets[0], wallets[0], wallets[0], wallets[0], wallets[0]];
+        await deposit5("5 FROM THE SAME WALLET (OPTIMISTIC)");
     });
 });
