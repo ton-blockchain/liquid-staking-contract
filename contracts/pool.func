@@ -25,8 +25,8 @@ global int saved_validator_set_hash;
 global [cell, int, int, int, int, int, int] current_round_borrowers;
 global [cell, int, int, int, int, int, int] prev_round_borrowers;
 
-global int min_loan_per_validator;
-global int max_loan_per_validator;
+;;[min, max]
+global [int, int] loan_params_per_validator;
 global int governance_fee; ;; times 2**16
 
 ;; Basic jetton that represents share of the pool
@@ -146,6 +146,7 @@ int muldiv_extra(int a, int b, int c) inline {
             current_round_closed? = true;
             return ();
         }
+        untouched_data = null();
         prev_round_borrowers~finalize_lending_round();
 
         saved_validator_set_hash = current_hash;
@@ -275,6 +276,7 @@ int muldiv_extra(int a, int b, int c) inline {
                     request_to_mint_deposit(sender_address, deposit_amount, query_id);
                     requested_for_deposit += deposit_amount;
                 }
+                return save_data_optimised();
         } elseif (op == pool::request_loan) {
 
               assert_state!(state::NORMAL);
@@ -298,6 +300,7 @@ int muldiv_extra(int a, int b, int c) inline {
               ;;TODO
               int available_funds = creditable_funds; ;;min( creditable_funds, muldiv(256 + disbalance_tolerance, total_balance, 512) );
 
+              [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
               min_loan = max(min_loan, min_loan_per_validator);
               max_loan = min(max_loan, max_loan_per_validator);
 
@@ -607,7 +610,8 @@ var get_pool_full_data() method_id {
             saved_validator_set_hash,
 
             prev_round_borrowers, current_round_borrowers,
-            min_loan_per_validator, max_loan_per_validator,
+            unpair(loan_params_per_validator),
+            ;;min_loan_per_validator, max_loan_per_validator,
             governance_fee,
 
             jetton_minter, supply,

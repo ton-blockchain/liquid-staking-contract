@@ -143,17 +143,20 @@ builder save_codes(builder pb) inline {
    return pb.store_ref(codes);
 }
 
+global slice untouched_data;
 
 () load_data() impure inline_ref {
 
     ;; this check should be removed in production
     ;; it ensures that load_data is not loaded twice
-    throw_unless(2222, state.null?());
+    ;;throw_unless(2222, state.null?());
 
     slice ds = get_data().begin_parse();
     state = ds~load_uint(8);
     halted? = ds~load_int(1);
     total_balance = ds~load_coins();
+    ds~load_minters_data();
+    untouched_data = ds;
     interest_rate = ds~load_uint(16);
     optimistic_deposit_withdrawals = ds~load_int(1);
     deposits_open? = ds~load_int(1);
@@ -161,19 +164,19 @@ builder save_codes(builder pb) inline {
     slice round_data = ds~load_ref().begin_parse();
         current_round_borrowers = round_data~load_round_data();
         prev_round_borrowers = round_data~load_round_data();
-    min_loan_per_validator = ds~load_coins();
-    max_loan_per_validator = ds~load_coins();
+    loan_params_per_validator = [ds~load_coins(), ds~load_coins()];
     governance_fee = ds~load_uint(8);
-    ds~load_minters_data();
     ds~load_roles();
     ds~load_codes();
 }
 
 () save_data() impure inline_ref {
+    [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
     set_data(begin_cell()
         .store_uint(state, 8)
         .store_int(halted?, 1)
         .store_coins(total_balance)
+        .save_minters_data()
         .store_uint(interest_rate, 16)
         .store_int(optimistic_deposit_withdrawals, 1)
         .store_int(deposits_open?, 1)
@@ -187,9 +190,21 @@ builder save_codes(builder pb) inline {
         .store_coins(min_loan_per_validator)
         .store_coins(max_loan_per_validator)
         .store_uint(governance_fee, 16)
-        .save_minters_data()
         .save_roles()
         .save_codes()
         .end_cell()
     );
+}
+
+() save_data_optimised() impure inline_ref {
+    if(untouched_data.null?()) {
+        return save_data();
+    }
+    set_data(begin_cell()
+        .store_uint(state, 8)
+        .store_int(halted?, 1)
+        .store_coins(total_balance)
+        .save_minters_data()
+        .store_slice(untouched_data)
+    .end_cell());
 }

@@ -63,6 +63,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeUint(0, 8) // state NORMAL
               .storeInt(0n, 1) // halted?
               .storeCoins(0) // total_balance
+              .storeRef(mintersData)
               .storeUint(100, 16) // minimal interest_rate
               .storeInt(config.optimistic_deposit_withdrawals, 1) // optimistic_deposit_withdrawals
               .storeInt(-1n, 1) // deposits_open?
@@ -76,7 +77,6 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeCoins(100 * 1000000000) // min_loan_per_validator
               .storeCoins(1000000 * 1000000000) // max_loan_per_validator
               .storeUint(655, 16) // governance fee
-              .storeRef(mintersData)
               .storeRef(roles)
               .storeRef(codes)
            .endCell();
