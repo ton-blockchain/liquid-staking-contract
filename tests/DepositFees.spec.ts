@@ -17,7 +17,7 @@ export function readCompiled(name: string): Cell {
     return Cell.fromBoc(Buffer.from(JSON.parse(readFileSync(filename, 'utf8')).hex, 'hex'))[0];
 }
 
-describe('Deposit Fees Calculatuion', () => {
+describe('Fees Printer', () => {
     let blockchain: Blockchain;
 
     let pool_code: Cell;
@@ -36,6 +36,8 @@ describe('Deposit Fees Calculatuion', () => {
     let normalState: BlockchainSnapshot;
     let deployer: SandboxContract<TreasuryContract>;
     let wallets: SandboxContract<TreasuryContract>[];
+
+    let optimistic = true;
 
     const newVset = () => {
         const confDict = loadConfig(blockchain.config);
@@ -60,7 +62,7 @@ describe('Deposit Fees Calculatuion', () => {
         blockchain.now = vset.utime_unitl - eConf.begin_before + 1;
     }
 
-    beforeAll(async () => {
+    async function deployAll () {
         blockchain = await Blockchain.create();
         blockchain.now = 100;
 
@@ -96,7 +98,7 @@ describe('Deposit Fees Calculatuion', () => {
         const poolConfig = {
               pool_jetton : poolJetton.address,
               pool_jetton_supply : 0n,
-              optimistic_deposit_withdrawals: -1n,
+              optimistic_deposit_withdrawals: optimistic ? -1n : 0n,
 
               sudoer : deployer.address,
               governor : deployer.address,
@@ -160,16 +162,14 @@ describe('Deposit Fees Calculatuion', () => {
         toElections();
         await pool.sendTouch(deployer.getSender());
         normalState = blockchain.snapshot();
-    });
+    }
 
-    // beforeEach(async () =>  await blockchain.loadFrom(normalState) );
-    //
-    async function deposit5 (header: string) {
+    async function deposit5Optimistic (header: string) {
         let poolBalanceBefore = (await pool.getFinanceData()).totalBalance;
         const poolBalanceBeforeAll = poolBalanceBefore;
 
         const depositAmount = toNano(100);
-        const gasAttached = toNano(1)
+        const gasAttached = toNano(1);
 
         let diffs: bigint[] = [];
         let fees: bigint[] = [];
@@ -206,29 +206,106 @@ describe('Deposit Fees Calculatuion', () => {
             Sent for deposit: ${fromNano(totalAdded)} + ${fromNano(gasAttached * BigInt(wallets.length))} TON
             Balance decrease: ${fromNano(totalDiff)} TON
             Deposited: ${fromNano(totalAdded)} TON
-            Average Deposits cost: ${fromNano(totalFee/5n)} TON
+            Deposits cost: ${fromNano(totalFee)} TON
         `;
         console.log(toPrint);
     }
 
-    it('5 new wallets', async () => {
-        await deposit5("5 WITH NEW WALLETS (OPTIMISTIC)");
-    });
+    async function deposit5 (header: string) {
+        let poolBalanceBefore = (await pool.getFinanceData()).totalBalance;
+        const poolBalanceBeforeAll = poolBalanceBefore;
 
-    it('5 existing wallets', async () => {
-        await deposit5("5 WITH EXISTING WALLETS (OPTIMISTIC)")
-    });
+        const depositAmount = toNano(100);
+        const gasAttached = toNano(1);
 
-    it('5 new but first rotates the round', async () => {
-        await blockchain.loadFrom(normalState);
+        let diffs: bigint[] = [];
+        let fees: bigint[] = [];
+        let deposits: bigint[] = [];
+        let balancesBefore: bigint[] = [];
+        for (let i = 0; i < wallets.length; i++) {
+            balancesBefore.push(await wallets[i].getBalance());
+            await pool.sendDeposit(wallets[i].getSender(), depositAmount + gasAttached);
+            const poolBalanceNow = (await pool.getFinanceData()).totalBalance;
+            const addedToPool = poolBalanceNow - poolBalanceBefore;
+            deposits.push(addedToPool);
+            poolBalanceBefore = poolBalanceNow;
+        }
+        const totalAdded = poolBalanceBefore - poolBalanceBeforeAll;
+
         newVset();
         toElections();
-        await deposit5("5 WITH NEW WALLETS, FIRST ROTATES (OPTIMISTIC)");
-    });
+        await pool.sendTouch(deployer.getSender());
 
-    it('5 times from the same wallet', async () => {
-        await blockchain.loadFrom(normalState);
-        wallets = [wallets[0], wallets[0], wallets[0], wallets[0], wallets[0]];
-        await deposit5("5 FROM THE SAME WALLET (OPTIMISTIC)");
+        for (let i = 0; i < wallets.length; i++) {
+            const balanceAfter = await wallets[i].getBalance();
+            const diff = balancesBefore[i] - balanceAfter;
+            diffs.push(diff);
+            const fee = diff - deposits[i];
+            fees.push(fee);
+        }
+
+        const totalDiff = diffs.reduce((a, b) => a + b, 0n);
+        const totalFee = totalDiff - totalAdded;
+
+        let toPrint = `     ${header}\n`;
+        for (let i = 0; i < wallets.length; i++) {
+            toPrint += `
+              #${i + 1}
+                Sent for deposit: ${fromNano(depositAmount)} + ${fromNano(gasAttached)} TON
+                Balance decrease: ${fromNano(diffs[i])} TON
+                Deposited: ${fromNano(deposits[i])} TON
+                Deposit cost: ${fromNano(fees[i])} TON
+            `;
+        }
+        toPrint += `
+          TOTAL
+            Sent for deposit: ${fromNano(totalAdded)} + ${fromNano(gasAttached * BigInt(wallets.length))} TON
+            Balance decrease: ${fromNano(totalDiff)} TON
+            Deposited: ${fromNano(totalAdded)} TON
+            Deposits cost: ${fromNano(totalFee)} TON
+        `;
+        console.log(toPrint);
+    }
+
+    describe('Deposit Optimistic', () => {
+        beforeAll(deployAll);
+
+        it('5 new wallets', async () => {
+            await deposit5Optimistic("5 WITH NEW WALLETS (OPTIMISTIC)");
+        });
+
+        it('5 existing wallets', async () => {
+            await deposit5Optimistic("5 WITH EXISTING WALLETS (OPTIMISTIC)")
+        });
+
+        it('5 new but first rotates the round', async () => {
+            await blockchain.loadFrom(normalState);
+            newVset();
+            toElections();
+            await deposit5Optimistic("5 WITH NEW WALLETS, FIRST ROTATES (OPTIMISTIC)");
+        });
+
+        it('5 times from the same wallet', async () => {
+            await blockchain.loadFrom(normalState);
+            wallets = [wallets[0], wallets[0], wallets[0], wallets[0], wallets[0]];
+            await deposit5Optimistic("5 FROM THE SAME WALLET (OPTIMISTIC)");
+        });
+    });
+    optimistic = true;
+    describe('Deposit Normal', () => {
+        beforeAll(deployAll);
+        it('5 new wallets', async () => {
+            await deposit5("5 WITH NEW WALLETS (NORMAL)");
+        });
+        it('5 existing wallets', async () => {
+            await deposit5("5 WITH EXISTING WALLETS (NORMAL)")
+        });
+        it('5 new but first rotates the round', async () => {
+            await blockchain.loadFrom(normalState);
+            newVset();
+            toElections();
+            await deposit5("5 WITH NEW WALLETS, FIRST ROTATES (NORMAL)");
+        });
     });
 });
+
