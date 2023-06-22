@@ -1,5 +1,5 @@
 ;;[borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit]
-(slice, ([cell, int, int, int, int, int, int])) ~load_round_data(slice s) {
+(slice, ([cell, int, int, int, int, int, int])) ~load_round_data(slice s) inline {
     slice ds = s~load_ref().begin_parse();
     var data = [ds~load_dict(),             ;; borrowers
                 ds~load_uint(32),           ;; round_id
@@ -11,7 +11,7 @@
    return (s, (data));
 }
 
-builder store_round_data(builder b, [cell, int, int, int, int, int, int] round_data) {
+builder store_round_data(builder b, [cell, int, int, int, int, int, int] round_data) inline {
   var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = round_data;
   cell serialized = begin_cell()
                      .store_dict(borrowers_dict)
@@ -61,7 +61,7 @@ builder store_round_data(builder b, [cell, int, int, int, int, int, int] round_d
     return (s, ());
 }
 
-builder save_minters_data(builder pb) {
+builder save_minters_data(builder pb) inline {
     builder b = begin_cell()
                  .store_slice(jetton_minter)
                  .store_coins(supply);
@@ -109,7 +109,7 @@ builder save_minters_data(builder pb) {
     return (s, ());
 }
 
-builder save_roles(builder pb) {
+builder save_roles(builder pb) inline {
     cell roles = begin_cell()
                  .store_slice(sudoer)
                  .store_uint(sudoer_set_at, 48)
@@ -134,7 +134,7 @@ builder save_roles(builder pb) {
     return (s, ());
 }
 
-builder save_codes(builder pb) {
+builder save_codes(builder pb) inline {
     cell codes = begin_cell()
                  .store_ref(controller_code)
                  .store_ref(pool_jetton_wallet_code)

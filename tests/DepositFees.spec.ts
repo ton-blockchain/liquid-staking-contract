@@ -206,7 +206,7 @@ describe('Deposit Fees Calculatuion', () => {
             Sent for deposit: ${fromNano(totalAdded)} + ${fromNano(gasAttached * BigInt(wallets.length))} TON
             Balance decrease: ${fromNano(totalDiff)} TON
             Deposited: ${fromNano(totalAdded)} TON
-            Deposits cost: ${fromNano(totalFee)} TON
+            Average Deposits cost: ${fromNano(totalFee/5n)} TON
         `;
         console.log(toPrint);
     }
