@@ -9,7 +9,13 @@ import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
 import { Conf, Op } from "../PoolConstants";
 import { getRandomTon } from '../utils';
+import { readFileSync } from 'fs';
 
+
+export function readCompiled(name: string): Cell {
+    const filename = 'build/' + name + '.compiled.json';
+    return Cell.fromBoc(Buffer.from(JSON.parse(readFileSync(filename, 'utf8')).hex, 'hex'))[0];
+}
 
 describe('Deposit Fees Calculatuion', () => {
     let blockchain: Blockchain;
@@ -69,16 +75,16 @@ describe('Deposit Fees Calculatuion', () => {
         ]);
 
         await setConsigliere(deployer.address);
-        payout_minter_code = await compile('PayoutMinter');
-        payout_wallet_code = await compile('PayoutWallet');
+        payout_minter_code = readCompiled('PayoutMinter');
+        payout_wallet_code = readCompiled('PayoutWallet');
 
-        pool_code = await compile('Pool');
-        controller_code = await compile('Controller');
+        pool_code = readCompiled('Pool');
+        controller_code = readCompiled('Controller');
 
-        dao_minter_code = await compile('DAOJettonMinter');
-        dao_wallet_code = await compile('DAOJettonWallet');
-        dao_vote_keeper_code = await compile('DAOVoteKeeper');
-        dao_voting_code = await compile('DAOVoting');
+        dao_minter_code = readCompiled('DAOJettonMinter');
+        dao_wallet_code = readCompiled('DAOJettonWallet');
+        dao_vote_keeper_code = readCompiled('DAOVoteKeeper');
+        dao_voting_code = readCompiled('DAOVoting');
 
         const content = jettonContentToCell({type:1,uri:"https://example.com/1.json"});
         poolJetton  = blockchain.openContract(DAOJettonMinter.createFromConfig({
@@ -90,7 +96,7 @@ describe('Deposit Fees Calculatuion', () => {
         const poolConfig = {
               pool_jetton : poolJetton.address,
               pool_jetton_supply : 0n,
-              optimistic_deposit_withdrawals: 0n,
+              optimistic_deposit_withdrawals: -1n,
 
               sudoer : deployer.address,
               governor : deployer.address,
@@ -155,39 +161,64 @@ describe('Deposit Fees Calculatuion', () => {
         normalState = blockchain.snapshot();
     });
 
-    beforeEach(async () =>  await blockchain.loadFrom(normalState) );
+    // beforeEach(async () =>  await blockchain.loadFrom(normalState) );
+    //
+    async function deposit5 (header: string) {
+        let balancesBefore = await Promise.all(wallets.map(w => w.getBalance()));
+        let poolBalanceBefore = (await pool.getFinanceData()).totalBalance;
+        const poolBalanceBeforeAll = poolBalanceBefore;
 
-    it('Deposit fee for one', async () => {
-        const poolBalanceBefore = (await pool.getFinanceData()).totalBalance;
+        const depositAmount = toNano(100);
+        const gasAttached = toNano(1)
 
-        const depositAmount = getRandomTon(10, 100000);
-        const depositResult = await pool.sendDeposit(wallets[0].getSender(), depositAmount);
+        let diffs: bigint[] = [];
+        let fees: bigint[] = [];
+        for (let i = 0; i < wallets.length; i++) {
+            await pool.sendDeposit(wallets[i].getSender(), depositAmount + gasAttached);
+            let poolBalanceNow = (await pool.getFinanceData()).totalBalance;
+            const addedToPool = poolBalanceNow - poolBalanceBefore;
+            expect(addedToPool).toBe(depositAmount);
+            const walletBalanceNow = await wallets[i].getBalance();
+            const diff = balancesBefore[i] - walletBalanceNow;
+            diffs.push(diff);
+            fees.push(diff - addedToPool);
+            poolBalanceBefore = poolBalanceNow;
+        }
 
-        let excesses = 0n;
-        expect(depositResult.transactions).not.toHaveTransaction({
-            to: wallets[0].address,
-            value: (x) => {excesses += x? x : 0n; return false}
-        });
+        const totalAdded = poolBalanceBefore - poolBalanceBeforeAll;
+        const totalDiff = diffs.reduce((a, b) => a + b, 0n);
+        const totalFee = totalDiff - totalAdded;
 
-        newVset();
-        toElections();
+        let toPrint = `     ${header}\n`;
+        for (let i = 0; i < wallets.length; i++) {
+            toPrint += `
+                #${i + 1}
+                Sent for deposit: ${fromNano(depositAmount)} + ${fromNano(gasAttached)} TON
+                Balance decrease: ${fromNano(diffs[i])} TON
+                Deposited: ${fromNano(depositAmount)} TON
+                Deposit cost: ${fromNano(fees[i])} TON
+            `;
+        }
+        toPrint += `
+            TOTAL
+            Sent for deposit: ${fromNano(totalAdded)} + ${fromNano(gasAttached * BigInt(wallets.length))} TON
+            Balance decrease: ${fromNano(totalDiff)} TON
+            Deposited: ${fromNano(totalAdded)} TON
+            Deposits cost: ${fromNano(totalFee)} TON
+        `;
+        console.log(toPrint);
+    }
 
-        const touchResult = await pool.sendTouch(deployer.getSender());
-        expect(touchResult.transactions).not.toHaveTransaction({
-            to: wallets[0].address,
-            value: (x) => {excesses += x? x : 0n; return false}
-        });
+    it('Deposit fee for 5 new wallets', async () => {
+        await deposit5("5 WITH NEW WALLETS (OPTIMISTIC)");
+    });
 
-        const poolBalanceAfter = (await pool.getFinanceData()).totalBalance;
-        const balanceDifference = poolBalanceAfter - poolBalanceBefore;
-        const poolSideDepositFee = depositAmount - balanceDifference;
+    it('Deposit fee for 5 existing wallets', async () => {
+        // Rotate round
+        // newVset();
+        // toElections();
+        // await pool.sendTouch(deployer.getSender());
 
-        console.log(`
-                    FEES FOR ONE
-            Pool side deposit fee: ${fromNano(poolSideDepositFee)} TON
-            Excesses (returned to nominator): ${fromNano(excesses)} TON
-            Real fee: ${fromNano(poolSideDepositFee - excesses)} TON
-        `)
+        await deposit5("5 WITH EXISTING WALLETS (OPTIMISTIC)")
     });
 });
-
