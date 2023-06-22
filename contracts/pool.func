@@ -60,12 +60,21 @@ global int current_round_closed?; ;; hash of validator set changed since round s
 const int state::NORMAL = 0;
 const int state::REPAYMENT_ONLY = 1;
 
-const int ONE_TON = 1000000000;
+
 const int disbalance_tolerance = 30; ;; x/256
+const int JETTONS_WORKCHAIN = 0;
+const int MAX_LOAN_DICT_DEPTH = 12;
+
+const int ONE_TON = 1000000000;
 const int MIN_TONS_FOR_STORAGE = 10 * ONE_TON; ;; 10 TON
 const int CONTROLLER_WORKCHAIN = -1; ;; masterchain
-const int MAX_LOAN_DICT_DEPTH = 12;
-const int SERVICE_NOTIFICATION_AMOUNT = ONE_TON / 100;
+
+const int SERVICE_NOTIFICATION_AMOUNT = 2 * ONE_TON / 100;
+;; finalize fee goes to
+;;   a) SERVICE_NOTIFICATION_AMOUNT to interest manager
+;;   b) TRANSFER_NOTIFICATION_AMOUNT for ton distribution start
+;;   c) TRANSFER_NOTIFICATION_AMOUNT + POOL_JETTON_WALLET_FEE + POOL_JETTON_MINT_FEE for jetton distribution
+;;   d) Gas fees
 const int FINALIZE_ROUND_FEE = ONE_TON;
 const int DEPOSIT_FEE = ONE_TON; ;;TODO reconsider
 const int WITHDRAWAL_FEE = ONE_TON / 2;
@@ -77,7 +86,6 @@ const int POOL_JETTON_MINT_FEE = 27500000; ;; 0.0275
 const int PAYOUT_ITEM_MINT_FEE = ONE_TON / 6;
 const int MINT_PAYOUT_FEE = ONE_TON / 20;
 const int MINTER_DEPLOY_FEE = ONE_TON / 5;
-const int JETTONS_WORKCHAIN = 0;
 
 
 #include "pool_storage.func";
@@ -138,10 +146,10 @@ int current_round_index();
         slice from_address = in_msg_body~load_msg_addr();
         ;; response will be ignored
         slice response_address = in_msg_body~load_msg_addr();
-        int request_immediate_withdrawal_if_possible = ~ in_msg_body~load_int(1);
-        int fill_or_kill = in_msg_body~load_int(1);
         ;; after that point we should not revert because jettons should not be lost
         try {
+            int request_immediate_withdrawal_if_possible = ~ in_msg_body~load_int(1);
+            int fill_or_kill = in_msg_body~load_int(1);
             assert_not_halted!(); ;; otherwise mint back
             update_round();
             throw_unless(error::not_enough_TON_to_process, msg_value > WITHDRAWAL_FEE);
@@ -172,7 +180,10 @@ int current_round_index();
             ;; note that sent_during_rotation is null because
             ;; effect of update_round is reverted in catch
             raw_reserve(balance - msg_value, 0);
-            request_to_mint_pool_jettons(from_address, jetton_amount, query_id, begin_cell(), true);
+            ;; request_to_mint automatically increase supply by minted amount
+            ;; however there is no extra tokens in this case
+            supply -= jetton_amount;
+            request_to_mint_pool_jettons(from_address, jetton_amount, query_id, null(), true);
         }
         
     {- ========== Governance operations ========== -}
@@ -266,7 +277,7 @@ int current_round_index();
                                 .store_coins(min_loan)
                                 .store_coins(max_loan)
                                 .store_uint(max_interest, 16),
-                        msgflag::NON_BOUNCEABLE, sendmode::PAY_FEES_SEPARETELY);
+                        msgflag::NON_BOUNCEABLE, sendmode::REGULAR);
 
         } elseif (op == pool::loan_repayment) {
             ;; we expect loans from previous round only
@@ -306,7 +317,7 @@ int current_round_index();
               (int expected_balance, int expected_supply) = _get_projected_conversion_ratio();
 
               int amount = muldiv_extra(deposit_amount, expected_supply, expected_balance);
-              request_to_mint_pool_jettons(sender_address, amount, query_id, begin_cell(), true);
+              request_to_mint_pool_jettons(sender_address, amount, query_id, null(), true);
               total_balance += deposit_amount;
             } else {
               request_to_mint_deposit(sender_address, deposit_amount, query_id);
@@ -427,7 +438,7 @@ int current_round_index();
                .store_coins(returned)
                .store_signed_coins(profit)
                .store_coins(total_balance), ;; duplication at this point?
-             msgflag::NON_BOUNCEABLE, sendmode::PAY_FEES_SEPARETELY);
+             msgflag::NON_BOUNCEABLE, sendmode::REGULAR);
     log_round_completion(round_id, borrowed, returned, profit);
 
     finalize_deposit_withdrawal_round(round_id);
@@ -496,9 +507,11 @@ int current_round_index();
                 .store_slice(destination)
                 .store_coins(amount) ;; max 124 bit
                 .store_coins(notification_ton)
-                .store_coins(forward_ton) ;; TRANSFER_NOTIFICATION_AMOUNT + JETTON_WALLET_FEE
-                .store_uint(1, 1)
-                .store_ref(payload.end_cell());
+                .store_coins(forward_ton); ;; TRANSFER_NOTIFICATION_AMOUNT + JETTON_WALLET_FEE
+    ifnot( payload.null?() ) {
+        mint_request = mint_request.store_uint(1, 1)
+                                   .store_ref(payload.end_cell());
+    }
     var msg = begin_cell()
             .store_msg_flags(msgflag::BOUNCEABLE)
             .store_slice(minter)
@@ -511,7 +524,7 @@ int current_round_index();
 () request_to_mint_pool_jettons(slice destination, int amount, int query_id, builder payload, int for_user?) impure {
     if (for_user?) {
       send_mint_message(jetton_minter, query_id, destination, amount, payload,
-              DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - POOL_JETTON_WALLET_FEE - POOL_JETTON_MINT_FEE - 16800000, ;;TODO
+              DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - POOL_JETTON_WALLET_FEE - POOL_JETTON_MINT_FEE,
               DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - POOL_JETTON_WALLET_FEE,
               DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION,
               sendmode::PAY_FEES_SEPARETELY);
@@ -630,11 +643,11 @@ int current_round_index();
     }
 
     total_balance -= ton_withdrawal;
-    sent_during_rotation += ton_withdrawal;
+    sent_during_rotation += ton_withdrawal + TRANSFER_NOTIFICATION_AMOUNT;
     var msg = begin_cell()
             .store_msg_flags(msgflag::BOUNCEABLE)
             .store_slice(prev_withdrawal_payout)
-            .store_coins(ton_withdrawal)
+            .store_coins(ton_withdrawal + TRANSFER_NOTIFICATION_AMOUNT)
             .store_msgbody_prefix_slice()
             .store_body_header(payouts::start_distribution, cur_lt());
     send_raw_message(msg.end_cell(), sendmode::REGULAR);
@@ -673,7 +686,7 @@ int current_round_index() {
 
 (int, int) _get_projected_conversion_ratio () inline {
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = prev_round_borrowers;
-    return (expected - borrowed + total_balance - FINALIZE_ROUND_FEE, supply);
+    return (max(expected - borrowed + total_balance - FINALIZE_ROUND_FEE, 0), supply);
 }
 
 
