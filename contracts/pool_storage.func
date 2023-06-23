@@ -165,7 +165,7 @@ global slice untouched_data;
         current_round_borrowers = round_data~load_round_data();
         prev_round_borrowers = round_data~load_round_data();
     loan_params_per_validator = [ds~load_coins(), ds~load_coins()];
-    governance_fee = ds~load_uint(8);
+    governance_fee = ds~load_uint(16);
     ds~load_roles();
     ds~load_codes();
 }

@@ -87,6 +87,11 @@ export abstract class ControllerState {
     static readonly SENT_RECOVER_REQUEST = 4;
     static readonly INSOLVENT = 5;
 }
+
+export abstract class PoolState {
+    static readonly NORMAL = 0;
+    static readonly REPAYMENT_ONLY = 1;
+}
 export abstract class Errors {
  static readonly success = 0;
  static readonly unknown_op = 0xffff;
