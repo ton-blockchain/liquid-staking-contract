@@ -63,6 +63,8 @@ export type PoolFullConfig = {
   payout_minter_code: Cell;
 };
 
+export type PoolData = Awaited<ReturnType<InstanceType<typeof Pool>['getFullData']>>;
+
 export function poolConfigToCell(config: PoolConfig): Cell {
     let emptyRoundData = beginCell()
                              .storeUint(0, 1) // empty dict
@@ -120,6 +122,45 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeRef(roles)
               .storeRef(codes)
            .endCell();
+}
+
+export function dataToFullConfig(data: PoolData) : PoolFullConfig {
+  /*
+   * I know we could use Object.keys/Object.assign kind of magic.
+   * But i feel like it should be explicit for easier TS
+   * level debug if any fields of either type changes.
+   * Let's do it dumb and reliable way
+   */
+  return {
+    state: data.state as (0 | 1),
+    halted: data.halted,
+    totalBalance: data.totalBalance,
+    poolJetton: data.poolJettonMinter,
+    poolJettonSupply: data.poolJettonSupply,
+    depositMinter: data.depositPayout,
+    requestedForDeposit: data.requestedForDeposit,
+    withdrawalMinter: data.withdrawalPayout,
+    requestedForWithdrawal: data.requestedForWithdrawal,
+    interestRate: data.interestRate,
+    optimisticDepositWithdrawals: data.optimisticDepositWithdrawals,
+    depositsOpen: data.depositsOpen,
+    savedValidatorSetHash: data.savedValidatorSetHash,
+    currentRound: data.currentRound,
+    prevRound: data.previousRound,
+    minLoanPerValidator: data.minLoan,
+    maxLoanPerValidator: data.maxLoan,
+    governanceFee: data.governanceFee,
+    sudoer: data.sudoer,
+    sudoerSetAt: data.sudoerSetAt,
+    governor: data.governor,
+    interest_manager: data.interestManager,
+    halter: data.halter,
+    approver: data.approver,
+    controller_code: data.controllerCode,
+    pool_jetton_wallet_code: data.jettonWalletCode,
+    payout_minter_code: data.payoutMinterCode,
+    governorUpdateAfter: 0xffffffffffff
+  };
 }
 
 export function poolFullConfigToCell(config: PoolFullConfig): Cell {
