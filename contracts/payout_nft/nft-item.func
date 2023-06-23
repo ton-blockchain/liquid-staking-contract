@@ -227,3 +227,9 @@ global slice collection;
   var (_collection, index, amount, prev, next) = load_static_data();
   return (init?, index, _collection, owner, begin_cell().store_coins(amount).end_cell());
 }
+
+(int) get_bill_amount() method_id {
+    (int init?, slice owner) = load_volatile_data();
+    var (_collection, index, amount, prev, next) = load_static_data();
+    return amount;
+}
