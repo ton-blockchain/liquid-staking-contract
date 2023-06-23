@@ -424,7 +424,7 @@ int current_round_index();
 
     if (fee > SERVICE_NOTIFICATION_AMOUNT) { ;; otherwise it is less than msg cost
       sent_during_rotation += fee;
-      send_msg_builder(governor, fee,
+      send_msg_builder(interest_manager, fee,
                begin_cell().store_body_header(interest_manager::operation_fee, cur_lt()),
                msgflag::NON_BOUNCEABLE, sendmode::REGULAR);
       
