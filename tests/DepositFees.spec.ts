@@ -1,14 +1,11 @@
-import { Blockchain, SandboxContract, internal, TreasuryContract, BlockchainSnapshot } from '@ton-community/sandbox';
-import { Cell, toNano, fromNano, beginCell, Address } from 'ton-core';
+import { Blockchain, SandboxContract, TreasuryContract, BlockchainSnapshot } from '@ton-community/sandbox';
+import { Cell, toNano, fromNano, beginCell } from 'ton-core';
 import { Pool } from '../wrappers/Pool';
 import { Controller } from '../wrappers/Controller';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
 import { setConsigliere } from '../wrappers/PayoutMinter.compile';
 import { getElectionsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
 import '@ton-community/test-utils';
-import { compile } from '@ton-community/blueprint';
-import { Conf, Op } from "../PoolConstants";
-import { getRandomTon } from '../utils';
 import { readFileSync } from 'fs';
 
 
@@ -17,7 +14,7 @@ export function readCompiled(name: string): Cell {
     return Cell.fromBoc(Buffer.from(JSON.parse(readFileSync(filename, 'utf8')).hex, 'hex'))[0];
 }
 
-describe('Fees Printer', () => {
+describe('Deposit Fees Printer', () => {
     let blockchain: Blockchain;
 
     let pool_code: Cell;
@@ -38,7 +35,7 @@ describe('Fees Printer', () => {
     let deployer: SandboxContract<TreasuryContract>;
     let wallets: SandboxContract<TreasuryContract>[];
 
-    let optimistic = true;
+    let optimistic = false;
     let nftDistribution = false;
 
     const newVset = () => {
@@ -272,6 +269,23 @@ describe('Fees Printer', () => {
         console.log(toPrint);
     }
 
+    describe('Deposit Normal', () => {
+        beforeAll(deployAll);
+        it('5 new wallets', async () => {
+            await deposit5("5 WITH NEW WALLETS (NORMAL)");
+        });
+        it('5 existing wallets', async () => {
+            await deposit5("5 WITH EXISTING WALLETS (NORMAL)")
+        });
+        it('5 new but first rotates the round', async () => {
+            await blockchain.loadFrom(normalState);
+            newVset();
+            toElections();
+            await deposit5("5 WITH NEW WALLETS, FIRST ROTATES (NORMAL)");
+        });
+    });
+
+    optimistic = true;
     describe('Deposit Optimistic', () => {
         beforeAll(deployAll);
 
@@ -296,24 +310,7 @@ describe('Fees Printer', () => {
             await deposit5Optimistic("5 FROM THE SAME WALLET (OPTIMISTIC)");
         });
     });
-    optimistic = false;
-    describe('Deposit Normal', () => {
-        beforeAll(deployAll);
-        it('5 new wallets', async () => {
-            await deposit5("5 WITH NEW WALLETS (NORMAL)");
-        });
-        it('5 existing wallets', async () => {
-            await deposit5("5 WITH EXISTING WALLETS (NORMAL)")
-        });
-        it('5 new but first rotates the round', async () => {
-            await blockchain.loadFrom(normalState);
-            newVset();
-            toElections();
-            await deposit5("5 WITH NEW WALLETS, FIRST ROTATES (NORMAL)");
-        });
-    });
 
-    optimistic = true;
     nftDistribution = true;
     describe('Deposit Optimistic NFT', () => {
         beforeAll(deployAll);
