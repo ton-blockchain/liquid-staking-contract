@@ -22,15 +22,15 @@ export type PoolConfig = {
   payout_minter_code: Cell;
   vote_keeper_code: Cell;
 };
-type RoundData = {borrowers: Cell | null, roundId: bigint,
+type RoundData = {borrowers: Cell | null, roundId: number,
                                   activeBorrowers: bigint, borrowed: bigint,
                                   expected: bigint, returned: bigint,
                                   profit: bigint};
 
 type State = typeof PoolState.NORMAL | typeof PoolState.REPAYMENT_ONLY;
 export type PoolFullConfig = {
-  state: bigint;
-  halted: bigint;
+  state: State;
+  halted: boolean;
   totalBalance: bigint;
   poolJetton: Address;
   poolJettonSupply: bigint;
@@ -38,9 +38,9 @@ export type PoolFullConfig = {
   requestedForDeposit: bigint | null;
   withdrawalMinter: Address | null;
   requestedForWithdrawal: bigint | null;
-  interestRate: bigint;
-  optimisticDepositWithdrawals: bigint;
-  depositsOpen: bigint;
+  interestRate: number;
+  optimisticDepositWithdrawals: boolean;
+  depositsOpen: boolean;
   savedValidatorSetHash: bigint;
   currentRound: RoundData;
   prevRound: RoundData;
@@ -48,12 +48,12 @@ export type PoolFullConfig = {
   minLoanPerValidator: bigint;
   maxLoanPerValidator: bigint;
 
-  governanceFee: bigint;
+  governanceFee: number;
 
   sudoer: Address;
-  sudoerSetAt: bigint;
+  sudoerSetAt: number;
   governor: Address;
-  governorUpdateAfter: bigint;
+  governorUpdateAfter: number;
   interest_manager: Address;
   halter: Address;
   approver: Address;
@@ -148,7 +148,7 @@ export function poolFullConfigToCell(config: PoolFullConfig): Cell {
     }
     if(config.withdrawalMinter) {
       mintersData = mintersData.storeUint(1, 1)
-                               .storeUint(0, 1)
+                               .storeBit(0)
                                .storeAddress(config.withdrawalMinter!)
                                .storeCoins(config.requestedForWithdrawal!);
     } else {
@@ -175,12 +175,12 @@ export function poolFullConfigToCell(config: PoolFullConfig): Cell {
                 .endCell();
     return beginCell()
               .storeUint(config.state, 8) // state NORMAL
-              .storeInt(config.halted, 1) // halted?
+              .storeBit(config.halted) // halted?
               .storeCoins(config.totalBalance) // total_balance
               .storeRef(minters)
               .storeUint(config.interestRate, 16) // minimal interest_rate
-              .storeInt(config.optimisticDepositWithdrawals, 1) // optimistic_deposit_withdrawals
-              .storeInt(config.depositsOpen, 1) // deposits_open?
+              .storeBit(config.optimisticDepositWithdrawals) // optimistic_deposit_withdrawals
+              .storeBit(config.depositsOpen) // deposits_open?
               .storeUint(config.savedValidatorSetHash, 256) // saved_validator_set_hash
               .storeRef(
                 beginCell()
@@ -370,8 +370,8 @@ export class Pool implements Contract {
         let halted = stack.readBoolean();
         let totalBalance = stack.readBigNumber();
         let interestRate = stack.readNumber();
-        let optimisticDepositWithdrawals = stack.readNumber();
-        let depositsOpen = stack.readNumber();
+        let optimisticDepositWithdrawals = stack.readBoolean();
+        let depositsOpen = stack.readBoolean();
         let savedValidatorSetHash = stack.readBigNumber();
 
         let prv = stack.readTuple();
