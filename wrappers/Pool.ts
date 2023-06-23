@@ -2,7 +2,7 @@ import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, 
 
 import { JettonMinter as AwaitedJettonMinter} from '../contracts/awaited_minter/wrappers/JettonMinter';
 
-import { Conf, Op } from "../PoolConstants";
+import { Conf, Op, PoolState } from "../PoolConstants";
 
 export type PoolConfig = {
   pool_jetton: Address;
@@ -27,6 +27,7 @@ type RoundData = {borrowers: Cell | null, roundId: bigint,
                                   expected: bigint, returned: bigint,
                                   profit: bigint};
 
+type State = typeof PoolState.NORMAL | typeof PoolState.REPAYMENT_ONLY;
 export type PoolFullConfig = {
   state: bigint;
   halted: bigint;
@@ -365,17 +366,17 @@ export class Pool implements Contract {
 
     async getFullData(provider: ContractProvider) {
         let { stack } = await provider.get('get_pool_full_data', []);
-        let state = Number(stack.readBigNumber());
-        let halted = Number(stack.readBigNumber());
+        let state = stack.readNumber() as State;
+        let halted = stack.readBoolean();
         let totalBalance = stack.readBigNumber();
-        let interestRate = Number(stack.readBigNumber());
-        let optimisticDepositWithdrawals = Number(stack.readBigNumber());
-        let depositsOpen = Number(stack.readBigNumber());
+        let interestRate = stack.readNumber();
+        let optimisticDepositWithdrawals = stack.readNumber();
+        let depositsOpen = stack.readNumber();
         let savedValidatorSetHash = stack.readBigNumber();
 
         let prv = stack.readTuple();
         let prvBorrowers = prv.readCellOpt();
-        let prvRoundId = Number(prv.readBigNumber());
+        let prvRoundId = prv.readNumber();
         let prvActiveBorrowers = prv.readBigNumber();
         let prvBorrowed = prv.readBigNumber();
         let prvExpected = prv.readBigNumber();
@@ -393,7 +394,7 @@ export class Pool implements Contract {
 
         let cur = stack.readTuple();
         let curBorrowers = cur.readCellOpt();
-        let curRoundId = Number(cur.readBigNumber());
+        let curRoundId = cur.readNumber();
         let curActiveBorrowers = cur.readBigNumber();
         let curBorrowed = cur.readBigNumber();
         let curExpected = cur.readBigNumber();
@@ -411,7 +412,7 @@ export class Pool implements Contract {
 
         let minLoan = stack.readBigNumber();
         let maxLoan = stack.readBigNumber();
-        let governanceFee = Number(stack.readBigNumber());
+        let governanceFee = stack.readNumber();
 
 
         let poolJettonMinter = stack.readAddress();
@@ -424,7 +425,7 @@ export class Pool implements Contract {
         let requestedForWithdrawal = stack.readBigNumber();
 
         let sudoer = stack.readAddress();
-        let sudoerSetAt = Number(stack.readBigNumber());
+        let sudoerSetAt = stack.readNumber();
 
         let governor = stack.readAddress();
         let interestManager = stack.readAddress();
