@@ -3,16 +3,13 @@ import { Cell, toNano, beginCell, Address } from 'ton-core';
 import { Pool, PoolConfig } from '../wrappers/Pool';
 import { Controller, ControllerConfig } from '../wrappers/Controller';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
-import {JettonWallet as PoolJettonWallet } from '../wrappers/JettonWallet';
-import {JettonWallet as DepositWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
-import {JettonWallet as WithdrawalWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
 import { setConsigliere } from '../wrappers/PayoutMinter.compile';
 import { getElectionsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
 import '@ton-community/test-utils';
 import { randomAddress } from "@ton-community/test-utils";
 import { compile } from '@ton-community/blueprint';
-import { findCommon } from '../utils';
 import { Conf, Op } from "../PoolConstants";
+import { findCommon, computedGeneric } from '../utils';
 
 const errors = {
     WRONG_SENDER: 0x9283,
@@ -52,7 +49,6 @@ describe('Controller & Pool', () => {
     let controller: SandboxContract<Controller>;
     let poolJetton: SandboxContract<DAOJettonMinter>;
     let deployer: SandboxContract<TreasuryContract>;
-    let notDeployer: SandboxContract<TreasuryContract>;
     let normalState: BlockchainSnapshot;
     let poolConfig: PoolConfig;
     let controllerConfig: ControllerConfig;
@@ -93,7 +89,7 @@ describe('Controller & Pool', () => {
 
     beforeAll(async () => {
         blockchain = await Blockchain.create();
-        blockchain.now = 100
+        blockchain.now = 100;
 
         deployer = await blockchain.treasury('deployer', {balance: toNano("1000000000")});
 
@@ -109,8 +105,6 @@ describe('Controller & Pool', () => {
         dao_vote_keeper_code = await compile('DAOVoteKeeper');
         dao_voting_code = await compile('DAOVoting');
 
-        deployer = await blockchain.treasury('deployer', {balance: toNano("1000000000")});
-        notDeployer = await blockchain.treasury('notDeployer', {balance: toNano("1000000000")});
         const governorAddress = randomAddress(-1);
 
         const content = jettonContentToCell({type:1,uri:"https://example.com/1.json"});
@@ -265,9 +259,8 @@ describe('Controller & Pool', () => {
                 body: loanRequestBodyToPool
             }));
             expect(requestLoanResult.outMessagesCount).toEqual(1);
-            const bounced = requestLoanResult.outMessages.get(0)!
-            expect(requestLoanResult.vmLogs).toContain("terminating vm with exit code " + errors.WRONG_SENDER);
-            expect(bounced.body.beginParse().loadUint(32)).toEqual(0xFFFFFFFF);
+            const txVmRes = computedGeneric(requestLoanResult)
+            expect(txVmRes.exitCode).toEqual(errors.WRONG_SENDER);
         });
         it('should not accept loan from another approver\'s controller', async () => {
             let anotherPoolConfig = {...poolConfig};
@@ -285,8 +278,9 @@ describe('Controller & Pool', () => {
                 value: toNano('0.5'),
                 body: loanRequestBodyToPool
             }));
-            expect(requestLoanResult.vmLogs).toContain(
-                "terminating vm with exit code " + errors.WRONG_SENDER);
+
+            const txVmRes = computedGeneric(requestLoanResult)
+            expect(txVmRes.exitCode).toEqual(errors.WRONG_SENDER);
         });
         it('should not accept loan from controller not from the masterchain', async () => {
             const basechainController = blockchain.openContract(
@@ -394,7 +388,8 @@ describe('Controller & Pool', () => {
                     body: body
                 }));
                 // limit reached
-                expect(result.vmLogs).not.toContain("terminating vm with exit code");
+                const txVmRes = computedGeneric(result)
+                expect(txVmRes.success).toEqual(true);
             }
             const {id, addr} = controllers[MAX_DEPTH];
             let body = loanRequestControllerIntoPool(minLoanRequestBody, id, deployer.address);
@@ -404,7 +399,8 @@ describe('Controller & Pool', () => {
                 value: toNano('0.5'),
                 body: body
             }));
-            expect(result.vmLogs).toContain("terminating vm with exit code " + errors.CREDIT_BOOK_TOO_DEEP);
+            const txVmRes = computedGeneric(result)
+            expect(txVmRes.exitCode).toEqual(errors.CREDIT_BOOK_TOO_DEEP);
         });
     });
     describe('Loan repayment', () => {
@@ -539,13 +535,6 @@ describe('Controller & Pool', () => {
                 to: poolConfig.interest_manager,
                 op: Op.interestManager.stats, // interest_manager::stats
             });
-            // TODO: add governor fee test
-            // console.log(poolConfig.governor);
-            // expect(repayLoanResult.transactions).toHaveTransaction({
-            //     from: pool.address,
-            //     to: poolConfig.governor,
-            //     op: Op.interestManager.operation_fee // governor::operation_fee
-            // });
             let newRoundId = await pool.getRoundId();
             expect(newRoundId).toEqual(roundId + 1);
             roundId = newRoundId;

@@ -25,8 +25,8 @@ global int saved_validator_set_hash;
 global [cell, int, int, int, int, int, int] current_round_borrowers;
 global [cell, int, int, int, int, int, int] prev_round_borrowers;
 
-global int min_loan_per_validator;
-global int max_loan_per_validator;
+;;[min, max]
+global [int, int] loan_params_per_validator;
 global int governance_fee; ;; times 2**16
 
 ;; Basic jetton that represents share of the pool
@@ -90,8 +90,6 @@ const int MINTER_DEPLOY_FEE = ONE_TON / 5;
 
 #include "pool_storage.func";
 
-() update_round() impure;
-
 () log_loan (slice, int)  impure;
 () log_repayment (slice, int, int) impure;
 () log_round_completion (int, int, int, int) impure;
@@ -107,9 +105,18 @@ const int MINTER_DEPLOY_FEE = ONE_TON / 5;
 slice _get_controller_address (int controller_id, slice validator) method_id;
 (slice, cell) build_controller_address(int controller_id, slice validator);
 
-() request_to_mint_pool_jettons(slice destination, int amount, int query_id, builder payload, int for_user?) impure;
-() request_to_mint_deposit(slice destination, int amount, int query_id) impure;
-() request_to_mint_withdrawal(slice destination, int amount, int query_id) impure;
+forall X, Y -> Y round_id_from_round_data(X p) asm "SECOND";
+int current_round_index() inline {
+    ;;var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = current_round_borrowers;
+    ;;return round_id;
+    return round_id_from_round_data(current_round_borrowers);
+}
+{-
+    () request_to_mint_pool_jettons(slice destination, int amount, int query_id, builder payload, int for_user?) impure;
+    () request_to_mint_deposit(slice destination, int amount, int query_id) impure;
+    () request_to_mint_withdrawal(slice destination, int amount, int query_id) impure;
+-}
+#include "pool_mint_helpers.func";
 
 () initiate_distribution_of_tons (int round_id) impure;
 () initiate_distribution_of_pool_jettons (int round_id) impure;
@@ -124,7 +131,33 @@ int muldiv_extra(int a, int b, int c) inline {
     return muldiv(a, b, c);
 }
 
-int current_round_index();
+() update_round() impure inline_ref {
+    sent_during_rotation = 0;
+    if(halted?) {
+        return ();
+    }
+    (int utime_since, int utime_until, cell vset) = get_current_validator_set();
+    int current_hash = cell_hash(vset);
+    if (saved_validator_set_hash != current_hash) {
+
+        var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = prev_round_borrowers;
+
+        if((~ borrowers_dict.null?()) | (active_borrowers > 0)) {
+            current_round_closed? = true;
+            return ();
+        }
+        untouched_data = null();
+        prev_round_borrowers~finalize_lending_round();
+
+        saved_validator_set_hash = current_hash;
+        int round_index = current_round_index() + 1;
+        log_round_rotation(round_index);
+        (prev_round_borrowers, current_round_borrowers) = (current_round_borrowers, [null(), round_index, 0, 0, 0, 0, 0]);
+        current_round_closed? = false;
+    } else {
+        current_round_closed? = false;
+    }
+}
 
 () recv_internal(int balance, int msg_value, cell in_msg_full, slice in_msg_body) impure {
     slice cs = in_msg_full.begin_parse();
@@ -226,7 +259,25 @@ int current_round_index();
         update_round();
         ;; it is ok, controller knew how to process loan_repayment/request_loan bounces
         {- ========== Pool operations ========== -}
-        if (op == pool::request_loan) {
+        if (op == pool::deposit) {
+                assert_state!(state::NORMAL);
+                throw_unless(error::deposits_are_closed, deposits_open?);
+                raw_reserve(balance - DEPOSIT_FEE - sent_during_rotation, 0);
+                int deposit_amount = msg_value - DEPOSIT_FEE;
+                throw_unless(error::deposit_amount_too_low, deposit_amount > 0);
+                if(optimistic_deposit_withdrawals) {
+                    ;; we convert TON to Jetton at projected (expected) price at the round end
+                    (int expected_balance, int expected_supply) = _get_projected_conversion_ratio();
+
+                    int amount = muldiv_extra(deposit_amount, expected_supply, expected_balance);
+                    request_to_mint_pool_jettons(sender_address, amount, query_id, null(), true);
+                    total_balance += deposit_amount;
+                } else {
+                    request_to_mint_deposit(sender_address, deposit_amount, query_id);
+                    requested_for_deposit += deposit_amount;
+                }
+                return save_data_optimised();
+        } elseif (op == pool::request_loan) {
 
               assert_state!(state::NORMAL);
               throw_if(error::borrowing_request_in_closed_round, current_round_closed?);
@@ -249,6 +300,7 @@ int current_round_index();
               ;;TODO
               int available_funds = creditable_funds; ;;min( creditable_funds, muldiv(256 + disbalance_tolerance, total_balance, 512) );
 
+              [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
               min_loan = max(min_loan, min_loan_per_validator);
               max_loan = min(max_loan, max_loan_per_validator);
 
@@ -306,23 +358,6 @@ int current_round_index();
                           .store_msgbody_prefix_stateinit_slice(init_state)
                           .store_body_header(controller::top_up, cur_lt());
             send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);
-        } elseif (op == pool::deposit) {
-            assert_state!(state::NORMAL);
-            throw_unless(error::deposits_are_closed, deposits_open?);
-            int deposit_amount = msg_value - DEPOSIT_FEE;
-            throw_unless(error::deposit_amount_too_low, deposit_amount > 0);
-            raw_reserve(balance - msg_value + deposit_amount - sent_during_rotation, 0);
-            if(optimistic_deposit_withdrawals) {
-              ;; we convert TON to Jetton at projected (expected) price at the round end
-              (int expected_balance, int expected_supply) = _get_projected_conversion_ratio();
-
-              int amount = muldiv_extra(deposit_amount, expected_supply, expected_balance);
-              request_to_mint_pool_jettons(sender_address, amount, query_id, null(), true);
-              total_balance += deposit_amount;
-            } else {
-              request_to_mint_deposit(sender_address, deposit_amount, query_id);
-              requested_for_deposit += deposit_amount;
-            }
         } else {
             throw(error::unknown_op);
         }
@@ -469,158 +504,9 @@ int current_round_index();
     emit_log(4, begin_cell().store_uint(round_id, 32));
 }
 
-() update_round() impure {
-    sent_during_rotation = 0;
-    if(halted?) {
-        return ();
-    }
-    (int utime_since, int utime_until, cell vset) = get_current_validator_set();
-    int current_hash = cell_hash(vset);
-    if (saved_validator_set_hash != current_hash) {
-
-      var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = prev_round_borrowers;
-
-      if((~ borrowers_dict.null?()) | (active_borrowers > 0)) {
-        current_round_closed? = true;
-        return ();
-      } 
-      prev_round_borrowers~finalize_lending_round();
-
-      saved_validator_set_hash = current_hash;
-      int round_index = current_round_index() + 1;
-      log_round_rotation(round_index);
-      (prev_round_borrowers, current_round_borrowers) = (current_round_borrowers, [null(), round_index, 0, 0, 0, 0, 0]);
-      current_round_closed? = false;
-    } else {
-        current_round_closed? = false;
-    }
-}
-
 () finalize_deposit_withdrawal_round (int round_id) {
     initiate_distribution_of_tons(round_id);
     initiate_distribution_of_pool_jettons(round_id);
-}
-
-() send_mint_message(slice minter, int query_id, slice destination, int amount, builder payload, int notification_ton, int forward_ton, int total_ton, int mode) impure {
-    builder mint_request = begin_cell()
-                .store_body_header(payout::mint, query_id)
-                .store_slice(destination)
-                .store_coins(amount) ;; max 124 bit
-                .store_coins(notification_ton)
-                .store_coins(forward_ton); ;; TRANSFER_NOTIFICATION_AMOUNT + JETTON_WALLET_FEE
-    ifnot( payload.null?() ) {
-        mint_request = mint_request.store_uint(1, 1)
-                                   .store_ref(payload.end_cell());
-    }
-    var msg = begin_cell()
-            .store_msg_flags(msgflag::BOUNCEABLE)
-            .store_slice(minter)
-            .store_coins(total_ton) ;;TRANSFER_NOTIFICATION_AMOUNT + JETTON_WALLET_FEE + MINT_FEE)
-            .store_msgbody_prefix_slice()
-            .store_builder(mint_request);
-    send_raw_message(msg.end_cell(), mode); ;; pay transfer fees separately, revert on errors
-}
-
-() request_to_mint_pool_jettons(slice destination, int amount, int query_id, builder payload, int for_user?) impure {
-    if (for_user?) {
-      send_mint_message(jetton_minter, query_id, destination, amount, payload,
-              DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - POOL_JETTON_WALLET_FEE - POOL_JETTON_MINT_FEE,
-              DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - POOL_JETTON_WALLET_FEE,
-              DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION,
-              sendmode::PAY_FEES_SEPARETELY);
-      var msg = begin_cell()
-                .store_msg_flags(msgflag::NON_BOUNCEABLE)
-                .store_slice(destination)
-                .store_coins(0)
-                .store_msgbody_prefix_slice()
-                .store_body_header(jetton::excesses, query_id);
-      send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE);
-    } else {
-      send_mint_message(jetton_minter, query_id, destination, amount, payload,
-              TRANSFER_NOTIFICATION_AMOUNT,
-              TRANSFER_NOTIFICATION_AMOUNT + POOL_JETTON_WALLET_FEE,
-              TRANSFER_NOTIFICATION_AMOUNT + POOL_JETTON_WALLET_FEE + POOL_JETTON_MINT_FEE,
-              sendmode::REGULAR
-      );
-      sent_during_rotation += TRANSFER_NOTIFICATION_AMOUNT + POOL_JETTON_WALLET_FEE + POOL_JETTON_MINT_FEE;
-    }
-    supply += amount;
-}
-
-() request_to_mint_deposit(slice destination, int amount, int query_id) impure {
-    if(deposit_payout.null?()) {
-        ;; we need to deploy new minter
-        cell state_init = calculate_payout_state_init(my_address(), current_round_index(), true);
-        slice to_address = calc_address(JETTONS_WORKCHAIN, state_init);
-        deposit_payout = to_address;
-        slice deposit_minter_jetton_wallet = calc_address(JETTONS_WORKCHAIN,
-          calculate_jetton_wallet_state_init(to_address, jetton_minter, pool_jetton_wallet_code)
-        );
-        builder msg = begin_cell()
-                      .store_msg_flags(msgflag::BOUNCEABLE)
-                      .store_slice(deposit_payout)
-                      .store_coins(MINTER_DEPLOY_FEE)
-                      .store_msgbody_prefix_stateinit_slice(state_init)
-                      .store_body_header(payout::init, cur_lt())
-                      .store_ref(
-                         begin_cell()
-                           .store_uint(0, 1) ;; distribution not started
-                           .store_uint(1, 1) ;; jettons
-                           .store_coins(0)
-                           .store_slice(deposit_minter_jetton_wallet)
-                         .end_cell()
-                      );
-        send_raw_message(msg.end_cell(), sendmode::REGULAR);
-    }
-    send_mint_message(deposit_payout, query_id, destination, amount, begin_cell(),
-                       DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - PAYOUT_PROCESS_FEE - PAYOUT_ITEM_MINT_FEE,
-                       DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - PAYOUT_PROCESS_FEE,
-                       DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION,
-                       sendmode::PAY_FEES_SEPARETELY
-                     );
-    var msg = begin_cell()
-            .store_msg_flags(msgflag::NON_BOUNCEABLE)
-            .store_slice(destination)
-            .store_coins(0)
-            .store_msgbody_prefix_slice()
-            .store_body_header(jetton::excesses, query_id);
-    send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE | sendmode::IGNORE_ERRORS);
-}
-
-() request_to_mint_withdrawal(slice destination, int amount, int query_id) impure {
-    if(withdrawal_payout.null?()) {
-        ;; we need to deploy new minter
-        cell state_init = calculate_payout_state_init(my_address(), current_round_index(), false);
-        slice to_address = calc_address(JETTONS_WORKCHAIN, state_init);
-        withdrawal_payout = to_address;
-        builder msg = begin_cell()
-                      .store_msg_flags(msgflag::BOUNCEABLE)
-                      .store_slice(withdrawal_payout)
-                      .store_coins(MINTER_DEPLOY_FEE)
-                      .store_msgbody_prefix_stateinit_slice(state_init)
-                      .store_body_header(payout::init, cur_lt())
-                      .store_ref(
-                         begin_cell()
-                           .store_uint(0, 1) ;; distribution not started
-                           .store_uint(0, 1) ;; TONs
-                           .store_coins(0)
-                         .end_cell()
-                      );
-        send_raw_message(msg.end_cell(), sendmode::REGULAR);
-    }
-    send_mint_message(withdrawal_payout, query_id, destination, amount, begin_cell(),
-            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - PAYOUT_PROCESS_FEE - PAYOUT_ITEM_MINT_FEE,
-            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - PAYOUT_PROCESS_FEE,
-            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION,
-            sendmode::PAY_FEES_SEPARETELY
-    );
-    var msg = begin_cell()
-            .store_msg_flags(msgflag::NON_BOUNCEABLE)
-            .store_slice(destination)
-            .store_coins(0)
-            .store_msgbody_prefix_slice()
-            .store_body_header(jetton::excesses, query_id);
-    send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE);
 }
 
 () initiate_distribution_of_tons(round_id) impure {
@@ -671,12 +557,6 @@ int current_round_index();
     total_balance += requested_for_deposit;
     deposit_payout = null();
     requested_for_deposit = 0;
-}
-
-int current_round_index() {
-    ;;TODO optimize
-    var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = current_round_borrowers;
-    return round_id;
 }
 
 (slice) _get_controller_address(int controller_id, slice validator) inline {
@@ -730,7 +610,8 @@ var get_pool_full_data() method_id {
             saved_validator_set_hash,
 
             prev_round_borrowers, current_round_borrowers,
-            min_loan_per_validator, max_loan_per_validator,
+            unpair(loan_params_per_validator),
+            ;;min_loan_per_validator, max_loan_per_validator,
             governance_fee,
 
             jetton_minter, supply,
