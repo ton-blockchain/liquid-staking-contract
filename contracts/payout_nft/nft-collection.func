@@ -269,6 +269,17 @@ slice calculate_nft_item_address(cell state_init) {
             send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);
         }
         distribution = new_distr.end_cell();
+        if(burnt_index == 0) {
+            var msg = begin_cell()
+                    .store_msg_flags(msgflag::NON_BOUNCEABLE)
+                    .store_slice(admin)
+                    .store_coins(0)
+                    .store_msgbody_prefix_slice()
+                    .store_op(op::return_unused)
+                    .store_query_id(query_id);
+
+            send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE);
+        }
         return save_data(issued_bills - burnt_amount, admin, distribution, collection_content, burnt_index, prev, current, next, next_state_init);
     }
 
