@@ -359,6 +359,19 @@ int muldiv_extra(int a, int b, int c) inline {
                           .store_msgbody_prefix_stateinit_slice(init_state)
                           .store_body_header(controller::top_up, cur_lt());
             send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);
+        } elseif (op == pool::donate) {
+            assert_state!(state::NORMAL);
+            int donate_value = msg_value - DEPOSIT_FEE;
+            throw_unless(error::deposit_amount_too_low, donate_value > 0);
+            total_balance += donate_value;
+            raw_reserve(balance - msg_value + donate_value, 0);
+            builder msg = begin_cell()
+                    .store_msg_flags(msgflag::NON_BOUNCEABLE)
+                    .store_slice(sender_address)
+                    .store_coins(0)
+                    .store_msgbody_prefix_slice()
+                    .store_body_header(jetton::excesses, query_id);
+            send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE);
         } else {
             throw(error::unknown_op);
         }
