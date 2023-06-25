@@ -1,5 +1,5 @@
 import { Blockchain, SandboxContract, TreasuryContract, BlockchainSnapshot, internal, SmartContractTransaction } from '@ton-community/sandbox';
-import { Address, Cell, toNano, beginCell, Message } from 'ton-core';
+import { Address, Cell, toNano, beginCell, Message, Dictionary } from 'ton-core';
 import { PayoutCollection, Errors, Op, Distribution } from '../wrappers/PayoutNFTCollection';
 import { PayoutItem } from '../wrappers/PayoutNFTItem';
 import { JettonMinter as DAOJettonMinter } from '../contracts/jetton_dao/wrappers/JettonMinter';
@@ -51,6 +51,13 @@ describe('Distributor NFT Collection', () => {
         dao_minter_code = await compile('DAOJettonMinter');
         dao_wallet_code = await compile('DAOJettonWallet');
         dao_voting_code = await compile('DAOVoting');
+
+        //TODO add instead of set
+        const _libs = Dictionary.empty(Dictionary.Keys.BigUint(256), Dictionary.Values.Cell());
+        _libs.set(BigInt(`0x${dao_wallet_code.hash().toString('hex')}`), dao_wallet_code);
+        const libs = beginCell().storeDictDirect(_libs).endCell();
+        blockchain.libs = libs;
+
         poolJetton  = blockchain.openContract(DAOJettonMinter.createFromConfig({
                                                   admin: deployer.address,
                                                   content: Cell.EMPTY,

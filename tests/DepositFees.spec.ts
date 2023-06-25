@@ -1,5 +1,5 @@
-import { Blockchain, SandboxContract, internal, TreasuryContract, BlockchainSnapshot } from '@ton-community/sandbox';
-import { Cell, toNano, fromNano, beginCell, Address } from 'ton-core';
+import { Blockchain, SandboxContract, internal, TreasuryContract, BlockchainSnapshot, printTransactionFees } from '@ton-community/sandbox';
+import { Cell, toNano, fromNano, beginCell, Address, Dictionary } from 'ton-core';
 import { Pool } from '../wrappers/Pool';
 import { Controller } from '../wrappers/Controller';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
@@ -80,18 +80,24 @@ describe('Fees Printer', () => {
 
         await setConsigliere(deployer.address);
 
-        payout_minter_code = readCompiled('PayoutMinter');
-        payout_wallet_code = readCompiled('PayoutWallet');
+        payout_minter_code = await compile('PayoutMinter');
+        payout_wallet_code = await compile('PayoutWallet');
 
-        payout_collection = readCompiled('PayoutNFTCollection');
+        payout_collection = await compile('PayoutNFTCollection');
 
-        pool_code = readCompiled('Pool');
+        pool_code = await compile('Pool');
         controller_code = readCompiled('Controller');
 
-        dao_minter_code = readCompiled('DAOJettonMinter');
-        dao_wallet_code = readCompiled('DAOJettonWallet');
-        dao_vote_keeper_code = readCompiled('DAOVoteKeeper');
-        dao_voting_code = readCompiled('DAOVoting');
+        dao_wallet_code = await compile('DAOJettonWallet');
+        dao_minter_code = await compile('DAOJettonMinter');
+        dao_vote_keeper_code = await compile('DAOVoteKeeper');
+        dao_voting_code = await compile('DAOVoting');
+
+        //TODO add instead of set
+        const _libs = Dictionary.empty(Dictionary.Keys.BigUint(256), Dictionary.Values.Cell());
+        _libs.set(BigInt(`0x${dao_wallet_code.hash().toString('hex')}`), dao_wallet_code);
+        const libs = beginCell().storeDictDirect(_libs).endCell();
+        blockchain.libs = libs;
 
         const content = jettonContentToCell({type:1,uri:"https://example.com/1.json"});
         poolJetton  = blockchain.openContract(DAOJettonMinter.createFromConfig({
@@ -181,7 +187,8 @@ describe('Fees Printer', () => {
         let deposits: bigint[] = [];
         for (let i = 0; i < wallets.length; i++) {
             const balanceBefore = await wallets[i].getBalance();
-            await pool.sendDeposit(wallets[i].getSender(), depositAmount + gasAttached);
+            let x = await pool.sendDeposit(wallets[i].getSender(), depositAmount + gasAttached);
+            //printTransactionFees(x.transactions);
             let poolBalanceNow = (await pool.getFinanceData()).totalBalance;
             const addedToPool = poolBalanceNow - poolBalanceBefore;
             deposits.push(addedToPool);
@@ -197,7 +204,7 @@ describe('Fees Printer', () => {
         const totalFee = totalDiff - totalAdded;
 
         let toPrint = `     ${header}\n`;
-        for (let i = 0; i < wallets.length; i++) {
+        /*for (let i = 0; i < wallets.length; i++) {
             toPrint += `
               #${i + 1}
                 Sent for deposit: ${fromNano(depositAmount)} + ${fromNano(gasAttached)} TON
@@ -205,13 +212,13 @@ describe('Fees Printer', () => {
                 Deposited: ${fromNano(deposits[i])} TON
                 Deposit cost: ${fromNano(fees[i])} TON
             `;
-        }
+        }*/
         toPrint += `
           TOTAL
             Sent for deposit: ${fromNano(totalAdded)} + ${fromNano(gasAttached * BigInt(wallets.length))} TON
             Balance decrease: ${fromNano(totalDiff)} TON
             Deposited: ${fromNano(totalAdded)} TON
-            Deposits cost: ${fromNano(totalFee)} TON
+            Average Deposits cost: ${fromNano(totalFee/5n)} TON
         `;
         console.log(toPrint);
     }
@@ -253,7 +260,7 @@ describe('Fees Printer', () => {
         const totalFee = totalDiff - totalAdded;
 
         let toPrint = `     ${header}\n`;
-        for (let i = 0; i < wallets.length; i++) {
+        /*for (let i = 0; i < wallets.length; i++) {
             toPrint += `
               #${i + 1}
                 Sent for deposit: ${fromNano(depositAmount)} + ${fromNano(gasAttached)} TON
@@ -261,13 +268,13 @@ describe('Fees Printer', () => {
                 Deposited: ${fromNano(deposits[i])} TON
                 Deposit cost: ${fromNano(fees[i])} TON
             `;
-        }
+        }*/
         toPrint += `
           TOTAL
             Sent for deposit: ${fromNano(totalAdded)} + ${fromNano(gasAttached * BigInt(wallets.length))} TON
             Balance decrease: ${fromNano(totalDiff)} TON
             Deposited: ${fromNano(totalAdded)} TON
-            Deposits cost: ${fromNano(totalFee)} TON
+            Average Deposits cost: ${fromNano(totalFee/5n)} TON
         `;
         console.log(toPrint);
     }
@@ -296,6 +303,7 @@ describe('Fees Printer', () => {
             await deposit5Optimistic("5 FROM THE SAME WALLET (OPTIMISTIC)");
         });
     });
+
     optimistic = false;
     describe('Deposit Normal', () => {
         beforeAll(deployAll);
@@ -337,6 +345,7 @@ describe('Fees Printer', () => {
             wallets = [wallets[0], wallets[0], wallets[0], wallets[0], wallets[0]];
             await deposit5Optimistic("5 FROM THE SAME WALLET (NFT)");
         });
+
     });
 });
 

@@ -1,0 +1,7 @@
+;; This file should be linked separately, thus developer to depend on this
+;; repo could use own params
+
+const int external_param::using_libs = -1;
+const int external_param::wallet_gas_consumption = 11500000;
+
+const int external_param::only_polls = -1;

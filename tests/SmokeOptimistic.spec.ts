@@ -48,6 +48,12 @@ describe('Pool', () => {
         dao_vote_keeper_code = await compile('DAOVoteKeeper');
         dao_voting_code = await compile('DAOVoting');
 
+        //TODO add instead of set
+        const _libs = Dictionary.empty(Dictionary.Keys.BigUint(256), Dictionary.Values.Cell());
+        _libs.set(BigInt(`0x${dao_wallet_code.hash().toString('hex')}`), dao_wallet_code);
+        const libs = beginCell().storeDictDirect(_libs).endCell();
+        blockchain.libs = libs;
+
         const content = jettonContentToCell({type:1,uri:"https://example.com/1.json"});
         poolJetton  = blockchain.openContract(DAOJettonMinter.createFromConfig({
                                                   admin:deployer.address,
