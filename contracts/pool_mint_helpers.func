@@ -1,0 +1,121 @@
+() send_mint_message(slice minter, int query_id, slice destination, int amount, builder payload, int notification_ton, int forward_ton, int total_ton, int mode) impure inline_ref {
+    builder mint_request = begin_cell()
+            .store_body_header(payout::mint, query_id)
+            .store_slice(destination)
+            .store_coins(amount) ;; max 124 bit
+            .store_coins(notification_ton)
+            .store_coins(forward_ton); ;; TRANSFER_NOTIFICATION_AMOUNT + JETTON_WALLET_FEE
+    ifnot( payload.null?() ) {
+        mint_request = mint_request.store_uint(1, 1)
+                .store_ref(payload.end_cell());
+    }
+    var msg = begin_cell()
+            .store_msg_flags(msgflag::BOUNCEABLE)
+            .store_slice(minter)
+            .store_coins(total_ton) ;;TRANSFER_NOTIFICATION_AMOUNT + JETTON_WALLET_FEE + MINT_FEE)
+            .store_msgbody_prefix_slice()
+            .store_builder(mint_request);
+    send_raw_message(msg.end_cell(), mode); ;; pay transfer fees separately, revert on errors
+}
+
+() request_to_mint_pool_jettons(slice destination, int amount, int query_id, builder payload, int for_user?) impure inline_ref {
+    if (for_user?) {
+        send_mint_message(jetton_minter, query_id, destination, amount, payload,
+                DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - POOL_JETTON_WALLET_FEE - POOL_JETTON_MINT_FEE,
+                DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - POOL_JETTON_WALLET_FEE,
+                DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION,
+                sendmode::PAY_FEES_SEPARETELY);
+        var msg = begin_cell()
+                .store_msg_flags(msgflag::NON_BOUNCEABLE)
+                .store_slice(destination)
+                .store_coins(0)
+                .store_msgbody_prefix_slice()
+                .store_body_header(jetton::excesses, query_id);
+        send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE);
+    } else {
+        send_mint_message(jetton_minter, query_id, destination, amount, payload,
+                TRANSFER_NOTIFICATION_AMOUNT,
+                TRANSFER_NOTIFICATION_AMOUNT + POOL_JETTON_WALLET_FEE,
+                TRANSFER_NOTIFICATION_AMOUNT + POOL_JETTON_WALLET_FEE + POOL_JETTON_MINT_FEE,
+                sendmode::REGULAR
+        );
+        sent_during_rotation += TRANSFER_NOTIFICATION_AMOUNT + POOL_JETTON_WALLET_FEE + POOL_JETTON_MINT_FEE;
+    }
+    supply += amount;
+}
+
+() request_to_mint_deposit(slice destination, int amount, int query_id) impure inline {
+    if(deposit_payout.null?()) {
+        ;; we need to deploy new minter
+        cell state_init = calculate_payout_state_init(my_address(), current_round_index(), true);
+        slice to_address = calc_address(JETTONS_WORKCHAIN, state_init);
+        deposit_payout = to_address;
+        slice deposit_minter_jetton_wallet = calc_address(JETTONS_WORKCHAIN,
+                calculate_jetton_wallet_state_init(to_address, jetton_minter, pool_jetton_wallet_code)
+        );
+        builder msg = begin_cell()
+                .store_msg_flags(msgflag::BOUNCEABLE)
+                .store_slice(deposit_payout)
+                .store_coins(MINTER_DEPLOY_FEE)
+                .store_msgbody_prefix_stateinit_slice(state_init)
+                .store_body_header(payout::init, cur_lt())
+                .store_ref(
+                        begin_cell()
+                                .store_uint(0, 1) ;; distribution not started
+                                .store_uint(1, 1) ;; jettons
+                                .store_coins(0)
+                                .store_slice(deposit_minter_jetton_wallet)
+                                .end_cell()
+                );
+        send_raw_message(msg.end_cell(), sendmode::REGULAR);
+    }
+    send_mint_message(deposit_payout, query_id, destination, amount, begin_cell(),
+            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - PAYOUT_PROCESS_FEE - PAYOUT_ITEM_MINT_FEE,
+            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - PAYOUT_PROCESS_FEE,
+            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION,
+            sendmode::PAY_FEES_SEPARETELY
+    );
+    var msg = begin_cell()
+            .store_msg_flags(msgflag::NON_BOUNCEABLE)
+            .store_slice(destination)
+            .store_coins(0)
+            .store_msgbody_prefix_slice()
+            .store_body_header(jetton::excesses, query_id);
+    send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE | sendmode::IGNORE_ERRORS);
+}
+
+() request_to_mint_withdrawal(slice destination, int amount, int query_id) impure inline {
+    if(withdrawal_payout.null?()) {
+        ;; we need to deploy new minter
+        cell state_init = calculate_payout_state_init(my_address(), current_round_index(), false);
+        slice to_address = calc_address(JETTONS_WORKCHAIN, state_init);
+        withdrawal_payout = to_address;
+        builder msg = begin_cell()
+                .store_msg_flags(msgflag::BOUNCEABLE)
+                .store_slice(withdrawal_payout)
+                .store_coins(MINTER_DEPLOY_FEE)
+                .store_msgbody_prefix_stateinit_slice(state_init)
+                .store_body_header(payout::init, cur_lt())
+                .store_ref(
+                        begin_cell()
+                                .store_uint(0, 1) ;; distribution not started
+                                .store_uint(0, 1) ;; TONs
+                                .store_coins(0)
+                                .end_cell()
+                );
+        send_raw_message(msg.end_cell(), sendmode::REGULAR);
+    }
+    send_mint_message(withdrawal_payout, query_id, destination, amount, begin_cell(),
+            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - PAYOUT_PROCESS_FEE - PAYOUT_ITEM_MINT_FEE,
+            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - PAYOUT_PROCESS_FEE,
+            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION,
+            sendmode::PAY_FEES_SEPARETELY
+    );
+    var msg = begin_cell()
+            .store_msg_flags(msgflag::NON_BOUNCEABLE)
+            .store_slice(destination)
+            .store_coins(0)
+            .store_msgbody_prefix_slice()
+            .store_body_header(jetton::excesses, query_id);
+    send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE);
+}

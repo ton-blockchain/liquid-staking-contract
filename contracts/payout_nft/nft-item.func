@@ -13,7 +13,7 @@
 
 
 const int ONE_COIN = 1000000000;
-const int min_tons_for_storage = 9 * ONE_COIN / 100; ;; 0.05 TON
+const int min_tons_for_storage = 9 * ONE_COIN / 100; ;; 0.09 TON
 const int burn_notification_amount = ONE_COIN / 100; ;; 0.01 TON
 
 ;;
@@ -226,4 +226,10 @@ global slice collection;
   (int init?, slice owner) = load_volatile_data();
   var (_collection, index, amount, prev, next) = load_static_data();
   return (init?, index, _collection, owner, begin_cell().store_coins(amount).end_cell());
+}
+
+(int) get_bill_amount() method_id {
+    (int init?, slice owner) = load_volatile_data();
+    var (_collection, index, amount, prev, next) = load_static_data();
+    return amount;
 }

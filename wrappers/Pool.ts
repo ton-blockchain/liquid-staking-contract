@@ -2,7 +2,7 @@ import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, 
 
 import { JettonMinter as AwaitedJettonMinter} from '../contracts/awaited_minter/wrappers/JettonMinter';
 
-import { Conf, Op } from "../PoolConstants";
+import { Conf, Op, PoolState } from "../PoolConstants";
 
 export type PoolConfig = {
   pool_jetton: Address;
@@ -22,6 +22,48 @@ export type PoolConfig = {
   payout_minter_code: Cell;
   vote_keeper_code: Cell;
 };
+type RoundData = {borrowers: Cell | null, roundId: number,
+                                  activeBorrowers: bigint, borrowed: bigint,
+                                  expected: bigint, returned: bigint,
+                                  profit: bigint};
+
+type State = typeof PoolState.NORMAL | typeof PoolState.REPAYMENT_ONLY;
+export type PoolFullConfig = {
+  state: State;
+  halted: boolean;
+  totalBalance: bigint;
+  poolJetton: Address;
+  poolJettonSupply: bigint;
+  depositMinter: Address | null;
+  requestedForDeposit: bigint | null;
+  withdrawalMinter: Address | null;
+  requestedForWithdrawal: bigint | null;
+  interestRate: number;
+  optimisticDepositWithdrawals: boolean;
+  depositsOpen: boolean;
+  savedValidatorSetHash: bigint;
+  currentRound: RoundData;
+  prevRound: RoundData;
+
+  minLoanPerValidator: bigint;
+  maxLoanPerValidator: bigint;
+
+  governanceFee: number;
+
+  sudoer: Address;
+  sudoerSetAt: number;
+  governor: Address;
+  governorUpdateAfter: number;
+  interest_manager: Address;
+  halter: Address;
+  approver: Address;
+
+  controller_code: Cell;
+  pool_jetton_wallet_code: Cell;
+  payout_minter_code: Cell;
+};
+
+export type PoolData = Awaited<ReturnType<InstanceType<typeof Pool>['getFullData']>>;
 
 export function poolConfigToCell(config: PoolConfig): Cell {
     let emptyRoundData = beginCell()
@@ -63,6 +105,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeUint(0, 8) // state NORMAL
               .storeInt(0n, 1) // halted?
               .storeCoins(0) // total_balance
+              .storeRef(mintersData)
               .storeUint(100, 16) // minimal interest_rate
               .storeInt(config.optimistic_deposit_withdrawals, 1) // optimistic_deposit_withdrawals
               .storeInt(-1n, 1) // deposits_open?
@@ -76,7 +119,119 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeCoins(100 * 1000000000) // min_loan_per_validator
               .storeCoins(1000000 * 1000000000) // max_loan_per_validator
               .storeUint(655, 16) // governance fee
-              .storeRef(mintersData)
+              .storeRef(roles)
+              .storeRef(codes)
+           .endCell();
+}
+
+export function dataToFullConfig(data: PoolData) : PoolFullConfig {
+  /*
+   * I know we could use Object.keys/Object.assign kind of magic.
+   * But i feel like it should be explicit for easier TS
+   * level debug if any fields of either type changes.
+   * Let's do it dumb and reliable way
+   */
+  return {
+    state: data.state as (0 | 1),
+    halted: data.halted,
+    totalBalance: data.totalBalance,
+    poolJetton: data.poolJettonMinter,
+    poolJettonSupply: data.poolJettonSupply,
+    depositMinter: data.depositPayout,
+    requestedForDeposit: data.requestedForDeposit,
+    withdrawalMinter: data.withdrawalPayout,
+    requestedForWithdrawal: data.requestedForWithdrawal,
+    interestRate: data.interestRate,
+    optimisticDepositWithdrawals: data.optimisticDepositWithdrawals,
+    depositsOpen: data.depositsOpen,
+    savedValidatorSetHash: data.savedValidatorSetHash,
+    currentRound: data.currentRound,
+    prevRound: data.previousRound,
+    minLoanPerValidator: data.minLoan,
+    maxLoanPerValidator: data.maxLoan,
+    governanceFee: data.governanceFee,
+    sudoer: data.sudoer,
+    sudoerSetAt: data.sudoerSetAt,
+    governor: data.governor,
+    interest_manager: data.interestManager,
+    halter: data.halter,
+    approver: data.approver,
+    controller_code: data.controllerCode,
+    pool_jetton_wallet_code: data.jettonWalletCode,
+    payout_minter_code: data.payoutMinterCode,
+    governorUpdateAfter: 0xffffffffffff
+  };
+}
+
+export function poolFullConfigToCell(config: PoolFullConfig): Cell {
+    let abs = (x:bigint) => { return x < 0n ? -x : x };
+    let serializeRoundData = (round: RoundData) => beginCell()
+                             .storeMaybeRef(round.borrowers)
+                             .storeUint(round.roundId, 32) // round_id
+                             .storeUint(round.activeBorrowers, 32) // active borrowers
+                             .storeCoins(round.borrowed) // borrowed
+                             .storeCoins(round.expected) // expected
+                             .storeCoins(round.returned) // returned
+                             .storeUint(Number(round.profit < 0), 1) // profit sign
+                             .storeCoins(abs(round.profit)) // profit
+                         .endCell();
+
+    let mintersData = beginCell()
+                          .storeAddress(config.poolJetton)
+                          .storeCoins(config.poolJettonSupply);
+    if(config.depositMinter) {
+      mintersData = mintersData.storeUint(1, 1)
+                               .storeUint(0, 1)
+                               .storeAddress(config.depositMinter!)
+                               .storeCoins(config.requestedForDeposit!);
+    } else {
+      mintersData = mintersData.storeUint(0, 1);
+    }
+    if(config.withdrawalMinter) {
+      mintersData = mintersData.storeUint(1, 1)
+                               .storeBit(0)
+                               .storeAddress(config.withdrawalMinter!)
+                               .storeCoins(config.requestedForWithdrawal!);
+    } else {
+      mintersData = mintersData.storeUint(0, 1);
+    }
+    let minters:Cell = mintersData.endCell();
+    let roles = beginCell()
+                   .storeAddress(config.sudoer)
+                   .storeUint(config.sudoerSetAt, 48) // sudoer set at
+                   .storeAddress(config.governor)
+                   .storeUint(config.governorUpdateAfter, 48) // givernor update after
+                   .storeAddress(config.interest_manager)
+                   .storeRef(
+                       beginCell()
+                         .storeAddress(config.halter)
+                         .storeAddress(config.approver)
+                       .endCell()
+                   )
+                .endCell();
+    let codes = beginCell()
+                    .storeRef(config.controller_code)
+                    .storeRef(config.pool_jetton_wallet_code)
+                    .storeRef(config.payout_minter_code)
+                .endCell();
+    return beginCell()
+              .storeUint(config.state, 8) // state NORMAL
+              .storeBit(config.halted) // halted?
+              .storeCoins(config.totalBalance) // total_balance
+              .storeRef(minters)
+              .storeUint(config.interestRate, 16) // minimal interest_rate
+              .storeBit(config.optimisticDepositWithdrawals) // optimistic_deposit_withdrawals
+              .storeBit(config.depositsOpen) // deposits_open?
+              .storeUint(config.savedValidatorSetHash, 256) // saved_validator_set_hash
+              .storeRef(
+                beginCell()
+                  .storeRef(serializeRoundData(config.currentRound))
+                  .storeRef(serializeRoundData(config.prevRound))
+                .endCell()
+              )
+              .storeCoins(config.minLoanPerValidator) // min_loan_per_validator
+              .storeCoins(config.maxLoanPerValidator) // max_loan_per_validator
+              .storeUint(config.governanceFee, 16) // governance fee
               .storeRef(roles)
               .storeRef(codes)
            .endCell();
@@ -252,17 +407,17 @@ export class Pool implements Contract {
 
     async getFullData(provider: ContractProvider) {
         let { stack } = await provider.get('get_pool_full_data', []);
-        let state = Number(stack.readBigNumber());
-        let halted = Number(stack.readBigNumber());
+        let state = stack.readNumber() as State;
+        let halted = stack.readBoolean();
         let totalBalance = stack.readBigNumber();
-        let interestRate = Number(stack.readBigNumber());
-        let optimisticDepositWithdrawals = Number(stack.readBigNumber());
-        let depositsOpen = Number(stack.readBigNumber());
+        let interestRate = stack.readNumber();
+        let optimisticDepositWithdrawals = stack.readBoolean();
+        let depositsOpen = stack.readBoolean();
         let savedValidatorSetHash = stack.readBigNumber();
 
         let prv = stack.readTuple();
         let prvBorrowers = prv.readCellOpt();
-        let prvRoundId = Number(prv.readBigNumber());
+        let prvRoundId = prv.readNumber();
         let prvActiveBorrowers = prv.readBigNumber();
         let prvBorrowed = prv.readBigNumber();
         let prvExpected = prv.readBigNumber();
@@ -280,7 +435,7 @@ export class Pool implements Contract {
 
         let cur = stack.readTuple();
         let curBorrowers = cur.readCellOpt();
-        let curRoundId = Number(cur.readBigNumber());
+        let curRoundId = cur.readNumber();
         let curActiveBorrowers = cur.readBigNumber();
         let curBorrowed = cur.readBigNumber();
         let curExpected = cur.readBigNumber();
@@ -298,7 +453,7 @@ export class Pool implements Contract {
 
         let minLoan = stack.readBigNumber();
         let maxLoan = stack.readBigNumber();
-        let governanceFee = Number(stack.readBigNumber());
+        let governanceFee = stack.readNumber();
 
 
         let poolJettonMinter = stack.readAddress();
@@ -311,7 +466,7 @@ export class Pool implements Contract {
         let requestedForWithdrawal = stack.readBigNumber();
 
         let sudoer = stack.readAddress();
-        let sudoerSetAt = Number(stack.readBigNumber());
+        let sudoerSetAt = stack.readNumber();
 
         let governor = stack.readAddress();
         let interestManager = stack.readAddress();
