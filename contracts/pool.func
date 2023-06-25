@@ -81,10 +81,9 @@ const int DEPOSIT_FEE = ONE_TON; ;;TODO reconsider
 const int WITHDRAWAL_FEE = ONE_TON / 2;
 const int TRANSFER_NOTIFICATION_AMOUNT = ONE_TON / 10;
 const int PAYOUT_PROCESS_FEE = ONE_TON / 7; ;; Due to consigliere wallet_fee is >= 0.1
-const int POOL_JETTON_WALLET_FEE = 14000000;
-const int POOL_JETTON_MINT_FEE = 10000000;
 const int MAX_POOL_GAS_ON_USER_ACTION = ONE_TON / 3;
 const int PAYOUT_ITEM_MINT_FEE = ONE_TON / 6;
+const int PAYOUT_DISTRIBUTION_AMOUNT = ONE_TON / 5; ;; we will get excesses back
 const int MINT_PAYOUT_FEE = ONE_TON / 20;
 const int MINTER_DEPLOY_FEE = ONE_TON / 5;
 
@@ -560,7 +559,7 @@ int muldiv_extra(int a, int b, int c) inline {
         return ();
     }
     int jetton_mint = muldiv_extra(requested_for_deposit, supply, total_balance);
-    sent_during_rotation += TRANSFER_NOTIFICATION_AMOUNT + POOL_JETTON_WALLET_FEE + POOL_JETTON_MINT_FEE;
+    sent_during_rotation += TRANSFER_NOTIFICATION_AMOUNT + PAYOUT_DISTRIBUTION_AMOUNT;
     request_to_mint_pool_jettons(deposit_payout,
                                  jetton_mint,
                                  cur_lt(),

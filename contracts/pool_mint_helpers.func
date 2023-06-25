@@ -21,22 +21,15 @@
 () request_to_mint_pool_jettons(slice destination, int amount, int query_id, builder payload, int for_user?) impure inline_ref {
     if (for_user?) {
         send_mint_message(jetton_minter, query_id, destination, amount, payload,
-                DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - POOL_JETTON_MINT_FEE - POOL_JETTON_WALLET_FEE,
-                DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - POOL_JETTON_MINT_FEE,
-                DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION,
-                sendmode::PAY_FEES_SEPARETELY);
-        var msg = begin_cell()
-                .store_msg_flags(msgflag::NON_BOUNCEABLE)
-                .store_slice(destination)
-                .store_coins(0)
-                .store_msgbody_prefix_slice()
-                .store_body_header(jetton::excesses, query_id);
-        send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE);
+                TRANSFER_NOTIFICATION_AMOUNT,
+                0,
+                0,
+                sendmode::CARRY_ALL_BALANCE);
     } else {
         send_mint_message(jetton_minter, query_id, destination, amount, payload,
                 TRANSFER_NOTIFICATION_AMOUNT,
-                TRANSFER_NOTIFICATION_AMOUNT + POOL_JETTON_WALLET_FEE,
-                TRANSFER_NOTIFICATION_AMOUNT + POOL_JETTON_WALLET_FEE + POOL_JETTON_MINT_FEE,
+                0,
+                TRANSFER_NOTIFICATION_AMOUNT + PAYOUT_DISTRIBUTION_AMOUNT,
                 sendmode::REGULAR
         );
     }
