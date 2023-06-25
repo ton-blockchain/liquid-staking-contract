@@ -193,12 +193,13 @@ describe('Distributor NFT Collection', () => {
         expect(computedGeneric(res).success).toEqual(true);
 
         let dest: Address;
-        let activeBills = dataBefore.nextItemIndex - 1n;
+        let activeBills = billBefore.billsCount;
         do {
             const burnRequestMsg = res.outMessages.get(0);
 
             const nftAddr = destinationAddress(burnRequestMsg);
-            expect(nftAddr.equals(await collection.getNFTAddress(activeBills))).toEqual(true);
+            let lastDeployedItemIndex = (await collection.getCollectionData()).nextItemIndex - 1n;
+            expect(nftAddr.equals(await collection.getNFTAddress(lastDeployedItemIndex))).toEqual(true);
 
             const nft = blockchain.openContract(PayoutItem.createFromAddress(nftAddr));
             const { owner } = await nft.getNFTData();

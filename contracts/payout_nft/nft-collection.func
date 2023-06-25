@@ -116,9 +116,11 @@ slice calculate_nft_item_address(cell state_init) {
     }
     throw_unless(error::need_init, ~ cell_null?(distribution));
 
+    slice distr = distribution.begin_parse();
+    int distribution_started = distr~load_uint(1);
     if (op == op::mint_nft) {
       throw_unless(error::unauthorized_mint_request, equal_slice_bits(sender, admin));
-       
+      throw_if(error::mint_after_distribution_start, distribution_started);
       slice owner = in_msg_body~load_msg_addr();
       int amount = in_msg_body~load_coins();
 
@@ -155,10 +157,7 @@ slice calculate_nft_item_address(cell state_init) {
     }
 
 
-    slice distr = distribution.begin_parse();
-    int distribution_started = distr~load_uint(1);
-
-    if (op == op::transfer_notification) { ;; accept only as jetton distribution start 
+    if (op == op::transfer_notification) { ;; accept only as jetton distribution start
         throw_if(error::distribution_already_started, distribution_started);
         int jettons? = distr~load_uint(1);
         throw_unless(error::cannot_distribute_jettons, jettons?);
@@ -270,7 +269,7 @@ slice calculate_nft_item_address(cell state_init) {
             send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);
         }
         distribution = new_distr.end_cell();
-        return save_data(issued_bills - burnt_amount, admin, distribution, collection_content, burnt_index + 1, prev, current, next, next_state_init);
+        return save_data(issued_bills - burnt_amount, admin, distribution, collection_content, burnt_index, prev, current, next, next_state_init);
     }
 
     throw(0xffff);
