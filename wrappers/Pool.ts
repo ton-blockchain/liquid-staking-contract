@@ -345,6 +345,17 @@ export class Pool implements Contract {
         });
     }
 
+    async sendSetGovernorFee(provider: ContractProvider, via: Sender, newFee: number, value: bigint = toNano("0.1")) {
+        await provider.internal(via, {
+            value, sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                    .storeUint(Op.governor.set_governance_fee, 32)
+                    .storeUint(1, 64)
+                    .storeUint(newFee, 16)
+                  .endCell(),
+        });
+    }
+
     // Get methods
     /*
     async getDepositPayout(provider: ContractProvider) {

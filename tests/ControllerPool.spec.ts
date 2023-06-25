@@ -105,8 +105,6 @@ describe('Controller & Pool', () => {
         dao_vote_keeper_code = await compile('DAOVoteKeeper');
         dao_voting_code = await compile('DAOVoting');
 
-        const governorAddress = randomAddress(-1);
-
         const content = jettonContentToCell({type:1,uri:"https://example.com/1.json"});
         poolJetton  = blockchain.openContract(DAOJettonMinter.createFromConfig({
                                                   admin:deployer.address,
@@ -120,7 +118,7 @@ describe('Controller & Pool', () => {
               optimistic_deposit_withdrawals: 0n,
 
               sudoer : deployer.address,
-              governor : governorAddress,
+              governor : deployer.address,
               interest_manager : deployer.address,
               halter : deployer.address,
               consigliere : deployer.address,
@@ -138,7 +136,7 @@ describe('Controller & Pool', () => {
           controllerId: 0,
           validator: deployer.address,
           pool: pool.address,
-          governor: governorAddress,
+          governor: deployer.address,
           approver: deployer.address,
           halter: deployer.address,
         };
@@ -198,7 +196,7 @@ describe('Controller & Pool', () => {
         const loanRequestControllerIntoPool: (reqBody: Cell, controllerId: number, valik: Address) => Cell =
             (reqBody, controllerId, valik) => {
                     return beginCell()
-                    .storeUint(Op.pool.request_loan, 32) // op pool::request_loan
+                    .storeUint(Op.pool.request_loan, 32)
                     // skip part with requesting to send a request to pool from controller
                     // send request to pool directly
                     .storeSlice(
@@ -486,7 +484,7 @@ describe('Controller & Pool', () => {
             expect(regularRequestResult.transactions).not.toHaveTransaction({
                 from: pool.address,
                 to: poolConfig.interest_manager,
-                op: Op.interestManager.stats, // interest_manager::stats
+                op: Op.interestManager.stats,
             });
             const currLoan1 = await pool.getLoan(0, deployer.address);
             const currLoan2 = await pool.getLoan(1, deployer.address);
@@ -523,7 +521,10 @@ describe('Controller & Pool', () => {
             const borrowers = await pool.getBorrowersDict(true);
             expect(borrowers.size).toEqual(1);
         });
+        let beforeRepay: BlockchainSnapshot;
         it('repaying of the last loan should rotate round', async () => {
+            beforeRepay = blockchain.snapshot();
+            console.log('repaying of the last loan should rotate round');
             const repayLoanResult = await anotherController.sendReturnUnusedLoan(deployer.getSender());
             expect(repayLoanResult.transactions).toHaveTransaction({
                 from: anotherController.address,
@@ -533,7 +534,7 @@ describe('Controller & Pool', () => {
             expect(repayLoanResult.transactions).toHaveTransaction({
                 from: pool.address,
                 to: poolConfig.interest_manager,
-                op: Op.interestManager.stats, // interest_manager::stats
+                op: Op.interestManager.stats,
             });
             let newRoundId = await pool.getRoundId();
             expect(newRoundId).toEqual(roundId + 1);
@@ -555,6 +556,50 @@ describe('Controller & Pool', () => {
             expect(currBorrowers.size).toEqual(0);
             const prevBorrowers = await pool.getBorrowersDict(true);
             expect(prevBorrowers.size).toEqual(2);
+        });
+        async function sendRepay() {
+            return await blockchain.sendMessage(internal({
+                from: anotherController.address,
+                to: pool.address,
+                value: toNano("100000"),
+                body: beginCell()
+                      .storeUint(Op.pool.loan_repayment, 32)
+                      .storeUint(0, 64)
+                    .endCell()
+            }))
+        }
+        it('should not pay governance fee if fee cannot cover it\'s send cost', async () => {
+            await blockchain.loadFrom(beforeRepay);
+            const setResult = await pool.sendSetGovernorFee(deployer.getSender(), 1);
+            expect(setResult.transactions).toHaveTransaction({
+                from: deployer.address,
+                to: pool.address,
+                success: true
+            });
+            const res = await sendRepay();
+            expect(res.transactions).toHaveTransaction({
+                from: anotherController.address,
+                to: pool.address,
+                success: true,
+            });
+            expect(res.transactions).not.toHaveTransaction({
+                from: pool.address,
+                op: Op.interestManager.operation_fee,
+            });
+        });
+        it('should pay governance fee if profit is enough', async () => {
+            await blockchain.loadFrom(beforeRepay);
+            await pool.sendSetGovernorFee(deployer.getSender(), 1 << 15);
+            const res = await sendRepay()
+            expect(res.transactions).toHaveTransaction({
+                from: anotherController.address,
+                to: pool.address,
+                success: true,
+            });
+            expect(res.transactions).toHaveTransaction({
+                from: pool.address,
+                op: Op.interestManager.operation_fee
+            });
         });
     });
 });
