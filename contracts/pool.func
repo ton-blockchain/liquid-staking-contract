@@ -580,7 +580,10 @@ int muldiv_extra(int a, int b, int c) inline {
 
 (int, int) _get_projected_conversion_ratio () inline {
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = prev_round_borrowers;
-    return (max(expected - borrowed + total_balance - FINALIZE_ROUND_FEE, 0), supply);
+    int expected_profit = expected - borrowed - FINALIZE_ROUND_FEE;
+    int fee = max(muldiv(governance_fee, profit, 65536), 0);
+    expected_profit -= fee;
+    return (max(total_balance + expected_profit, 0), supply);
 }
 
 
