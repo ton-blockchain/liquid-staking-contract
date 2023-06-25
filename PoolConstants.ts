@@ -67,7 +67,16 @@ export abstract class Op {
     }
     static readonly jetton = {
         excesses: 0xd53276db,
-        transfer_notification: 0x7362d09c
+        internal_transfer: 0x178d4519,
+        transfer_notification: 0x7362d09c,
+        burn : 0x595f07bc,
+        burn_notification : 0x7bdd97de,
+        withdraw_tons : 0x6d8e5e3c,
+        withdraw_jettons : 0x768a50b2,
+
+        provide_wallet_address : 0x2c76b973,
+        take_wallet_address : 0xd1735400,
+        change_content : 0x5773d1f5,
     }
     static readonly payout = {
         init: 0xf5aa8943,
