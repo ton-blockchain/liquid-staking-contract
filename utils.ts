@@ -2,6 +2,7 @@ import { Address, Tuple, TupleItem, TupleItemInt, TupleReader, toNano } from "to
 import { Cell, Slice, Sender, SenderArguments, ContractProvider, Message, beginCell, Dictionary, MessageRelaxed, Transaction } from "ton-core";
 import { Blockchain, MessageParams, SendMessageResult, SmartContract, SmartContractTransaction } from "@ton-community/sandbox";
 import { computeMessageForwardFees, MsgPrices } from "./fees";
+import { Op } from "./PoolConstants";
 
 
 const randomAddress = (wc: number = 0) => {
@@ -153,6 +154,80 @@ export class LispList <T extends IAny> {
         return new LispIterator(this.tuple, this.ctor);
     }
 }
+
+export type InternalTransfer = {
+    from: Address | null,
+    to: Address | null,
+    amount: bigint,
+    forwardAmount: bigint,
+    payload: Cell | null
+};
+
+export type ControllerStaticData = {
+    id: number,
+    validator: Address,
+    pool: Address,
+    governor: Address,
+    approver: Address | null,
+    halter: Address | null
+}
+export const parseControllerStatic = (meta: Cell) => {
+    const ms = meta.beginParse();
+    const hs = ms.preloadRef().beginParse(); // Halter appriver cell
+    return {
+        id: ms.loadUint(32),
+        validator: ms.loadAddress(),
+        pool: ms.loadAddress(),
+        governor: ms.loadAddress(),
+        approver: hs.loadAddressAny(),
+        halter: hs.loadAddressAny()
+    };
+}
+export const parseInternalTransfer = (body: Cell) => {
+    const ts = body.beginParse();
+    if(ts.loadUint(32) !== Op.jetton.internal_transfer)
+        throw(Error("Internal transfer op expected!"));
+
+    ts.skip(64);
+    return {
+        amount: ts.loadCoins(),
+        from: ts.loadAddressAny(),
+        to: ts.loadAddressAny(),
+        forwardAmount: ts.loadCoins(),
+        payload: ts.loadMaybeRef()
+    };
+};
+
+const testPartial = (cmp: any, match: any) => {
+    for (let key in match) {
+        if(!(key in cmp)) {
+            throw Error(`Unknown key ${key} in ${cmp}`);
+        }
+
+        if(match[key] instanceof Address) {
+            if(!(match[key] as Address).equals(cmp[key])) {
+                return false
+            }
+        }
+        else if(match[key] instanceof Cell) {
+            if(!(match[key] as Cell).equals(cmp[key])) {
+                return false;
+            }
+        }
+        else if(match[key] !== cmp[key]){
+            return false;
+        }
+    }
+    return true;
+}
+export const testControllerMeta = (meta: Cell, match: Partial<ControllerStaticData>) => {
+    const res = parseControllerStatic(meta);
+    return testPartial(res, match);
+}
+export const testJettonTransfer = (body: Cell, match: Partial<InternalTransfer>) => {
+    const res = parseInternalTransfer(body);
+    return testPartial(res, match);
+};
 
 export {
     differentAddress,
