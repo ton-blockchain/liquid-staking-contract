@@ -415,6 +415,14 @@ export class Pool implements Contract {
     }
 
 
+    async getControllerAddress(provider: ContractProvider, id:number, validator: Address) {
+      const {stack} = await provider.get('get_controller_address', [
+        {type: 'int', value: BigInt(id)},
+        {type: 'slice', cell: beginCell().storeAddress(validator).endCell()}
+      ]);
+
+      return stack.readAddress();
+    }
     async getFullData(provider: ContractProvider) {
         let { stack } = await provider.get('get_pool_full_data', []);
         let state = stack.readNumber() as State;
