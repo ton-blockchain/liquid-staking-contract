@@ -17,6 +17,7 @@ const int op::start_distribution = 0x1140a64f;
 const int op::transfer_notification = 0x7362d09c;
 
 const int op::mint_nft = 0x1674b0a0;
+const int op::return_unused = 0x4bc7c2df;
 
 (slice, (int)) ~load_op(slice s) inline { return s.load_uint(32); }
 (slice, (int)) ~load_query_id(slice s) inline { return s.load_uint(64); }

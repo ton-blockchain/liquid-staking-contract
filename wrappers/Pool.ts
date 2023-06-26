@@ -325,6 +325,16 @@ export class Pool implements Contract {
                   .endCell(),
         });
     }
+    async sendDonate(provider: ContractProvider, via: Sender, value:bigint) {
+        await provider.internal(via, {
+            value: value + toNano('1'),
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                     .storeUint(Op.pool.donate, 32) // op = touch
+                     .storeUint(1, 64) // query id
+                  .endCell(),
+        });
+    }
 
 
     async sendUpgrade(provider: ContractProvider, via: Sender,

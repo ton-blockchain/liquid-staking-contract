@@ -1,5 +1,5 @@
 import { Blockchain, SandboxContract, internal, TreasuryContract, BlockchainSnapshot } from '@ton-community/sandbox';
-import { Cell, toNano, beginCell, Address } from 'ton-core';
+import { Cell, toNano, beginCell, Address, Dictionary } from 'ton-core';
 import { Pool, PoolConfig } from '../wrappers/Pool';
 import { Controller, ControllerConfig } from '../wrappers/Controller';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
@@ -101,9 +101,17 @@ describe('Controller & Pool', () => {
         controller_code = await compile('Controller');
 
         dao_minter_code = await compile('DAOJettonMinter');
-        dao_wallet_code = await compile('DAOJettonWallet');
+        let dao_wallet_code_raw = await compile('DAOJettonWallet');
         dao_vote_keeper_code = await compile('DAOVoteKeeper');
         dao_voting_code = await compile('DAOVoting');
+
+        //TODO add instead of set
+        const _libs = Dictionary.empty(Dictionary.Keys.BigUint(256), Dictionary.Values.Cell());
+        _libs.set(BigInt(`0x${dao_wallet_code_raw.hash().toString('hex')}`), dao_wallet_code_raw);
+        const libs = beginCell().storeDictDirect(_libs).endCell();
+        blockchain.libs = libs;
+        let lib_prep = beginCell().storeUint(2,8).storeBuffer(dao_wallet_code_raw.hash()).endCell();
+        dao_wallet_code = new Cell({ exotic:true, bits: lib_prep.bits, refs:lib_prep.refs});
 
         const governorAddress = randomAddress(-1);
 

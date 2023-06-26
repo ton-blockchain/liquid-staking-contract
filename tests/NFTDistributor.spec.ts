@@ -1,5 +1,5 @@
 import { Blockchain, SandboxContract, TreasuryContract, BlockchainSnapshot, internal, SmartContractTransaction } from '@ton-community/sandbox';
-import { Address, Cell, toNano, beginCell, Message } from 'ton-core';
+import { Address, Cell, toNano, beginCell, Message, Dictionary } from 'ton-core';
 import { PayoutCollection, Errors, Op, Distribution } from '../wrappers/PayoutNFTCollection';
 import { PayoutItem } from '../wrappers/PayoutNFTItem';
 import { JettonMinter as DAOJettonMinter } from '../contracts/jetton_dao/wrappers/JettonMinter';
@@ -49,8 +49,17 @@ describe('Distributor NFT Collection', () => {
         }
 
         dao_minter_code = await compile('DAOJettonMinter');
-        dao_wallet_code = await compile('DAOJettonWallet');
+        let dao_wallet_code_raw = await compile('DAOJettonWallet');
         dao_voting_code = await compile('DAOVoting');
+
+        //TODO add instead of set
+        const _libs = Dictionary.empty(Dictionary.Keys.BigUint(256), Dictionary.Values.Cell());
+        _libs.set(BigInt(`0x${dao_wallet_code_raw.hash().toString('hex')}`), dao_wallet_code_raw);
+        const libs = beginCell().storeDictDirect(_libs).endCell();
+        blockchain.libs = libs;
+        let lib_prep = beginCell().storeUint(2,8).storeBuffer(dao_wallet_code_raw.hash()).endCell();
+        dao_wallet_code = new Cell({ exotic:true, bits: lib_prep.bits, refs:lib_prep.refs});
+
         poolJetton  = blockchain.openContract(DAOJettonMinter.createFromConfig({
                                                   admin: deployer.address,
                                                   content: Cell.EMPTY,
@@ -184,12 +193,13 @@ describe('Distributor NFT Collection', () => {
         expect(computedGeneric(res).success).toEqual(true);
 
         let dest: Address;
-        let activeBills = dataBefore.nextItemIndex - 1n;
+        let activeBills = billBefore.billsCount;
         do {
             const burnRequestMsg = res.outMessages.get(0);
 
             const nftAddr = destinationAddress(burnRequestMsg);
-            expect(nftAddr.equals(await collection.getNFTAddress(activeBills))).toEqual(true);
+            let lastDeployedItemIndex = (await collection.getCollectionData()).nextItemIndex - 1n;
+            expect(nftAddr.equals(await collection.getNFTAddress(lastDeployedItemIndex))).toEqual(true);
 
             const nft = blockchain.openContract(PayoutItem.createFromAddress(nftAddr));
             const { owner } = await nft.getNFTData();
