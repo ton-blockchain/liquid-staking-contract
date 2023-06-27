@@ -62,18 +62,11 @@
         send_raw_message(msg.end_cell(), sendmode::REGULAR);
     }
     send_mint_message(deposit_payout, query_id, destination, amount, begin_cell(),
-            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - PAYOUT_PROCESS_FEE - PAYOUT_ITEM_MINT_FEE,
-            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - PAYOUT_PROCESS_FEE,
-            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION,
-            sendmode::PAY_FEES_SEPARETELY
+            TRANSFER_NOTIFICATION_AMOUNT,
+            0,
+            0,
+            sendmode::CARRY_ALL_BALANCE
     );
-    var msg = begin_cell()
-            .store_msg_flags(msgflag::NON_BOUNCEABLE)
-            .store_slice(destination)
-            .store_coins(0)
-            .store_msgbody_prefix_slice()
-            .store_body_header(jetton::excesses, query_id);
-    send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE | sendmode::IGNORE_ERRORS);
 }
 
 () request_to_mint_withdrawal(slice destination, int amount, int query_id) impure inline {
@@ -98,16 +91,9 @@
         send_raw_message(msg.end_cell(), sendmode::REGULAR);
     }
     send_mint_message(withdrawal_payout, query_id, destination, amount, begin_cell(),
-            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - PAYOUT_PROCESS_FEE - PAYOUT_ITEM_MINT_FEE,
-            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION - PAYOUT_PROCESS_FEE,
-            DEPOSIT_FEE - MAX_POOL_GAS_ON_USER_ACTION,
-            sendmode::PAY_FEES_SEPARETELY
+            TRANSFER_NOTIFICATION_AMOUNT,
+            0,
+            0,
+            sendmode::CARRY_ALL_BALANCE
     );
-    var msg = begin_cell()
-            .store_msg_flags(msgflag::NON_BOUNCEABLE)
-            .store_slice(destination)
-            .store_coins(0)
-            .store_msgbody_prefix_slice()
-            .store_body_header(jetton::excesses, query_id);
-    send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE);
 }
