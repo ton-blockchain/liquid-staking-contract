@@ -90,10 +90,10 @@ describe('Withdraw Fees Printer', () => {
 
         wallets = await Promise.all([
             blockchain.treasury("wallet1"),
-            /*blockchain.treasury("wallet2"),
+            blockchain.treasury("wallet2"),
             blockchain.treasury("wallet3"),
             blockchain.treasury("wallet4"),
-            blockchain.treasury("wallet5"),*/
+            blockchain.treasury("wallet5"),
         ]);
 
         await setConsigliere(deployer.address);

@@ -647,3 +647,32 @@ var get_pool_full_data() method_id {
             (_get_projected_conversion_ratio())
     );
 }
+
+;; We order all loans by controller address hash, put them in line and find position
+;; of median of given controller loan. This data can be used for deterministic
+;; voting: if stakers decide to vote in some proptions, we can check that controllers
+;; voted in the same proportion
+(int, int) get_controller_loan_position(int controller_addr_hash, int prev?) method_id {
+    load_data();
+    var target = prev? ? prev_round_borrowers : current_round_borrowers;
+    var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = target;
+    int found? = true;
+    int address = -1;
+    int loan_summ = 0;
+    do {
+        (address, slice cs, found?) = borrowers_dict.udict_get_next?(ADDR_SIZE, address);
+        if(found?) {
+            int address_loan = cs~load_coins() + cs~load_coins();
+            if(address == controller_addr_hash) {
+                ;; we found controller
+                int distance_to_median = loan_summ + (address_loan / 2);
+                return (distance_to_median, expected);
+            } else {
+              loan_summ += address_loan;
+            }
+        }
+    } until (~ found?);
+    ;; controller not found
+    throw(65536);
+    return (null(), null());
+}
