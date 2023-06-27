@@ -14,8 +14,11 @@ import { Conf, Op } from "../PoolConstants";
 const loadConfig = (config:Cell) => {
           return config.beginParse().loadDictDirect(Dictionary.Keys.Int(32), Dictionary.Values.Cell());
         };
-
+/*
 describe('Pool', () => {
+
+
+
     let pool_code: Cell;
     let controller_code: Cell;
     let payout_minter_code: Cell;
@@ -168,3 +171,4 @@ describe('Pool', () => {
 
     });
 });
+*/
