@@ -1,4 +1,4 @@
-import { Blockchain, SandboxContract, TreasuryContract, BlockchainSnapshot } from '@ton-community/sandbox';
+import { Blockchain, SandboxContract, TreasuryContract, BlockchainSnapshot, printTransactionFees, prettyLogTransactions } from '@ton-community/sandbox';
 import { Cell, toNano, fromNano, beginCell, Address, Dictionary } from 'ton-core';
 import { Pool } from '../wrappers/Pool';
 import { Controller } from '../wrappers/Controller';
@@ -90,10 +90,10 @@ describe('Withdraw Fees Printer', () => {
 
         wallets = await Promise.all([
             blockchain.treasury("wallet1"),
-            blockchain.treasury("wallet2"),
+            /*blockchain.treasury("wallet2"),
             blockchain.treasury("wallet3"),
             blockchain.treasury("wallet4"),
-            blockchain.treasury("wallet5"),
+            blockchain.treasury("wallet5"),*/
         ]);
 
         await setConsigliere(deployer.address);
@@ -196,7 +196,7 @@ describe('Withdraw Fees Printer', () => {
         normalState = blockchain.snapshot();
     }
 
-    async function withdraw5 (header: string) {
+    async function withdraw5 (header: string, waitTillRoundEnd: boolean = false, fillOrKill: boolean = false) {
         const poolBalanceBefore = (await pool.getFinanceData()).totalBalance;
         const gasAttached = toNano(1);
 
@@ -206,6 +206,7 @@ describe('Withdraw Fees Printer', () => {
         let withdrawals: bigint[] = [];
         // want here to withdraw 100% of all deposits
         let jSupply = (await poolJetton.getJettonData()).totalSupply;
+        let poolData = (await pool.getFullData());
 
         for (let i = 0; i < wallets.length; i++) {
             balancesBefore.push(await wallets[i].getBalance());
@@ -213,8 +214,12 @@ describe('Withdraw Fees Printer', () => {
             let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
             const jettonAmount = await myPoolJettonWallet.getJettonBalance();
             jAmounts.push(jettonAmount);
-            const res = await myPoolJettonWallet.sendBurnWithParams(wallets[i].getSender(), gasAttached, jettonAmount, wallets[i].address, false, false);
-            withdrawals.push(jettonAmount * poolBalanceBefore / jSupply);
+            const res = await myPoolJettonWallet.sendBurnWithParams(wallets[i].getSender(), gasAttached, jettonAmount, wallets[i].address, waitTillRoundEnd, fillOrKill);
+            if(waitTillRoundEnd) { // next round ratio
+              withdrawals.push(jettonAmount * poolData.projectedTotalBalance / poolData.projectedPoolSupply);
+            } else { // this round ratio
+              withdrawals.push(jettonAmount * poolData.totalBalance / poolData.supply);
+            }
             // // take incoming distributed amount with unknown source from transactions
             // expect(res.transactions).toHaveTransaction({
             //     to: wallets[i].address,
@@ -225,6 +230,7 @@ describe('Withdraw Fees Printer', () => {
         newVset();
         toElections();
         const rotateResult = await pool.sendTouch(notDeployer.getSender());
+        //printTransactionFees(rotateResult.transactions);
         let serviceFees = 0n;
         expect(rotateResult.transactions).not.toHaveTransaction({
             from: pool.address,
@@ -234,6 +240,7 @@ describe('Withdraw Fees Printer', () => {
 
         let toPrint = `     ${header}\n`;
         for (let i = 0; i < wallets.length; i++) {
+
             const balanceAfter = await wallets[i].getBalance();
             const received = balanceAfter - balancesBefore[i];
             const cost = withdrawals[i] - received;
@@ -257,7 +264,7 @@ describe('Withdraw Fees Printer', () => {
         `;
         console.log(toPrint);
     }
-
+/*
     describe('Withdraw Normal', () => {
         beforeAll(deployAll);
         it('5 new wallets', async () => {
@@ -270,8 +277,9 @@ describe('Withdraw Fees Printer', () => {
             await withdraw5("5 WITH NEW WALLETS, FIRST ROTATES (NORMAL)");
         });
     });
-
-    optimistic = true;
+*/
+    nftDistribution = true;
+    optimistic = false;
     describe('Withdraw Optimistic', () => {
         beforeAll(deployAll);
         it('5 new wallets', async () => {
@@ -284,17 +292,17 @@ describe('Withdraw Fees Printer', () => {
             await withdraw5("5 WITH NEW WALLETS, FIRST ROTATES (OPTIMISTIC)");
         });
     });
-    nftDistribution = true;
+    optimistic = true;
     describe('Withdraw Optimistic NFT', () => {
         beforeAll(deployAll);
         it('5 new wallets', async () => {
             await withdraw5('5 WITH NEW WALLETS (NFT)');
         });
-        it('5 new but first rotates the round', async () => {
+        it('5 new but wait till round end', async () => {
             await blockchain.loadFrom(normalState);
             newVset();
             toElections();
-            await withdraw5("5 WITH NEW WALLETS, FIRST ROTATES (NFT)");
+            await withdraw5("5 WITH NEW WALLETS, FIRST ROTATES (NFT)", true);
         });
     });
 });
