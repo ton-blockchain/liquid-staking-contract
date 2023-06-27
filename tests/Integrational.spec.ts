@@ -1,5 +1,5 @@
 import { Blockchain,BlockchainSnapshot, createShardAccount,internal,SandboxContract,SendMessageResult,SmartContractTransaction,TreasuryContract } from "@ton-community/sandbox";
-import { Address, Cell, beginCell, toNano } from 'ton-core';
+import { Address, Cell, beginCell, toNano, Sender } from 'ton-core';
 import { compile } from '@ton-community/blueprint';
 import '@ton-community/test-utils';
 import { keyPairFromSeed, getSecureRandomBytes, getSecureRandomWords, KeyPair } from 'ton-crypto';
@@ -10,11 +10,12 @@ import { Elector } from "../wrappers/Elector";
 import { Config  } from "../wrappers/Config";
 import { setConsigliere } from "../wrappers/PayoutMinter.compile";
 import { Conf, ControllerState, Errors, Op } from "../PoolConstants";
-import { testJettonTransfer, buff2bigint, computedGeneric, getRandomTon, testControllerMeta } from "../utils";
+import { testJettonTransfer, buff2bigint, computedGeneric, getRandomTon, testControllerMeta, getExternals, testLog, testLogRepayment } from "../utils";
 import { ElectorTest } from "../wrappers/ElectorTest";
 import { getElectionsConf, getStakeConf, getValidatorsConf, getVset, loadConfig, packStakeConf, packValidatorsConf } from "../wrappers/ValidatorUtils";
 import { ConfigTest } from "../wrappers/ConfigTest";
 import { computeMessageForwardFees, getMsgPrices } from "../fees";
+import { getRandomInt, randomAddress } from "../contracts/jetton_dao/tests/utils";
 
 type Validator = {
   wallet: SandboxContract<TreasuryContract>,
@@ -40,6 +41,8 @@ describe('Integrational tests', () => {
     let controller:SandboxContract<Controller>;
     let validator:Validator;
     let validators: Validator[];
+    // Depositors array first idx -> round, second -> sender
+    let depositors: SandboxContract<TreasuryContract>[][];
     let elector:SandboxContract<ElectorTest>;
     let config:SandboxContract<ConfigTest>;
     let poolConfig:PoolConfig;
@@ -53,9 +56,11 @@ describe('Integrational tests', () => {
     let loadSnapshot:(snap:string) => Promise<void>;
     let getCurTime:() => number;
     let updateConfig:() => Promise<Cell>;
+    let announceElections:() => Promise<number>;
     let runElections:() => Promise<void>;
     let waitNextRound:() => Promise<void>;
-    let nextRound:() => Promise<void>;
+    let waitUnlock:(since: number) => void;
+    let nextRound:(count?: number, post?:() => Promise<void>) => Promise<void>;
 
 
     beforeAll(async () => {
@@ -81,9 +86,10 @@ describe('Integrational tests', () => {
         msgConf = getMsgPrices(bc.config, -1);
         
         validators = [];
+        depositors = [];
 
         const validatorsCount   = 5;
-        const validatorsWallets = await bc.createWallets(validatorsCount, {workchain: -1});
+        const validatorsWallets = await bc.createWallets(validatorsCount, {workchain: -1}); 
 
         validator = {
             wallet: await bc.treasury('validator', {workchain: -1}),
@@ -196,25 +202,42 @@ describe('Integrational tests', () => {
           // Should change to the current vset
           const newVset = getVset(newConf, 34);
           expect(newVset).toEqual(nextVset);
+          // Should trigger unfreeze if possible
+          await elector.sendTickTock("tick");
+        }
+        waitUnlock = async (since:number) => {
+            const unlockTime = since + eConf.stake_held_for + 61;
+            if(getCurTime() < unlockTime)
+                bc.now = unlockTime;
         }
 
-        runElections = async () => {
-
+        announceElections = async () => {
           const curVset = getVset(bc.config, 34);
+          const curTime = getCurTime();
           const electBegin = curVset.utime_unitl - eConf.begin_before + 1;
 
-          bc.now = getCurTime();
-          if(bc.now < electBegin) {
+          const prevElections = await elector.getActiveElectionId();
+
+          if(curTime < electBegin) {
               bc.now = electBegin;
           }
+          else if(curTime < prevElections - eConf.end_before) {
+              return prevElections;
+          }
 
-          let prevElections = await elector.getActiveElectionId();
-          let curElections: number;
+          let curElections = prevElections;
+
           do {
               await elector.sendTickTock("tick");
               curElections = await elector.getActiveElectionId();
           } while(curElections == 0 || prevElections == curElections);
 
+          return curElections;
+        }
+
+        runElections = async () => {
+
+          await announceElections();
           // Elector profits
           await bc.sendMessage(internal({
             from: new Address(-1, Buffer.alloc(32, 0)),
@@ -232,16 +255,26 @@ describe('Integrational tests', () => {
           while(i < validators.length
                 && (curStake < sConf.min_total_stake || i + partCount < vConf.min_validators)) {
             const validator = validators[i++];
-            const res       = await elector.sendNewStake(validator.wallet.getSender(),
-                                                         stakeSize,
-                                                         validator.wallet.address,
-                                                         validator.keys.publicKey,
-                                                         validator.keys.secretKey,
-                                                         electState.elect_at);
-            expect(res.transactions).not.toHaveTransaction({
+            const hasStake  = await elector.getReturnedStake(validator.wallet.address);
+            if(hasStake > 0n) {
+                // Get stake back
+                const rec = await elector.sendRecoverStake(validator.wallet.getSender());
+                expect(rec.transactions).toHaveTransaction({
+                    from: elector.address,
+                    to: validator.wallet.address,
+                    op: Op.elector.recover_stake_ok
+                });
+            }
+            const res = await elector.sendNewStake(validator.wallet.getSender(),
+                                                   stakeSize,
+                                                   validator.wallet.address,
+                                                   validator.keys.publicKey,
+                                                   validator.keys.secretKey,
+                                                   electState.elect_at);
+            expect(res.transactions).toHaveTransaction({
               from: elector.address,
               to: validator.wallet.address,
-              op: 0xee6f454c
+              op: Op.elector.new_stake_ok
             });
             curStake += stakeSize;
           }
@@ -259,16 +292,21 @@ describe('Integrational tests', () => {
             ...
           });
           */
-          electState     = await elector.getParticipantListExtended();
+          electState = await elector.getParticipantListExtended();
           expect(electState.finished).toBe(true);
           // Updating active vset
           await elector.sendTickTock("tock");
         }
 
-        nextRound = async () => {
-            await runElections();
-            await updateConfig();
-            await waitNextRound();
+        nextRound = async (count:number = 1, post?:() => void) => {
+            while(count--) {
+                await runElections();
+                await updateConfig();
+                await waitNextRound();
+                if(post) {
+                    await post()
+                }
+            }
         };
     });
 
@@ -306,33 +344,43 @@ describe('Integrational tests', () => {
         expect((await controller.getControllerData()).approved).toBe(true);
     });
     it('Deposit to pool', async () => {
-        const depo   = getRandomTon(300000, 500000);
-        const dataBefore = await pool.getFullData();
-        const res    = await pool.sendDeposit(deployer.getSender(), depo);
-        const minter = bc.openContract(await pool.getDepositMinter());
-        const wallet = await minter.getWalletAddress(deployer.address);
-        expect(res.transactions).toHaveTransaction({
-            from: minter.address,
-            to: wallet,
-            body: (x) => {
-                return testJettonTransfer(x!, {
-                    amount: depo - Conf.poolDepositFee,
-                    from: null,
-                    to: null
-                });
-            }
-        });
-        expect(res.transactions).toHaveTransaction({
-            from: wallet,
-            to: deployer.address,
-            op: Op.jetton.transfer_notification,
-            success: true
-        });
+        const depoCount = getRandomInt(5, 10);
+        const roundDepo: SandboxContract<TreasuryContract>[] = [];
+        for(let i = 0; i < depoCount; i++) {
+            const depo   = getRandomTon(150000, 200000);
+            const depositor  = await bc.treasury(`Depo:0:${i}`);
+            roundDepo.push(depositor);
 
-        const dataAfter = await pool.getFullData();
-        expect(dataAfter.requestedForDeposit).toEqual(dataBefore.requestedForDeposit + depo - Conf.poolDepositFee);
-        expect(dataAfter.totalBalance).toEqual(dataBefore.totalBalance);
-        expect(dataAfter.depositPayout).toEqualAddress(minter.address);
+            const dataBefore = await pool.getFullData();
+            const res    = await pool.sendDeposit(depositor.getSender(), depo);
+            const minter = bc.openContract(await pool.getDepositMinter());
+            const wallet = await minter.getWalletAddress(depositor.address);
+            expect(res.transactions).toHaveTransaction({
+                from: minter.address,
+                to: wallet,
+                body: (x) => {
+                    return testJettonTransfer(x!, {
+                        amount: depo - Conf.poolDepositFee,
+                        from: null,
+                        to: null
+                    });
+                }
+            });
+            expect(res.transactions).toHaveTransaction({
+                from: wallet,
+                to: depositor.address,
+                op: Op.jetton.transfer_notification,
+                success: true
+            });
+
+            const dataAfter = await pool.getFullData();
+            expect(dataAfter.requestedForDeposit).toEqual(dataBefore.requestedForDeposit + depo - Conf.poolDepositFee);
+            expect(dataAfter.totalBalance).toEqual(dataBefore.totalBalance);
+            expect(dataAfter.depositPayout).toEqualAddress(minter.address);
+        }
+
+        // Push into global depositors matrix
+        depositors.push(roundDepo);
         snapStates.set('initial', bc.snapshot());
     });
     it('First round rotation and deposit creditation', async () => {
@@ -343,15 +391,15 @@ describe('Integrational tests', () => {
         expect(dataAfter.totalBalance).toEqual(dataBefore.totalBalance + dataBefore.requestedForDeposit);
         expect(dataAfter.currentRound.roundId).toEqual(dataBefore.currentRound.roundId + 1);
         expect(dataAfter.previousRound).toEqual(dataBefore.currentRound);
+        expect(dataAfter.requestedForDeposit).toEqual(0n);
     });
     it('Request loan from controller', async () => {
-        let   curTime = getCurTime();
         const curVset = getVset(bc.config, 34);
-        if(curTime < curVset.utime_unitl - eConf.begin_before) {
+        if(getCurTime() < curVset.utime_unitl - eConf.begin_before) {
             bc.now = curVset.utime_unitl - eConf.begin_before + 1;
         }
-        const minLoan = getRandomTon(100000, 150000);
-        const maxLoan = getRandomTon(150001, 200000);
+        const minLoan = getRandomTon(200000, 300000);
+        const maxLoan = getRandomTon(350000, 500000);
         const maxInterest = Math.floor(0.05 * 65535);
         const reqBalance  = await controller.getBalanceForLoan(maxLoan, maxInterest);
         const controllerSmc     = await bc.getContract(controller.address);
@@ -361,7 +409,6 @@ describe('Integrational tests', () => {
         }
 
         const poolData = await pool.getFullData();
-        curTime        = getCurTime(); // Update in case anything ticks
         const res = await controller.sendRequestLoan(validator.wallet.getSender(),
                                                      minLoan,
                                                      maxLoan,
@@ -415,5 +462,63 @@ describe('Integrational tests', () => {
     });
     it('Controller deposit to elector', async () => {
         const controllerData = await controller.getControllerData();
+        const curElect = await announceElections();
+        const res      = await controller.sendNewStake(validator.wallet.getSender(),
+                                                       controllerData.borrowedAmount,
+                                                       validator.keys.publicKey,
+                                                       validator.keys.secretKey,
+                                                       curElect);
+        expect(res.transactions).toHaveTransaction({
+            from: elector.address,
+            to: controller.address,
+            op: Op.elector.new_stake_ok
+        });
+        const stake = await elector.getStake(validator.keys.publicKey);
+        expect(stake).toEqual(controllerData.borrowedAmount - toNano('1'));
+    });
+    it('Next elections round and profit return', async () => {
+        await nextRound(3, async () => {
+            await controller.sendUpdateHash(validator.wallet.getSender());
+            await pool.sendTouch(deployer.getSender());
+        });
+
+        /*
+        for(let i = 0; i < 10; i ++) {
+            await elector.sendTickTock("tick");
+        }
+        console.log(await elector.getReturnedStake(controller.address));
+        */
+        const controllerData = await controller.getControllerData();
+        const dataBefore     = await pool.getFullData();
+        const curLoan        = await pool.getLoan(0, validator.wallet.address, true);
+
+        expect(curLoan.borrowed).toBeGreaterThan(0n);
+        expect(curLoan.interestAmount).toBeGreaterThan(0n);
+
+        const res = await controller.sendRecoverStake(validator.wallet.getSender());
+        // Should get more than borrowed
+        expect(res.transactions).toHaveTransaction({
+            from: elector.address,
+            to: controller.address,
+            op: Op.elector.recover_stake_ok,
+            value: (x) => x! > controllerData.borrowedAmount,
+            success:true
+        });
+        // Should trigger loan repayment
+        expect(res.transactions).toHaveTransaction({
+            from: controller.address,
+            to: pool.address,
+            op: Op.pool.loan_repayment,
+            value: (x) => x == controllerData.borrowedAmount,
+            success: true
+        });
+        const externals = getExternals(res.transactions);
+        expect(externals.some(x => testLogRepayment(x, pool.address, {
+            lender: controller.address
+        }))).toBe(true);
+        expect(await pool.getLoan(0, validator.wallet.address, true)).toEqual({
+            borrowed: 0n,
+            interestAmount: 0n
+        });
     });
 });
