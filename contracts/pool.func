@@ -11,6 +11,7 @@
 #include "network_config_utils.func";
 #include "jetton_dao/contracts/jetton-utils.func";
 
+
 ;; Whole storage is put to global variables
 
 global int state;
@@ -79,13 +80,9 @@ const int FINALIZE_ROUND_FEE = ONE_TON;
 const int DEPOSIT_FEE = ONE_TON; ;;TODO reconsider
 const int WITHDRAWAL_FEE = ONE_TON / 2;
 const int TRANSFER_NOTIFICATION_AMOUNT = ONE_TON / 10;
-const int PAYOUT_PROCESS_FEE = ONE_TON / 7; ;; Due to consigliere wallet_fee is >= 0.1
-const int POOL_JETTON_WALLET_FEE = 22900000; ;; 0.0229
 const int MAX_POOL_GAS_ON_USER_ACTION = ONE_TON / 3;
-const int POOL_JETTON_MINT_FEE = 27500000; ;; 0.0275
-const int PAYOUT_ITEM_MINT_FEE = ONE_TON / 6;
-const int MINT_PAYOUT_FEE = ONE_TON / 20;
-const int MINTER_DEPLOY_FEE = ONE_TON / 5;
+const int PAYOUT_DISTRIBUTION_AMOUNT = ONE_TON / 5; ;; we will get excesses back
+const int MINTER_DEPLOY_FEE = ONE_TON / 10;
 
 
 #include "pool_storage.func";
@@ -358,6 +355,19 @@ int muldiv_extra(int a, int b, int c) inline {
                           .store_msgbody_prefix_stateinit_slice(init_state)
                           .store_body_header(controller::top_up, cur_lt());
             send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);
+        } elseif (op == pool::donate) {
+            assert_state!(state::NORMAL);
+            int donate_value = msg_value - DEPOSIT_FEE;
+            throw_unless(error::deposit_amount_too_low, donate_value > 0);
+            total_balance += donate_value;
+            raw_reserve(balance - msg_value + donate_value, 0);
+            builder msg = begin_cell()
+                    .store_msg_flags(msgflag::NON_BOUNCEABLE)
+                    .store_slice(sender_address)
+                    .store_coins(0)
+                    .store_msgbody_prefix_slice()
+                    .store_body_header(jetton::excesses, query_id);
+            send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE);
         } else {
             throw(error::unknown_op);
         }
@@ -546,7 +556,7 @@ int muldiv_extra(int a, int b, int c) inline {
         return ();
     }
     int jetton_mint = muldiv_extra(requested_for_deposit, supply, total_balance);
-    sent_during_rotation += TRANSFER_NOTIFICATION_AMOUNT + POOL_JETTON_WALLET_FEE + POOL_JETTON_MINT_FEE;
+    sent_during_rotation += TRANSFER_NOTIFICATION_AMOUNT + PAYOUT_DISTRIBUTION_AMOUNT;
     request_to_mint_pool_jettons(deposit_payout,
                                  jetton_mint,
                                  cur_lt(),
@@ -566,7 +576,10 @@ int muldiv_extra(int a, int b, int c) inline {
 
 (int, int) _get_projected_conversion_ratio () inline {
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = prev_round_borrowers;
-    return (max(expected - borrowed + total_balance - FINALIZE_ROUND_FEE, 0), supply);
+    int expected_profit = expected - borrowed - FINALIZE_ROUND_FEE;
+    int fee = max(muldiv(governance_fee, profit, 65536), 0);
+    expected_profit -= fee;
+    return (max(total_balance + expected_profit, 0), supply);
 }
 
 
@@ -587,6 +600,7 @@ int muldiv_extra(int a, int b, int c) inline {
 
 (int, int) get_loan(int controller_id, slice validator_address, int prev?) method_id {
     load_data();
+    update_round();
     var round_borrowers = prev? ? prev_round_borrowers
                             : current_round_borrowers;
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = round_borrowers;
@@ -603,6 +617,7 @@ int muldiv_extra(int a, int b, int c) inline {
 
 var get_pool_full_data() method_id {
     load_data();
+    update_round();
     return (state, halted?,
             total_balance,
             interest_rate,
@@ -631,4 +646,33 @@ var get_pool_full_data() method_id {
 
             (_get_projected_conversion_ratio())
     );
+}
+
+;; We order all loans by controller address hash, put them in line and find position
+;; of median of given controller loan. This data can be used for deterministic
+;; voting: if stakers decide to vote in some proptions, we can check that controllers
+;; voted in the same proportion
+(int, int) get_controller_loan_position(int controller_addr_hash, int prev?) method_id {
+    load_data();
+    var target = prev? ? prev_round_borrowers : current_round_borrowers;
+    var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = target;
+    int found? = true;
+    int address = -1;
+    int loan_summ = 0;
+    do {
+        (address, slice cs, found?) = borrowers_dict.udict_get_next?(ADDR_SIZE, address);
+        if(found?) {
+            int address_loan = cs~load_coins() + cs~load_coins();
+            if(address == controller_addr_hash) {
+                ;; we found controller
+                int distance_to_median = loan_summ + (address_loan / 2);
+                return (distance_to_median, expected);
+            } else {
+              loan_summ += address_loan;
+            }
+        }
+    } until (~ found?);
+    ;; controller not found
+    throw(65536);
+    return (null(), null());
 }

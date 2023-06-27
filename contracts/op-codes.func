@@ -42,6 +42,7 @@ const int pool::deposit = 0x47d54391;
 const int pool::withdraw = 0x319B0CDC;
 const int pool::withdrawal = 0x0a77535c;
 const int pool::touch = 0x4bc7c2df;
+const int pool::donate = 0x73affe21;
 
 const int pool::deploy_controller = 0xb27edcad;
 

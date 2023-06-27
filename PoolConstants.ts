@@ -40,7 +40,8 @@ export abstract class Op {
         withdraw       : 0xf34b091c,
         withdrawal     : 0x0a77535c,
         deploy_controller : 0xb27edcad,
-        touch: 0x4bc7c2df
+        touch: 0x4bc7c2df,
+        donate: 0x73affe21
     }
     static readonly governor = {
         set_sudoer : 0x79e7c016,
