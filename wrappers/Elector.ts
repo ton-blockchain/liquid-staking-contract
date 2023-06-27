@@ -1,4 +1,5 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, toNano, Sender, SendMode, Tuple, TupleReader } from "ton-core";
+import { Op } from "../PoolConstants";
 import { LispList, bigint2buff, buff2bigint } from "../utils";
 import { signData, loadConfig } from "./ValidatorUtils";
 
@@ -88,6 +89,14 @@ export class Elector implements Contract {
                                           max_factor,
                                           adnl_address,
                                           query_id),
+            sendMode: SendMode.PAY_GAS_SEPARATELY
+        });
+    }
+
+    async sendRecoverStake(provider: ContractProvider, via: Sender, value: bigint = toNano('1')) {
+        await provider.internal(via, {
+            value,
+            body: beginCell().storeUint(Op.elector.recover_stake, 32).storeUint(1, 64).endCell(),
             sendMode: SendMode.PAY_GAS_SEPARATELY
         });
     }
