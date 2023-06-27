@@ -1,8 +1,9 @@
 import { Address, Tuple, TupleItem, TupleItemInt, TupleReader, toNano } from "ton";
 import { Cell, Slice, Sender, SenderArguments, ContractProvider, Message, beginCell, Dictionary, MessageRelaxed, Transaction } from "ton-core";
-import { Blockchain, MessageParams, SendMessageResult, SmartContract, SmartContractTransaction } from "@ton-community/sandbox";
+import { Blockchain, BlockchainTransaction, MessageParams, SendMessageResult, SmartContract, SmartContractTransaction } from "@ton-community/sandbox";
 import { computeMessageForwardFees, MsgPrices } from "./fees";
 import { Op } from "./PoolConstants";
+import { MessageValue } from "ton-core/dist/types/Message";
 
 
 const randomAddress = (wc: number = 0) => {
@@ -155,6 +156,82 @@ export class LispList <T extends IAny> {
     }
 }
 
+export const getExternals = (transactions: BlockchainTransaction[]) => {
+    const externals:Message[] = [];
+    return transactions.reduce((all, curExt) => [...all, ...curExt.externals], externals);
+}
+export const testLog = (message: Message, from: Address, topic: number | bigint, matcher?:(body: Cell) => boolean) => {
+    // Meh
+    if(message.info.type !== "external-out") {
+        console.log("Wrong from");
+        return false;
+    }
+    if(!message.info.src.equals(from))
+        return false;
+    if(!message.info.dest)
+        return false;
+    if(message.info.dest!.value !== BigInt(topic))
+        return false;
+    if(matcher !== undefined) {
+        if(!message.body)
+            console.log("No body");
+        return matcher(message.body);
+    }
+    return true;
+};
+
+type LoanParams = {
+    lender: Address,
+    amount: bigint,
+}
+type RepaymentParams = LoanParams & {
+    profit: bigint
+}
+export const testLogRepayment = (message: Message, from: Address, match: Partial<RepaymentParams>) => {
+    return testLog(message, from, 2,  x => {
+        const bs = x.beginParse();
+        const repayment: RepaymentParams = {
+            lender: bs.loadAddress(),
+            amount: bs.loadCoins(),
+            profit: bs.loadCoins(),
+        };
+        return testPartial(repayment, match);
+    });
+}; 
+
+export const testLogLoan = (message: Message, from: Address, match: Partial<LoanParams>) => {
+    return testLog(message, from, 1, x => {
+        const bs = x.beginParse();
+        const loan : LoanParams = {
+            lender: bs.loadAddress(),
+            amount: bs.loadCoins()
+        }
+        return testPartial(loan, match);
+    });
+}
+type RoundCompletionParams = {
+    round: number,
+    borrowed: bigint,
+    returned: bigint,
+    profit: bigint
+}
+export const testLogRound = (message: Message, from: Address, match: Partial<RoundCompletionParams>) => {
+    return testLog(message, from, 3, x => {
+        const bs = x.beginParse();
+        const roundStats : RoundCompletionParams = {
+            round: bs.loadUint(32),
+            borrowed: bs.loadCoins(),
+            returned: bs.loadCoins(),
+            profit: bs.loadCoins()
+        };
+        return testPartial(roundStats, match);
+    });
+}
+export const testLogRotation = (message: Message, from: Address, roundId: number) => {
+    return testLog(message, from, 4, x => {
+        return x.beginParse().preloadUint(32) == roundId;
+    });
+}
 export type InternalTransfer = {
     from: Address | null,
     to: Address | null,
