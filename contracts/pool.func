@@ -635,7 +635,7 @@ var get_pool_full_data() method_id {
             withdrawal_payout, requested_for_withdrawal,
 
             sudoer, sudoer_set_at,
-            governor,
+            governor, governor_update_after,
             interest_manager,
             halter,
             approver,

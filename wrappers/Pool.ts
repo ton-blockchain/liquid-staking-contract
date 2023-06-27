@@ -153,13 +153,13 @@ export function dataToFullConfig(data: PoolData) : PoolFullConfig {
     sudoer: data.sudoer,
     sudoerSetAt: data.sudoerSetAt,
     governor: data.governor,
+    governorUpdateAfter: data.governorUpdateAfter,
     interest_manager: data.interestManager,
     halter: data.halter,
     approver: data.approver,
     controller_code: data.controllerCode,
     pool_jetton_wallet_code: data.jettonWalletCode,
-    payout_minter_code: data.payoutMinterCode,
-    governorUpdateAfter: 0xffffffffffff
+    payout_minter_code: data.payoutMinterCode
   };
 }
 
@@ -479,6 +479,7 @@ export class Pool implements Contract {
         let sudoerSetAt = stack.readNumber();
 
         let governor = stack.readAddress();
+        let governorUpdateAfter = stack.readNumber();
         let interestManager = stack.readAddress();
         let halter = stack.readAddress();
         let approver = stack.readAddress();
@@ -506,7 +507,7 @@ export class Pool implements Contract {
             withdrawalPayout, requestedForWithdrawal,
 
             sudoer, sudoerSetAt,
-            governor,
+            governor, governorUpdateAfter,
             interestManager,
             halter,
             approver,
