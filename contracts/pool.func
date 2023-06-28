@@ -676,3 +676,37 @@ var get_pool_full_data() method_id {
     throw(65536);
     return (null(), null());
 }
+
+int calculate_loan_amount(int min_loan, int max_loan, int max_interest ) method_id {
+    load_data();
+    update_round();
+    if(current_round_closed?) {
+        return -1;
+    }
+    if(max_interest < interest_rate) {
+        return -1;
+    }
+
+    int creditable_funds = pair_first(get_balance())
+            - muldiv_extra(requested_for_withdrawal, total_balance, supply)
+            - MIN_TONS_FOR_STORAGE;
+    int available_funds = min( creditable_funds, muldiv(256 + disbalance_tolerance, total_balance, 512) );
+
+    [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
+    min_loan = max(min_loan, min_loan_per_validator);
+    max_loan = min(max_loan, max_loan_per_validator);
+
+    if(min_loan > max_loan) {
+        return -1;
+    }
+
+    int actual_loan = min(available_funds, max_loan);
+
+    if(actual_loan <  min_loan) {
+        return -1;
+    }
+
+    int interest = muldiv(actual_loan, interest_rate, 65535);
+
+    return actual_loan + interest;
+}
