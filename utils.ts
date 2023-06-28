@@ -197,7 +197,7 @@ export const testLogRepayment = (message: Message, from: Address, match: Partial
         };
         return testPartial(repayment, match);
     });
-}; 
+};
 
 export const testLogLoan = (message: Message, from: Address, match: Partial<LoanParams>) => {
     return testLog(message, from, 1, x => {
@@ -232,6 +232,34 @@ export const testLogRotation = (message: Message, from: Address, roundId: number
         return x.beginParse().preloadUint(32) == roundId;
     });
 }
+type Log = RoundCompletionParams | LoanParams | RepaymentParams | number;
+type LogTypes = 1 | 2 | 3 | 4;
+type LogMatch<T extends LogTypes> = T extends 1 ? Partial<LoanParams>
+    : T extends 2 ? Partial<RepaymentParams>
+    : T extends 3 ? Partial<RoundCompletionParams>
+    : number;
+export const assertLog = <T extends LogTypes>(transactions: BlockchainTransaction[], from: Address, type: T, match:LogMatch<T> ) => {
+    expect(getExternals(transactions).some(x => {
+        let res = false;
+        switch(type) {
+            case 1:
+                res = testLogLoan(x, from, match as Partial<LoanParams>);
+                break;
+            case 2:
+                res = testLogRepayment(x, from, match as Partial<RepaymentParams>);
+                break;
+            case 3:
+                res = testLogRound(x, from, match as Partial<RoundCompletionParams>);
+                break;
+            case 4:
+                res = testLogRotation(x, from, match as number);
+                break;
+        }
+        return res;
+    })).toBe(true);
+}
+
+
 export type InternalTransfer = {
     from: Address | null,
     to: Address | null,
@@ -305,6 +333,29 @@ export const testJettonTransfer = (body: Cell, match: Partial<InternalTransfer>)
     const res = parseInternalTransfer(body);
     return testPartial(res, match);
 };
+
+type PayoutMint = {
+    dest: Address,
+    amount: bigint,
+    notification: bigint,
+    forward: bigint
+    payload: Cell | null
+};
+export const parsePayoutMint = (data: Cell) : PayoutMint => {
+    const ds = data.beginParse().skip(32 + 64);
+    return {
+        dest: ds.loadAddress(),
+        amount: ds.loadCoins(),
+        notification: ds.loadCoins(),
+        forward: ds.loadCoins(),
+        payload: ds.loadMaybeRef()
+    };
+}
+export const testPayoutMint = (body: Cell, match: Partial<PayoutMint>) => {
+    const res = parsePayoutMint(body);
+    return testPartial(res, match);
+}
+
 
 export {
     differentAddress,
