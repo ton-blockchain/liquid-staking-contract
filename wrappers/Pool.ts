@@ -1,7 +1,6 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano, TupleBuilder, Dictionary, DictionaryValue } from 'ton-core';
 
-import { JettonMinter as AwaitedJettonMinter} from '../contracts/awaited_minter/wrappers/JettonMinter';
-
+import { PayoutCollection } from "./PayoutNFTCollection";
 import { Conf, Op, PoolState } from "../PoolConstants";
 
 export type PoolConfig = {
@@ -370,12 +369,12 @@ export class Pool implements Contract {
     */
     async getDepositMinter(provider: ContractProvider) {
         let res = await this.getFullData(provider);
-        return AwaitedJettonMinter.createFromAddress(res.depositPayout!);
+        return PayoutCollection.createFromAddress(res.depositPayout!);
     }
 
     async getWithdrawalMinter(provider: ContractProvider) {
         let res = await this.getFullData(provider);
-        return AwaitedJettonMinter.createFromAddress(res.withdrawalPayout!);
+        return PayoutCollection.createFromAddress(res.withdrawalPayout!);
     }
     async getFinanceData(provider: ContractProvider) {
         return await this.getFullData(provider);
