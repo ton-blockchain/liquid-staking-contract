@@ -333,7 +333,8 @@ int muldiv_extra(int a, int b, int c) inline {
               ;; lets check other side
               (int closed, last_one) = current_round_borrowers~close_loan(sender_address, msg_value);
               ifnot(closed) {
-                ;; TODO, send to governance ????
+                ;; if this request was sent by actual controller, this bounce should be processed
+                throw(error::unknown_borrower);
               }
             }
             if(last_one) {
