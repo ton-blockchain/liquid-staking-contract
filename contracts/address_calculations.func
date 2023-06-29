@@ -10,8 +10,8 @@ cell controller_init_data (cell static_data) {
   ;; TODO optimize with store_zeros
   return begin_cell()
             .store_uint(0, 8) ;; state
-            .store_int(0, 1)  ;; halted
-            .store_int(0, 1)  ;; approved
+            .store_bool(false)  ;; halted
+            .store_bool(false)  ;; approved
             .store_coins(0) ;; stake_amount_sent
             .store_timestamp(0) ;; stake_at
             .store_uint(0, 256) ;; saved_validator_set_hash
@@ -38,7 +38,7 @@ cell controller_init_state (cell static_data) {
 
 slice calc_address(int workchain, cell state_init) inline {
     return begin_cell().store_uint(4, 3) ;; 0x100 : $10 + anycast (Maybe = 0)
-            .store_int(workchain, 8)
+            .store_workchain(workchain)
             .store_uint(
                     cell_hash(state_init), 256)
             .end_cell()

@@ -43,7 +43,7 @@ addr_std$10 anycast:(Maybe Anycast)
 -}
 
 builder store_masterchain_address(builder b, int address_hash) inline {
-  return b.store_uint(4, 3).store_int(-1, 8).store_uint(address_hash, 256);
+  return b.store_uint(4, 3).store_workchain(MASTERCHAIN).store_uint(address_hash, 256);
 }
 
 

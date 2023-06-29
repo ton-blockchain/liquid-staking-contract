@@ -34,8 +34,8 @@ builder store_round_data(builder b, [cell, int, int, int, int, int, int] round_d
     deposit_payout = null();
     requested_for_deposit = 0;
     ;; (Maybe (Either X, ^X))
-    if(ds~load_int(1)) {
-      if(ds~load_int(1)) {
+    if(ds~load_bool()) {
+      if(ds~load_bool()) {
         slice ajm_s = ds~load_ref().begin_parse();
         deposit_payout = ajm_s~load_msg_addr();
         requested_for_deposit = ajm_s~load_coins();
@@ -48,8 +48,8 @@ builder store_round_data(builder b, [cell, int, int, int, int, int, int] round_d
     withdrawal_payout = null();
     requested_for_withdrawal = 0;
     ;;(Maybe (Either X, ^X)) 
-    if(ds~load_int(1)) {
-      if(ds~load_int(1)) {
+    if(ds~load_bool()) {
+      if(ds~load_bool()) {
           slice atm_s = ds~load_ref().begin_parse();
           withdrawal_payout = atm_s~load_msg_addr();
           requested_for_withdrawal = atm_s~load_coins();
@@ -66,19 +66,19 @@ builder save_minters_data(builder pb) inline {
                  .store_slice(jetton_minter)
                  .store_coins(supply);
     if(deposit_payout.null?()) {
-      b = b.store_int(false, 1);
+      b = b.store_bool(false);
     } else {
-      b = b.store_int(true, 1) ;; Maybe
-           .store_int(false, 1) ;;Either X
+      b = b.store_bool(true) ;; Maybe
+           .store_bool(false) ;;Either X
            .store_slice(deposit_payout)
            .store_coins(requested_for_deposit);
     }
     if(withdrawal_payout.null?()) {
-      b = b.store_int(false, 1);
+      b = b.store_bool(false);
     } else {
-      b = b.store_int(true, 1);
+      b = b.store_bool(true);
       if(b.builder_bits() > 1023 - 267 - 124) {
-        b = b.store_int(true, 1) ;;Either ^X
+        b = b.store_bool(true) ;;Either ^X
               .store_ref(
               begin_cell()
                 .store_slice(withdrawal_payout)
@@ -86,7 +86,7 @@ builder save_minters_data(builder pb) inline {
               .end_cell()
             );
       } else {
-        b = b.store_int(false, 1) ;;Either X
+        b = b.store_bool(false) ;;Either X
              .store_slice(withdrawal_payout)
              .store_coins(requested_for_withdrawal);
       }
@@ -99,9 +99,9 @@ builder save_minters_data(builder pb) inline {
 (slice, ()) ~load_roles(slice s) impure inline {
     slice ds = s~load_ref().begin_parse();
     sudoer = ds~load_msg_addr();
-    sudoer_set_at = ds~load_uint(48);
+    sudoer_set_at = ds~load_timestamp();
     governor = ds~load_msg_addr();
-    governor_update_after = ds~load_uint(48);
+    governor_update_after = ds~load_timestamp();
     interest_manager = ds~load_msg_addr();
     ds = ds~load_ref().begin_parse();
     halter = ds~load_msg_addr();
@@ -112,9 +112,9 @@ builder save_minters_data(builder pb) inline {
 builder save_roles(builder pb) inline {
     cell roles = begin_cell()
                  .store_slice(sudoer)
-                 .store_uint(sudoer_set_at, 48)
+                 .store_timestamp(sudoer_set_at)
                  .store_slice(governor)
-                 .store_uint(governor_update_after, 48)
+                 .store_timestamp(governor_update_after)
                  .store_slice(interest_manager)
                  .store_ref(
                    begin_cell()
@@ -153,19 +153,19 @@ global slice untouched_data;
 
     slice ds = get_data().begin_parse();
     state = ds~load_uint(8);
-    halted? = ds~load_int(1);
+    halted? = ds~load_bool();
     total_balance = ds~load_coins();
     ds~load_minters_data();
     untouched_data = ds;
-    interest_rate = ds~load_uint(16);
-    optimistic_deposit_withdrawals = ds~load_int(1);
-    deposits_open? = ds~load_int(1);
+    interest_rate = ds~load_share();
+    optimistic_deposit_withdrawals = ds~load_bool();
+    deposits_open? = ds~load_bool();
     saved_validator_set_hash = ds~load_uint(256);
     slice round_data = ds~load_ref().begin_parse();
         current_round_borrowers = round_data~load_round_data();
         prev_round_borrowers = round_data~load_round_data();
     loan_params_per_validator = [ds~load_coins(), ds~load_coins()];
-    governance_fee = ds~load_uint(16);
+    governance_fee = ds~load_share();
     ds~load_roles();
     ds~load_codes();
 }
@@ -174,12 +174,12 @@ global slice untouched_data;
     [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
     set_data(begin_cell()
         .store_uint(state, 8)
-        .store_int(halted?, 1)
+        .store_bool(halted?)
         .store_coins(total_balance)
         .save_minters_data()
-        .store_uint(interest_rate, 16)
-        .store_int(optimistic_deposit_withdrawals, 1)
-        .store_int(deposits_open?, 1)
+        .store_share(interest_rate)
+        .store_bool(optimistic_deposit_withdrawals)
+        .store_bool(deposits_open?)
         .store_uint(saved_validator_set_hash, 256)
         .store_ref(
           begin_cell()
@@ -189,7 +189,7 @@ global slice untouched_data;
         )
         .store_coins(min_loan_per_validator)
         .store_coins(max_loan_per_validator)
-        .store_uint(governance_fee, 16)
+        .store_share(governance_fee)
         .save_roles()
         .save_codes()
         .end_cell()
@@ -202,7 +202,7 @@ global slice untouched_data;
     }
     set_data(begin_cell()
         .store_uint(state, 8)
-        .store_int(halted?, 1)
+        .store_bool(halted?)
         .store_coins(total_balance)
         .save_minters_data()
         .store_slice(untouched_data)
