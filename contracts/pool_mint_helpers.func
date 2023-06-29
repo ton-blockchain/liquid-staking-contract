@@ -67,6 +67,7 @@
             0,
             sendmode::CARRY_ALL_BALANCE
     );
+    requested_for_deposit += amount;
 }
 
 () request_to_mint_withdrawal(slice destination, int amount, int query_id) impure inline {
@@ -96,4 +97,5 @@
             0,
             sendmode::CARRY_ALL_BALANCE
     );
+    requested_for_withdrawal += amount;
 }

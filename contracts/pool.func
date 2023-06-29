@@ -77,7 +77,7 @@ const int SERVICE_NOTIFICATION_AMOUNT = 2 * ONE_TON / 100;
 ;;   c) TRANSFER_NOTIFICATION_AMOUNT + POOL_JETTON_WALLET_FEE + POOL_JETTON_MINT_FEE for jetton distribution
 ;;   d) Gas fees
 const int FINALIZE_ROUND_FEE = ONE_TON;
-const int DEPOSIT_FEE = ONE_TON; ;;TODO reconsider
+const int DEPOSIT_FEE = ONE_TON;
 const int WITHDRAWAL_FEE = ONE_TON / 2;
 const int TRANSFER_NOTIFICATION_AMOUNT = ONE_TON / 10;
 const int MAX_POOL_GAS_ON_USER_ACTION = ONE_TON / 3;
@@ -204,7 +204,6 @@ int muldiv_extra(int a, int b, int c) inline {
                 throw_if(105, fill_or_kill);
                 raw_reserve(balance - msg_value - sent_during_rotation, 0);
                 request_to_mint_withdrawal(from_address, jetton_amount, query_id);
-                requested_for_withdrawal += jetton_amount;
             }
         } catch (exc_arg, exc_num) {
             ;; note that sent_during_rotation is null because
@@ -271,7 +270,6 @@ int muldiv_extra(int a, int b, int c) inline {
                     total_balance += deposit_amount;
                 } else {
                     request_to_mint_deposit(sender_address, deposit_amount, query_id);
-                    requested_for_deposit += deposit_amount;
                 }
                 return save_data_optimised();
         } elseif (op == pool::request_loan) {
@@ -283,7 +281,7 @@ int muldiv_extra(int a, int b, int c) inline {
               int max_loan = in_msg_body~load_coins();
               int max_interest = in_msg_body~load_share();
               slice static_data = in_msg_body;
-              in_msg_body = in_msg_body.preload_ref().begin_parse();   ;; TODO we can use static_data to optimize check
+              in_msg_body = in_msg_body.preload_ref().begin_parse();
               int controller_id = in_msg_body~load_controller_id();
               slice validator = in_msg_body~load_msg_addr();
 
@@ -294,8 +292,7 @@ int muldiv_extra(int a, int b, int c) inline {
               int creditable_funds = balance
                                      - muldiv_extra(requested_for_withdrawal, total_balance, supply)
                                      - MIN_TONS_FOR_STORAGE;
-              ;;TODO
-              int available_funds = creditable_funds; ;;min( creditable_funds, muldiv(256 + disbalance_tolerance, total_balance, 512) );
+              int available_funds = min( creditable_funds, muldiv(256 + disbalance_tolerance, total_balance, 512) );
 
               [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
               min_loan = max(min_loan, min_loan_per_validator);
@@ -453,7 +450,7 @@ int muldiv_extra(int a, int b, int c) inline {
     ;; and governor fees, nulifies variables.
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = borrowers_data;
     throw_unless(error::finalizing_active_credit_round, borrowers_dict.null?());
-    throw_unless(error::finalizing_active_credit_round, active_borrowers == 0); ;; TODO - halt here?
+    throw_unless(error::finalizing_active_credit_round, active_borrowers == 0);
 
     profit -= FINALIZE_ROUND_FEE;
 
