@@ -598,9 +598,11 @@ int muldiv_extra(int a, int b, int c) inline {
 }
 
 
-(int, int) get_loan(int controller_id, slice validator_address, int prev?) method_id {
+(int, int) get_loan(int controller_id, slice validator_address, int prev?, int update?) method_id {
     load_data();
-    update_round();
+    if (update?) {
+        update_round();
+    }
     var round_borrowers = prev? ? prev_round_borrowers
                             : current_round_borrowers;
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = round_borrowers;
@@ -614,10 +616,11 @@ int muldiv_extra(int a, int b, int c) inline {
     int accounted_interest = loan_data~load_coins();
     return (borrowed_amount, accounted_interest);
 }
-
-var get_pool_full_data() method_id {
+var compose_pool_full_data_internal( int update?) inline_ref {
     load_data();
-    update_round();
+    if (update?) {
+        update_round();
+    }
     return (state, halted?,
             total_balance,
             interest_rate,
@@ -647,6 +650,13 @@ var get_pool_full_data() method_id {
             (_get_projected_conversion_ratio())
     );
 }
+var get_pool_full_data() method_id {
+    return compose_pool_full_data_internal(true);
+}
+
+var get_pool_full_data_raw() method_id {
+    return compose_pool_full_data_internal(false);
+}
 
 ;; We order all loans by controller address hash, put them in line and find position
 ;; of median of given controller loan. This data can be used for deterministic
@@ -654,6 +664,7 @@ var get_pool_full_data() method_id {
 ;; voted in the same proportion
 (int, int) get_controller_loan_position(int controller_addr_hash, int prev?) method_id {
     load_data();
+    update_round();
     var target = prev? ? prev_round_borrowers : current_round_borrowers;
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = target;
     int found? = true;
@@ -677,7 +688,7 @@ var get_pool_full_data() method_id {
     return (null(), null());
 }
 
-int calculate_loan_amount(int min_loan, int max_loan, int max_interest ) method_id {
+int calculate_loan_amount(int min_loan, int max_loan, int max_interest) method_id {
     load_data();
     update_round();
     if(current_round_closed?) {

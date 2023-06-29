@@ -381,11 +381,12 @@ export class Pool implements Contract {
         return await this.getFullData(provider);
     }
 
-    async getLoan(provider: ContractProvider, controllerId: number, validator: Address, previous=false) {
+    async getLoan(provider: ContractProvider, controllerId: number, validator: Address, previous=false, updateRound=true) {
         const args = new TupleBuilder();
         args.writeNumber(controllerId);
         args.writeAddress(validator);
         args.writeBoolean(previous);
+        args.writeBoolean(updateRound);
         let { stack } = await provider.get('get_loan', args.build());
         return {
             borrowed: stack.readBigNumber(),
