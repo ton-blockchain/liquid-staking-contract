@@ -68,7 +68,7 @@ const int MAX_LOAN_DICT_DEPTH = 12;
 
 const int ONE_TON = 1000000000;
 const int MIN_TONS_FOR_STORAGE = 10 * ONE_TON; ;; 10 TON
-const int CONTROLLER_WORKCHAIN = -1; ;; masterchain
+const int CONTROLLER_WORKCHAIN = MASTERCHAIN;
 
 const int SERVICE_NOTIFICATION_AMOUNT = 2 * ONE_TON / 100;
 ;; finalize fee goes to
@@ -180,8 +180,8 @@ int muldiv_extra(int a, int b, int c) inline {
         try {
             int request_immediate_withdrawal_if_possible = ~ in_msg_body~load_bool();
             int fill_or_kill = in_msg_body~load_bool();
-            assert_not_halted!(); ;; otherwise mint back
             update_round();
+            assert_not_halted!(); ;; otherwise mint back
             throw_unless(error::not_enough_TON_to_process, msg_value > WITHDRAWAL_FEE);
             int approximate_amount = muldiv(jetton_amount, total_balance, supply);
             int available_funds = balance - msg_value - MIN_TONS_FOR_STORAGE;
@@ -251,8 +251,8 @@ int muldiv_extra(int a, int b, int c) inline {
                 assert_sender!(sender_address, interest_manager);
                 interest_rate = in_msg_body~load_share();
     } else {
-        assert_not_halted!();
         update_round();
+        assert_not_halted!();
         ;; it is ok, controller knew how to process loan_repayment/request_loan bounces
         {- ========== Pool operations ========== -}
         if (op == pool::deposit) {
@@ -527,6 +527,12 @@ int muldiv_extra(int a, int b, int c) inline {
     slice prev_withdrawal_payout = withdrawal_payout;
     if(pair_first(get_balance()) < ton_withdrawal + MIN_TONS_FOR_STORAGE) {
       ;; not enough money to withdraw
+      ;; Note that this halt will not be saved to the storage:
+      ;; transaction which will cause halt inside update_round
+      ;; will revert on assert_not_halted!(); However, this halt
+      ;; still has sense: it will affect any operation after assert_not_halted!()
+      ;; and also it will be shown in get methods since there is update_round()
+      ;; call inside get_pool_full_data
       halted? = true;
       state = state::REPAYMENT_ONLY;
       return ();

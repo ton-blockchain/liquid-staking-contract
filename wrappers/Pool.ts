@@ -118,7 +118,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               )
               .storeCoins(100 * 1000000000) // min_loan_per_validator
               .storeCoins(1000000 * 1000000000) // max_loan_per_validator
-              .storeUint(655, 16) // governance fee
+              .storeUint(155, 16) // governance fee
               .storeRef(roles)
               .storeRef(codes)
            .endCell();
