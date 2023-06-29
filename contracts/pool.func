@@ -1,9 +1,9 @@
 #include "stdlib.func";
+#include "types.func";
 #include "op-codes.func";
 #include "errors.func";
 #include "messages.func";
 #include "asserts.func";
-#include "utils.func";
 #include "sudoer_requests.func";
 #include "address_calculations.func";
 #include "governor_requests.func";
@@ -178,8 +178,8 @@ int muldiv_extra(int a, int b, int c) inline {
         slice response_address = in_msg_body~load_msg_addr();
         ;; after that point we should not revert because jettons should not be lost
         try {
-            int request_immediate_withdrawal_if_possible = ~ in_msg_body~load_int(1);
-            int fill_or_kill = in_msg_body~load_int(1);
+            int request_immediate_withdrawal_if_possible = ~ in_msg_body~load_bool();
+            int fill_or_kill = in_msg_body~load_bool();
             assert_not_halted!(); ;; otherwise mint back
             update_round();
             throw_unless(error::not_enough_TON_to_process, msg_value > WITHDRAWAL_FEE);
@@ -229,28 +229,28 @@ int muldiv_extra(int a, int b, int c) inline {
         process_prepare_governance_migration(sender_address, in_msg_body);
     } elseif (op == governor::set_roles) {
                 assert_sender!(sender_address, governor);
-                if(in_msg_body~load_int(1)) {
+                if(in_msg_body~load_bool()) {
                     governor = in_msg_body~load_msg_addr();
                     throw_unless(error::governor_update_not_matured, governor_update_after > now());
                     governor_update_after = 0xffffffffffff;
                 }
-                if(in_msg_body~load_int(1)) {
+                if(in_msg_body~load_bool()) {
                     interest_manager = in_msg_body~load_msg_addr();
                 }
-                if(in_msg_body~load_int(1)) {
+                if(in_msg_body~load_bool()) {
                     halter = in_msg_body~load_msg_addr();
                 }
     } elseif(op == governor::set_deposit_settings) {
                 assert_sender!(sender_address, governor);
-                optimistic_deposit_withdrawals = in_msg_body~load_int(1);
-                deposits_open?  = in_msg_body~load_int(1);
+                optimistic_deposit_withdrawals = in_msg_body~load_bool();
+                deposits_open?  = in_msg_body~load_bool();
     } elseif(op == governor::set_governance_fee) {
                 assert_sender!(sender_address, governor);
-                governance_fee = in_msg_body~load_uint(16);
+                governance_fee = in_msg_body~load_share();
     } elseif (op == interest_manager::set_interest) {
                 assert_state!(state::NORMAL);
                 assert_sender!(sender_address, interest_manager);
-                interest_rate = in_msg_body~load_uint(16);
+                interest_rate = in_msg_body~load_share();
     } else {
         assert_not_halted!();
         update_round();
@@ -281,10 +281,10 @@ int muldiv_extra(int a, int b, int c) inline {
 
               int min_loan = in_msg_body~load_coins();
               int max_loan = in_msg_body~load_coins();
-              int max_interest = in_msg_body~load_uint(16);
+              int max_interest = in_msg_body~load_share();
               slice static_data = in_msg_body;
               in_msg_body = in_msg_body.preload_ref().begin_parse();   ;; TODO we can use static_data to optimize check
-              int controller_id = in_msg_body~load_uint(32);
+              int controller_id = in_msg_body~load_controller_id();
               slice validator = in_msg_body~load_msg_addr();
 
               assert_sender!(sender_address, _get_controller_address(controller_id, validator));
@@ -307,7 +307,7 @@ int muldiv_extra(int a, int b, int c) inline {
 
               throw_unless(error::not_enough_funds_for_loan, actual_loan >=  min_loan);
 
-              int interest = muldiv(actual_loan, interest_rate, 65535);
+              int interest = muldiv(actual_loan, interest_rate, SHARE_BASIS);
               builder msg = begin_cell()
                         .store_msg_flags(msgflag::BOUNCEABLE)
                         .store_slice(sender_address)
@@ -325,7 +325,7 @@ int muldiv_extra(int a, int b, int c) inline {
                                 .store_body_header(interest_manager::request_notification, cur_lt())
                                 .store_coins(min_loan)
                                 .store_coins(max_loan)
-                                .store_uint(max_interest, 16),
+                                .store_share(max_interest),
                         msgflag::NON_BOUNCEABLE, sendmode::REGULAR);
 
         } elseif (op == pool::loan_repayment) {
@@ -346,7 +346,7 @@ int muldiv_extra(int a, int b, int c) inline {
             ;; return save_data
         } elseif (op == pool::deploy_controller) {
             assert_state!(state::NORMAL);
-            int controller_id = in_msg_body~load_uint(32);
+            int controller_id = in_msg_body~load_controller_id();
             (slice controller_address, cell init_state ) = build_controller_address(controller_id, sender_address);
             builder msg = begin_cell()
                           .store_msg_flags(msgflag::BOUNCEABLE)
@@ -378,7 +378,7 @@ int muldiv_extra(int a, int b, int c) inline {
 
 (slice, cell) build_controller_address(int controller_id, slice validator) {
     cell static_data = begin_cell()
-                          .store_uint(controller_id, 32)
+                          .store_controller_id(controller_id)
                           .store_slice(validator)
                           .store_slice(my_address())
                           .store_slice(governor)
@@ -458,7 +458,7 @@ int muldiv_extra(int a, int b, int c) inline {
     profit -= FINALIZE_ROUND_FEE;
 
     ;; governance_fee / 65536 < 1 ratio, share to send to governance
-    int fee = max(muldiv(governance_fee, profit, 65536), 0);
+    int fee = max(muldiv(governance_fee, profit, SHARE_BASIS), 0);
     profit -= fee;
 
     ;; if there is negative profit (loss), then it can take maximum all the balance
@@ -577,7 +577,7 @@ int muldiv_extra(int a, int b, int c) inline {
 (int, int) _get_projected_conversion_ratio () inline {
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = prev_round_borrowers;
     int expected_profit = expected - borrowed - FINALIZE_ROUND_FEE;
-    int fee = max(muldiv(governance_fee, profit, 65536), 0);
+    int fee = max(muldiv(governance_fee, profit, SHARE_BASIS), 0);
     expected_profit -= fee;
     return (max(total_balance + expected_profit, 0), supply);
 }
@@ -592,7 +592,7 @@ int muldiv_extra(int a, int b, int c) inline {
     load_data();
     var (controller_address, _) = build_controller_address( controller_id,
       begin_cell()
-           .store_uint(4, 3).store_int(wc, 8).store_uint(addr_hash, ADDR_SIZE)
+           .store_uint(4, 3).store_workchain(wc).store_uint(addr_hash, ADDR_SIZE)
       .end_cell().begin_parse());
     return parse_std_addr(controller_address);
 }
@@ -684,7 +684,7 @@ var get_pool_full_data_raw() method_id {
         }
     } until (~ found?);
     ;; controller not found
-    throw(65536);
+    throw(error::unknown_op);
     return (null(), null());
 }
 
@@ -717,7 +717,7 @@ int calculate_loan_amount(int min_loan, int max_loan, int max_interest) method_i
         return -1;
     }
 
-    int interest = muldiv(actual_loan, interest_rate, 65535);
+    int interest = muldiv(actual_loan, interest_rate, SHARE_BASIS);
 
     return actual_loan + interest;
 }

@@ -16,7 +16,7 @@ const int GOVERNOR_QUARANTINE = 86400;
 
 () process_prepare_governance_migration(slice sender, slice in_msg) impure inline_ref {
     assert_sender!(sender, governor);
-    governor_update_after = in_msg~load_uint(48);
+    governor_update_after = in_msg~load_timestamp();
     throw_unless(error::governor_update_too_soon, governor_update_after - now() > GOVERNOR_QUARANTINE );
 }
 

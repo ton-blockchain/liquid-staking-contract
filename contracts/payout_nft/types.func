@@ -1,0 +1,30 @@
+;; general
+(slice, (int)) ~load_timestamp(slice s) inline { return s.load_uint(48); }
+builder store_timestamp(builder b, int timestamp) inline { return b.store_uint(timestamp, 48); }
+
+(slice, (int)) ~load_bool(slice s) inline { return s.load_int(1); }
+builder store_bool(builder b, int flag) inline { return b.store_int(flag, 1); }
+
+(slice, (int)) ~load_workchain(slice s) inline { return s.load_int(8); }
+builder store_workchain(builder b, int wc) inline { return b.store_int(wc, 8); }
+const int MASTERCHAIN = -1;
+const int BASECHAIN = 0;
+
+;; Op-codes
+
+(slice, (int)) ~load_op(slice s) inline { return s.load_uint(32); }
+(slice, (int)) ~load_query_id(slice s) inline { return s.load_uint(64); }
+(slice, (int, int)) ~load_body_header(slice s) inline {
+    int op = s~load_uint(32);
+    int query_id = s~load_uint(64);
+    return (s, (op, query_id));
+}
+
+builder store_op(builder b, int op) inline { return b.store_uint(op, 32); }
+builder store_query_id(builder b, int query_id) inline { return b.store_uint(query_id, 64); }
+builder store_body_header(builder b, int op, int query_id) inline {
+    return b.store_uint(op, 32)
+            .store_uint(query_id, 64);
+}
+
+

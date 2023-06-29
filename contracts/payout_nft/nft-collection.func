@@ -5,6 +5,7 @@
 ;; of its bill value to total.
 
 #include "stdlib.func";
+#include "types.func";
 #include "op-codes.func";
 #include "errors.func";
 #include "params.func";
@@ -73,7 +74,7 @@ const int start_distribution_gas_usage = ONE_COIN / 100;
 
 cell calculate_nft_item_state_init(int item_index, cell nft_item_code) {
   cell data = begin_cell()
-                 .store_int(false, 1) ;; init?
+                 .store_bool(false) ;; init?
                  .store_slice(my_address())
                  .store_uint(item_index, 64)
               .end_cell();
@@ -82,7 +83,7 @@ cell calculate_nft_item_state_init(int item_index, cell nft_item_code) {
 
 slice calculate_nft_item_address(cell state_init) {
   return begin_cell().store_uint(4, 3)
-                     .store_int(0, 8) ;; wc
+                     .store_workchain(BASECHAIN) ;; wc
                      .store_uint(cell_hash(state_init), 256)
                      .end_cell()
                      .begin_parse();
@@ -101,8 +102,7 @@ slice calculate_nft_item_address(cell state_init) {
     }
     slice sender = cs~load_msg_addr();
 
-    int op = in_msg_body~load_uint(32);
-    int query_id = in_msg_body~load_uint(64);
+    (int op, int query_id) = in_msg_body~load_body_header();
 
     var (issued_bills, admin, distribution, collection_content, next_item_index, prev, current, next, next_state_init) = load_data();
 
@@ -117,7 +117,7 @@ slice calculate_nft_item_address(cell state_init) {
     throw_unless(error::need_init, ~ cell_null?(distribution));
 
     slice distr = distribution.begin_parse();
-    int distribution_started = distr~load_uint(1);
+    int distribution_started = distr~load_bool();
     if (op == op::mint_nft) {
       throw_unless(error::unauthorized_mint_request, equal_slice_bits(sender, admin));
       throw_if(error::mint_after_distribution_start, distribution_started);
@@ -144,8 +144,8 @@ slice calculate_nft_item_address(cell state_init) {
                 .store_ref(current_state_init)
                 .store_ref(
                   begin_cell()
-                    .store_uint(op::init_nft, 32)
-                    .store_uint(query_id, 64)
+                    .store_op(op::init_nft)
+                    .store_query_id(query_id)
                     .store_slice(owner)
                     .store_coins(amount)
                     .store_slice(next)  ;; reverse order intentioned
@@ -159,7 +159,7 @@ slice calculate_nft_item_address(cell state_init) {
 
     if (op == op::transfer_notification) { ;; accept only as jetton distribution start
         throw_if(error::distribution_already_started, distribution_started);
-        int jettons? = distr~load_uint(1);
+        int jettons? = distr~load_bool();
         throw_unless(error::cannot_distribute_jettons, jettons?);
         distr~skip_bits(4); ;; volume, store_coins(0) takes 4 bits
         slice my_jetton_wallet = distr~load_msg_addr();
@@ -174,8 +174,8 @@ slice calculate_nft_item_address(cell state_init) {
                      (from_address.preload_uint(2) == 0)));
         throw_unless(8765, current.slice_bits() > 4);
         distribution = begin_cell()
-                        .store_uint(1, 1) ;; started
-                        .store_uint(1, 1) ;; jettons
+                        .store_bool(true) ;; started
+                        .store_bool(true) ;; jettons
                         .store_coins(burnt_amount)
                         .store_slice(my_jetton_wallet)
                            .end_cell();
@@ -193,12 +193,12 @@ slice calculate_nft_item_address(cell state_init) {
     if (op == op::start_distribution) {
         throw_unless(error::unauthorized_start_request, equal_slice_bits(sender, admin));
         throw_if(error::distribution_already_started, distribution_started);
-        int jettons? = distr~load_uint(1);
+        int jettons? = distr~load_bool();
         throw_if(error::cannot_distribute_tons, jettons?);
 
         distribution = begin_cell()
-                        .store_uint(1, 1) ;; started
-                        .store_uint(0, 1) ;; not jettons
+                        .store_bool(true) ;; started
+                        .store_bool(false) ;; not jettons
                         .store_coins(msg_value - start_distribution_gas_usage) ;; volume
                        .end_cell();
         
@@ -225,14 +225,14 @@ slice calculate_nft_item_address(cell state_init) {
         throw_unless(error::unauthorized_burn_notification,
                 equal_slice_bits(expected_address, sender)
         );
-        int jettons? = distr~load_uint(1);
+        int jettons? = distr~load_bool();
         int volume_to_distribute = distr~load_coins();
 
         int share_amount = muldiv(burnt_amount, volume_to_distribute, issued_bills);
         ;;  ^ The same as
         ;; share = (jettons_burned / supply) * volume_to_distribute
 
-        var new_distr = begin_cell().store_uint(1, 1).store_uint(jettons?, 1)
+        var new_distr = begin_cell().store_bool(true).store_bool(jettons?)
                             .store_coins(volume_to_distribute - share_amount);
 
         if (jettons?) {
@@ -250,7 +250,7 @@ slice calculate_nft_item_address(cell state_init) {
                       .store_slice(burner_address)
                       .store_maybe_ref(null()) ;; custom_payload
                       .store_coins(jetton_transfer_notification_value)
-                      .store_int(false, 1)
+                      .store_bool(false)
                       .store_op(op::distributed_asset)
                       .end_cell()
                     );
@@ -323,7 +323,7 @@ cell get_nft_content(int index, cell individual_nft_content) method_id {
   int amount = cs~load_coins();
   cs = distribution.begin_parse();
   cs~skip_bits(1);
-  int jettons? = cs~load_int(1);
+  int jettons? = cs~load_bool();
   cs = collection_content.begin_parse();
   ;;cell onchain_content = begin_cell().store_uint(0, 8).store_dict(content_dict).end_cell();
   cs~skip_bits(8);

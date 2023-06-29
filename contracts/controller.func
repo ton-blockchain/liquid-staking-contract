@@ -11,11 +11,11 @@
 -}
 
 #include "stdlib.func";
+#include "types.func";
 #include "op-codes.func";
 #include "messages.func";
 #include "errors.func";
 #include "asserts.func";
-#include "utils.func";
 #include "network_config_utils.func";
 #include "sudoer_requests.func";
 #include "governor_requests.func";
@@ -28,7 +28,6 @@ const int MIN_TONS_FOR_STORAGE = 2 * ONE_TON; ;; 10 TON
 const int DEPOSIT_FEE = ONE_TON / 4; ;; 0.25 TON
 const int WITHDRAWAL_FEE = ONE_TON / 4; ;; 0.25 TON
 const int MIN_STAKE_TO_SEND = 50000 * ONE_TON; ;; 300 000 TON
-const int MASTERCHAIN = -1;
 
 ;; Time in seconds for validator to make mandatory actions, such as
 ;; recover stake or update hash
@@ -349,7 +348,7 @@ int check_new_stake_msg(slice cs);
                   slice request = in_msg_body;
                   int min_loan = in_msg_body~load_coins();
                   int max_loan = in_msg_body~load_coins();
-                  int max_interest = in_msg_body~load_uint(16);
+                  int max_interest = in_msg_body~load_share();
                   in_msg_body.end_parse();
 
                   throw_unless(error::controller_not_approved, approved?);
@@ -421,8 +420,8 @@ int check_new_stake_msg(slice cs);
 () save_data() impure inline_ref {
     set_data(begin_cell()
         .store_uint(state, 8)
-        .store_int(halted?, 1)
-        .store_int(approved?, 1)
+        .store_bool(halted?)
+        .store_bool(approved?)
         .store_coins(stake_amount_sent)
         .store_timestamp(stake_at)
         .store_uint(saved_validator_set_hash, 256)
@@ -476,7 +475,7 @@ int check_new_stake_msg(slice cs);
 
 slice make_address(int wc, int addr) inline_ref {
     return begin_cell()
-           .store_uint(4, 3).store_int(wc, 8).store_uint(addr, ADDR_SIZE).end_cell().begin_parse();
+           .store_uint(4, 3).store_workchain(wc).store_uint(addr, ADDR_SIZE).end_cell().begin_parse();
 }
 
 slice elector_address() inline_ref {
