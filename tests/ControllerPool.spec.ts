@@ -185,7 +185,7 @@ describe('Controller & Pool', () => {
             to: controller.address,
             success: true,
         });
-        const depositResult = await pool.sendDeposit(deployer.getSender(), toNano('320000'));
+        const depositResult = await pool.sendDeposit(deployer.getSender(), toNano('640000'));
         expect(depositResult.transactions).toHaveTransaction({
             from: deployer.address,
             to: pool.address,
