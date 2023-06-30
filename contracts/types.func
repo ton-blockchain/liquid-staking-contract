@@ -20,6 +20,9 @@ const int BASECHAIN = 0;
     return (s, (op, query_id));
 }
 
+
+(slice, ()) ~skip_bounce(slice s) inline { s~skip_bits(32); return (s, ());}
+
 builder store_op(builder b, int op) inline { return b.store_uint(op, 32); }
 builder store_query_id(builder b, int query_id) inline { return b.store_uint(query_id, 64); }
 builder store_body_header(builder b, int op, int query_id) inline {

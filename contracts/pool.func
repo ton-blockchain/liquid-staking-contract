@@ -162,11 +162,20 @@ int muldiv_extra(int a, int b, int c) inline {
 
     slice sender_address = cs~load_msg_addr();
     load_data();
+    int op = int query_id = -1;
     if (flags & 1) { ;; bounced messages
-      ;; TODO
+        ;; generally all bounces are either insignificant or unexpected
+        ;; and require manual recover. However we can try automatically
+        ;; handle credit bounce
+        in_msg_body~skip_bounce();
+        (op, query_id) = in_msg_body~load_body_header();
+        if(op == controller::credit) {
+            ;; just reassing op and process as usual
+            op = pool::loan_repayment;
+        }
+    } else {
+      (op, query_id) = in_msg_body~load_body_header();
     }
-
-    (int op, int query_id) = in_msg_body~load_body_header();
 
     if (op == halter::halt) {
         return process_halt_request(sender_address);
@@ -253,7 +262,7 @@ int muldiv_extra(int a, int b, int c) inline {
     } else {
         update_round();
         assert_not_halted!();
-        ;; it is ok, controller knew how to process loan_repayment/request_loan bounces
+        ;; it is ok, controller know how to process loan_repayment/request_loan bounces
         {- ========== Pool operations ========== -}
         if (op == pool::deposit) {
                 assert_state!(state::NORMAL);

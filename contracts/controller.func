@@ -95,7 +95,7 @@ int check_new_stake_msg(slice cs);
     load_data();
     if (flags & 1) { ;; bounced messages
         if (in_msg_body.slice_bits() >= 64) {
-            in_msg_body~skip_bits(32); ;; skip 0xFFFFFFFF bounced prefix
+            in_msg_body~skip_bounce(); ;; skip 0xFFFFFFFF bounced prefix
             int op = in_msg_body~load_op();
             if ((op == elector::new_stake) & (is_elector_address(sender_address))) {
                 ;; `new_stake` from nominator-pool should always be handled without throws by elector
