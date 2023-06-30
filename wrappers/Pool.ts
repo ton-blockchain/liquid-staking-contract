@@ -117,7 +117,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               )
               .storeCoins(100 * 1000000000) // min_loan_per_validator
               .storeCoins(1000000 * 1000000000) // max_loan_per_validator
-              .storeUint(655, 16) // governance fee
+              .storeUint(155, 16) // governance fee
               .storeRef(roles)
               .storeRef(codes)
            .endCell();
@@ -152,13 +152,13 @@ export function dataToFullConfig(data: PoolData) : PoolFullConfig {
     sudoer: data.sudoer,
     sudoerSetAt: data.sudoerSetAt,
     governor: data.governor,
+    governorUpdateAfter: data.governorUpdateAfter,
     interest_manager: data.interestManager,
     halter: data.halter,
     approver: data.approver,
     controller_code: data.controllerCode,
     pool_jetton_wallet_code: data.jettonWalletCode,
-    payout_minter_code: data.payoutMinterCode,
-    governorUpdateAfter: 0xffffffffffff
+    payout_minter_code: data.payoutMinterCode
   };
 }
 
@@ -380,11 +380,12 @@ export class Pool implements Contract {
         return await this.getFullData(provider);
     }
 
-    async getLoan(provider: ContractProvider, controllerId: number, validator: Address, previous=false) {
+    async getLoan(provider: ContractProvider, controllerId: number, validator: Address, previous=false, updateRound=true) {
         const args = new TupleBuilder();
         args.writeNumber(controllerId);
         args.writeAddress(validator);
         args.writeBoolean(previous);
+        args.writeBoolean(updateRound);
         let { stack } = await provider.get('get_loan', args.build());
         return {
             borrowed: stack.readBigNumber(),
@@ -486,6 +487,7 @@ export class Pool implements Contract {
         let sudoerSetAt = stack.readNumber();
 
         let governor = stack.readAddress();
+        let governorUpdateAfter = stack.readNumber();
         let interestManager = stack.readAddress();
         let halter = stack.readAddress();
         let approver = stack.readAddress();
@@ -513,7 +515,7 @@ export class Pool implements Contract {
             withdrawalPayout, requestedForWithdrawal,
 
             sudoer, sudoerSetAt,
-            governor,
+            governor, governorUpdateAfter,
             interestManager,
             halter,
             approver,

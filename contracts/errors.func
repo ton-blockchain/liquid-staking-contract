@@ -21,6 +21,7 @@ const int error::not_enough_TON_to_process = 0xf300;
 
 const int error::controller_in_wrong_workchain = 0xf400;
 const int error::credit_book_too_deep = 0xf401;
+const int error::unknown_borrower = 0xf402;
 
 const int error::finalizing_active_credit_round = 0xf500;
 

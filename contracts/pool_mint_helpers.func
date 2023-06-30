@@ -6,7 +6,7 @@
             .store_coins(notification_ton)
             .store_coins(forward_ton); ;; TRANSFER_NOTIFICATION_AMOUNT + JETTON_WALLET_FEE
     ifnot( payload.null?() ) {
-        mint_request = mint_request.store_uint(1, 1)
+        mint_request = mint_request.store_bool(true)
                 .store_ref(payload.end_cell());
     }
     var msg = begin_cell()
@@ -53,8 +53,8 @@
                 .store_body_header(payout::init, cur_lt())
                 .store_ref(
                         begin_cell()
-                                .store_uint(0, 1) ;; distribution not started
-                                .store_uint(1, 1) ;; jettons
+                                .store_bool(false) ;; distribution not started
+                                .store_bool(true) ;; jettons
                                 .store_coins(0)
                                 .store_slice(deposit_minter_jetton_wallet)
                                 .end_cell()
@@ -67,6 +67,7 @@
             0,
             sendmode::CARRY_ALL_BALANCE
     );
+    requested_for_deposit += amount;
 }
 
 () request_to_mint_withdrawal(slice destination, int amount, int query_id) impure inline {
@@ -83,8 +84,8 @@
                 .store_body_header(payout::init, cur_lt())
                 .store_ref(
                         begin_cell()
-                                .store_uint(0, 1) ;; distribution not started
-                                .store_uint(0, 1) ;; TONs
+                                .store_bool(false) ;; distribution not started
+                                .store_bool(false) ;; not jettons
                                 .store_coins(0)
                                 .end_cell()
                 );
@@ -96,4 +97,5 @@
             0,
             sendmode::CARRY_ALL_BALANCE
     );
+    requested_for_withdrawal += amount;
 }

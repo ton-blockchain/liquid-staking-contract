@@ -185,7 +185,7 @@ describe('Controller & Pool', () => {
             to: controller.address,
             success: true,
         });
-        const depositResult = await pool.sendDeposit(deployer.getSender(), toNano('320000'));
+        const depositResult = await pool.sendDeposit(deployer.getSender(), toNano('640000'));
         expect(depositResult.transactions).toHaveTransaction({
             from: deployer.address,
             to: pool.address,
@@ -232,7 +232,7 @@ describe('Controller & Pool', () => {
             });
             const loan = await pool.getLoan(0, deployer.address);
             const { interestRate } = await pool.getFinanceData()
-            const expectedInterest = loanRequestParams[1] * BigInt(interestRate) / 65535n;
+            const expectedInterest = loanRequestParams[1] * BigInt(interestRate) / 65536n;
             expect(loan.borrowed).toEqual(loanRequestParams[1]);
             expect(loan.interestAmount).toEqual(expectedInterest);
         });

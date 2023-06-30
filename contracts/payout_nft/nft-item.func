@@ -1,4 +1,5 @@
 #include "stdlib.func";
+#include "types.func";
 #include "op-codes.func";
 #include "errors.func";
 #include "params.func";
@@ -80,7 +81,7 @@ global slice collection;
 () store_data(slice owner) impure {
     set_data(
         begin_cell()
-            .store_int(true, 1)
+            .store_bool(true)
             .store_slice(owner)
             .store_slice(static_data)
             .end_cell()
@@ -90,7 +91,7 @@ global slice collection;
 () store_data_full(slice owner, int amount, slice prev, slice next) impure {
     set_data(
         begin_cell()
-            .store_int(true, 1)
+            .store_bool(true)
             .store_slice(owner)
             .store_slice(static_data)
             .store_coins(amount)
@@ -176,8 +177,7 @@ global slice collection;
     cs~load_coins(); ;; skip ihr_fee
     int fwd_fee = muldiv(cs~load_coins(), 3, 2); ;; we use message fwd_fee for estimation of forward_payload costs
 
-    int op = in_msg_body~load_uint(32);
-    int query_id = in_msg_body~load_uint(64);
+    (int op, int query_id) = in_msg_body~load_body_header();
 
     (int init?, slice owner) = load_volatile_data();
     if (~ init?) {
@@ -193,7 +193,7 @@ global slice collection;
       send_msg(owner, 0, op::ownership_assigned, query_id,
                  begin_cell()
                    .store_uint(0, 2) ;; prev_owner:MsgAddress - addr_none
-                   .store_int(false, 1), ;; forward_payload:(Either Cell ^Cell) - empty
+                   .store_bool(false), ;; forward_payload:(Either Cell ^Cell) - empty
                  sendmode::CARRY_ALL_BALANCE | sendmode::IGNORE_ERRORS);  ;; all except min_tons_for_storage
       return ();
     }
