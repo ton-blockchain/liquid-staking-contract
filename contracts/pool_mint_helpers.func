@@ -1,14 +1,10 @@
-() send_mint_message(slice minter, int query_id, slice destination, int amount, builder payload, int notification_ton, int forward_ton, int total_ton, int mode) impure inline_ref {
+() send_mint_message(slice minter, int query_id, slice destination, int amount, int notification_ton, int forward_ton, int total_ton, int mode) impure inline_ref {
     builder mint_request = begin_cell()
             .store_body_header(payout::mint, query_id)
             .store_slice(destination)
             .store_coins(amount) ;; max 124 bit
             .store_coins(notification_ton)
             .store_coins(forward_ton); ;; TRANSFER_NOTIFICATION_AMOUNT + JETTON_WALLET_FEE
-    ifnot( payload.null?() ) {
-        mint_request = mint_request.store_bool(true)
-                .store_ref(payload.end_cell());
-    }
     var msg = begin_cell()
             .store_msg_flags(msgflag::BOUNCEABLE)
             .store_slice(minter)
@@ -18,15 +14,15 @@
     send_raw_message(msg.end_cell(), mode); ;; pay transfer fees separately, revert on errors
 }
 
-() request_to_mint_pool_jettons(slice destination, int amount, int query_id, builder payload, int for_user?) impure inline_ref {
+() request_to_mint_pool_jettons(slice destination, int amount, int query_id, int for_user?) impure inline_ref {
     if (for_user?) {
-        send_mint_message(jetton_minter, query_id, destination, amount, payload,
+        send_mint_message(jetton_minter, query_id, destination, amount,
                 TRANSFER_NOTIFICATION_AMOUNT,
                 0,
                 0,
                 sendmode::CARRY_ALL_BALANCE);
     } else {
-        send_mint_message(jetton_minter, query_id, destination, amount, payload,
+        send_mint_message(jetton_minter, query_id, destination, amount,
                 TRANSFER_NOTIFICATION_AMOUNT,
                 0,
                 TRANSFER_NOTIFICATION_AMOUNT + PAYOUT_DISTRIBUTION_AMOUNT,
@@ -61,7 +57,7 @@
                 );
         send_raw_message(msg.end_cell(), sendmode::REGULAR);
     }
-    send_mint_message(deposit_payout, query_id, destination, amount, begin_cell(),
+    send_mint_message(deposit_payout, query_id, destination, amount,
             TRANSFER_NOTIFICATION_AMOUNT,
             0,
             0,
@@ -91,7 +87,7 @@
                 );
         send_raw_message(msg.end_cell(), sendmode::REGULAR);
     }
-    send_mint_message(withdrawal_payout, query_id, destination, amount, begin_cell(),
+    send_mint_message(withdrawal_payout, query_id, destination, amount,
             TRANSFER_NOTIFICATION_AMOUNT,
             0,
             0,

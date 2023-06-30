@@ -109,7 +109,7 @@ int current_round_index() inline {
     return round_id_from_round_data(current_round_borrowers);
 }
 {-
-    () request_to_mint_pool_jettons(slice destination, int amount, int query_id, builder payload, int for_user?) impure;
+    () request_to_mint_pool_jettons(slice destination, int amount, int query_id, int for_user?) impure;
     () request_to_mint_deposit(slice destination, int amount, int query_id) impure;
     () request_to_mint_withdrawal(slice destination, int amount, int query_id) impure;
 -}
@@ -221,7 +221,7 @@ int muldiv_extra(int a, int b, int c) inline {
             ;; request_to_mint automatically increase supply by minted amount
             ;; however there is no extra tokens in this case
             supply -= jetton_amount;
-            request_to_mint_pool_jettons(from_address, jetton_amount, query_id, null(), true);
+            request_to_mint_pool_jettons(from_address, jetton_amount, query_id, true);
         }
         
     {- ========== Governance operations ========== -}
@@ -275,7 +275,7 @@ int muldiv_extra(int a, int b, int c) inline {
                     (int expected_balance, int expected_supply) = _get_projected_conversion_ratio();
 
                     int amount = muldiv_extra(deposit_amount, expected_supply, expected_balance);
-                    request_to_mint_pool_jettons(sender_address, amount, query_id, null(), true);
+                    request_to_mint_pool_jettons(sender_address, amount, query_id, true);
                     total_balance += deposit_amount;
                 } else {
                     request_to_mint_deposit(sender_address, deposit_amount, query_id);
@@ -573,8 +573,6 @@ int muldiv_extra(int a, int b, int c) inline {
     request_to_mint_pool_jettons(deposit_payout,
                                  jetton_mint,
                                  cur_lt(),
-                                 begin_cell()
-                                   .store_body_header(payouts::start_distribution, cur_lt()),
                                  false
                                 );
     total_balance += requested_for_deposit;
