@@ -11,6 +11,11 @@ export abstract class Conf {
     static readonly stakeRecoverFine = toNano('10');
     static readonly gracePeriod    = 600;
     static readonly sudoQuarantine = 86400;
+    static readonly serviceNotificationAmount = toNano('0.02');
+    static readonly governanceFee  = BigInt(1 << 16);
+    static readonly finalizeRoundFee = toNano('1');
+    static readonly notificationAmount = toNano('0.1');
+    static readonly distributionAmount = toNano('0.2');
 };
 
 export abstract class Op {
