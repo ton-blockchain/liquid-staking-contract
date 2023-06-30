@@ -106,7 +106,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeInt(0n, 1) // halted?
               .storeCoins(0) // total_balance
               .storeRef(mintersData)
-              .storeUint(100, 16) // minimal interest_rate
+              .storeUint(100, 24) // minimal interest_rate
               .storeInt(config.optimistic_deposit_withdrawals, 1) // optimistic_deposit_withdrawals
               .storeInt(-1n, 1) // deposits_open?
               .storeUint(0, 256) // saved_validator_set_hash
@@ -118,7 +118,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               )
               .storeCoins(100 * 1000000000) // min_loan_per_validator
               .storeCoins(1000000 * 1000000000) // max_loan_per_validator
-              .storeUint(155, 16) // governance fee
+              .storeUint(155, 24) // governance fee
               .storeRef(roles)
               .storeRef(codes)
            .endCell();
@@ -219,7 +219,7 @@ export function poolFullConfigToCell(config: PoolFullConfig): Cell {
               .storeBit(config.halted) // halted?
               .storeCoins(config.totalBalance) // total_balance
               .storeRef(minters)
-              .storeUint(config.interestRate, 16) // minimal interest_rate
+              .storeUint(config.interestRate, 24) // minimal interest_rate
               .storeBit(config.optimisticDepositWithdrawals) // optimistic_deposit_withdrawals
               .storeBit(config.depositsOpen) // deposits_open?
               .storeUint(config.savedValidatorSetHash, 256) // saved_validator_set_hash
@@ -231,7 +231,7 @@ export function poolFullConfigToCell(config: PoolFullConfig): Cell {
               )
               .storeCoins(config.minLoanPerValidator) // min_loan_per_validator
               .storeCoins(config.maxLoanPerValidator) // max_loan_per_validator
-              .storeUint(config.governanceFee, 16) // governance fee
+              .storeUint(config.governanceFee, 24) // governance fee
               .storeRef(roles)
               .storeRef(codes)
            .endCell();
