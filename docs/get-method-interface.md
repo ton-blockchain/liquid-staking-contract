@@ -1,5 +1,5 @@
 # Pool
-`var get_pool_full_data()` - return full TON data
+`var get_pool_full_data()` - return full Jetton Pool data (note, method depends on network configs and may not work via LS)
 - `state` - `uint8` - internal state of the pool. Normal ones is `0`.
 - `halted` - `bool` - wether operation of the pool is stopped. `0` means pool is working normally
 - `total_balance` - `uint` - summ of all TON accounted by Pool
@@ -56,3 +56,20 @@ Projected pool jetton/TON ratio is equal to `projected_total_balance/projected_s
 
 ---
 `(int, int) get_controller_loan_position(int controller_addr_hash, int prev?)` - We order all loans by controller address hash, put them in line and find position of median of given controller loan. This data can be used for deterministic voting: if stakers decide to vote in some proptions, we can check that controllers voted in the same proportion. Returns numerator and denominator.
+
+# Controller
+`var get_validator_controller_data()` - return full TON data
+- `state` - `uint8` - internal state of the controller: `0` - REST, `1` - SENT_BORROWING_REQUEST, `2` - SENT_STAKE_REQUEST, `3` - FUNDS_STAKEN, `4` - SENT_RECOVER_REQUEST, `5` - INSOLVENT
+- `halted` - `bool` - whether operation of the controller is stopped. `0` means pool is working normally
+- `approved` - `bool` - whether controller is approved and can send loan requests
+- `stake_amount_sent` - `int` - volume of last sent stake to elector
+- `stake_at` - `int` - time of last sent stake to elector
+- `saved_validator_set_hash` - `int` - latest known validator hash
+- `validator_set_changes_count` - `int` - number of validator set updates since stake was sent
+- `validator_set_change_time` - `int` - time of last validator set updates
+- `stake_held_for` - `int` - period of stake unlock after round end
+- `borrowed_amount` - `int` - amount of TON which should be returned to Pool
+- `borrowed_time` - `int` - timestamp of when funds were borrowed
+- `validator` - `slice`  - address of validator wallet
+- `pool` - `slice`  - address of pool wallet
+- `sudoer` - `slice`  - address of sudoer wallet
