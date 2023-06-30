@@ -156,10 +156,19 @@ export class LispList <T extends IAny> {
     }
 }
 
+export const muldivExtra  = (a: bigint, b: bigint, c: bigint) => {
+    return b == c ? a : a * b / c
+}
 export const getExternals = (transactions: BlockchainTransaction[]) => {
     const externals:Message[] = [];
     return transactions.reduce((all, curExt) => [...all, ...curExt.externals], externals);
 }
+export const loadSigned = (ds: Slice) => {
+    const neg = ds.loadBit();
+    const value = ds.loadCoins();
+    return neg ? - value : value;
+}
+
 export const testLog = (message: Message, from: Address, topic: number | bigint, matcher?:(body: Cell) => boolean) => {
     // Meh
     if(message.info.type !== "external-out") {
@@ -193,7 +202,7 @@ export const testLogRepayment = (message: Message, from: Address, match: Partial
         const repayment: RepaymentParams = {
             lender: bs.loadAddress(),
             amount: bs.loadCoins(),
-            profit: bs.loadCoins(),
+            profit: loadSigned(bs),
         };
         return testPartial(repayment, match);
     });
@@ -222,14 +231,15 @@ export const testLogRound = (message: Message, from: Address, match: Partial<Rou
             round: bs.loadUint(32),
             borrowed: bs.loadCoins(),
             returned: bs.loadCoins(),
-            profit: bs.loadCoins()
+            profit: loadSigned(bs)
         };
         return testPartial(roundStats, match);
     });
 }
 export const testLogRotation = (message: Message, from: Address, roundId: number) => {
     return testLog(message, from, 4, x => {
-        return x.beginParse().preloadUint(32) == roundId;
+        const testVal = x.beginParse().preloadUint(32);
+        return testVal  == roundId;
     });
 }
 type Log = RoundCompletionParams | LoanParams | RepaymentParams | number;
@@ -303,6 +313,20 @@ export const parseInternalTransfer = (body: Cell) => {
     };
 };
 
+type JettonTransferNotification = {
+    amount: bigint,
+    from: Address | null,
+    payload: Cell | null
+}
+export const parseTransferNotification = (body: Cell) => {
+    const bs = body.beginParse().skip(64 + 32);
+    return {
+        amount: bs.loadCoins(),
+        from: bs.loadAddressAny(),
+        payload: bs.loadMaybeRef()
+    }
+}
+
 const testPartial = (cmp: any, match: any) => {
     for (let key in match) {
         if(!(key in cmp)) {
@@ -333,6 +357,11 @@ export const testJettonTransfer = (body: Cell, match: Partial<InternalTransfer>)
     const res = parseInternalTransfer(body);
     return testPartial(res, match);
 };
+
+export const testJettonNotification = (body: Cell, match: Partial<JettonTransferNotification>) => {
+    const res = parseTransferNotification(body);
+    return testPartial(res, match);
+}
 
 type PayoutMint = {
     dest: Address,
