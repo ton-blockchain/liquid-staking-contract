@@ -16,6 +16,8 @@ export abstract class Conf {
     static readonly finalizeRoundFee = toNano('1');
     static readonly notificationAmount = toNano('0.1');
     static readonly distributionAmount = toNano('0.2');
+    static readonly burnNotificationAmount = toNano('0.01');
+    static readonly burnRequestValue = toNano('0.01');
 };
 
 export abstract class Op {
