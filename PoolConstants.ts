@@ -45,7 +45,7 @@ export abstract class Op {
         request_loan   : 0xe642c965,
         loan_repayment : 0xdfdca27b,
         deposit        : 0x47d54391,
-        withdraw       : 0xf34b091c,
+        withdraw       : 0x319B0CDC,
         withdrawal     : 0x0a77535c,
         deploy_controller : 0xb27edcad,
         touch: 0x4bc7c2df,
