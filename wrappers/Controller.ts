@@ -109,7 +109,7 @@ export class Controller implements Contract {
                           .storeUint(query_id, 64)
                           .storeCoins(min_loan)
                           .storeCoins(max_loan)
-                          .storeUint(max_interest, 16)
+                          .storeUint(max_interest, 24)
                .endCell();
     }
     async sendRequestLoan(provider: ContractProvider,

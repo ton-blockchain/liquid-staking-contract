@@ -32,9 +32,9 @@ builder store_body_header(builder b, int op, int query_id) inline {
 
 ;; Pool types
 
-(slice, (int)) ~load_share(slice s) inline { return s.load_uint(16); }
-builder store_share(builder b, int share) inline { return b.store_uint(share, 16); }
-const int SHARE_BASIS = 65536;
+(slice, (int)) ~load_share(slice s) inline { return s.load_uint(24); }
+builder store_share(builder b, int share) inline { return b.store_uint(share, 24); }
+const int SHARE_BASIS = 256 * 256 * 256; ;; 24 bit
 
 
 (slice, (int)) ~load_controller_id(slice s) inline { return s.load_uint(32); }

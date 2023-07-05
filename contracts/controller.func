@@ -366,7 +366,7 @@ int check_new_stake_msg(slice cs);
                   ;; lets check whether we can afford it
                   int elector_fine = max_recommended_punishment_for_validator_misbehaviour(max_loan + balance);
                   int overdue_fine = (HASH_UPDATE_FINE * 3) - STAKE_RECOVER_FINE;
-                  int interest_payment = muldiv(max_loan, max_interest, 65535);
+                  int interest_payment = muldiv(max_loan, max_interest, SHARE_BASIS);
                   int validator_amount = balance - borrowed_amount;
                   throw_unless(error::too_high_loan_request_amount, validator_amount >= (MIN_TONS_FOR_STORAGE + overdue_fine) + elector_fine + interest_payment);
 
@@ -529,7 +529,7 @@ int get_max_punishment(int stake) method_id {
     int balance = pair_first(get_balance());
     int elector_fine = max_recommended_punishment_for_validator_misbehaviour(credit + balance);
     int overdue_fine = (HASH_UPDATE_FINE * 3) - STAKE_RECOVER_FINE;
-    int interest_payment = muldiv(credit, interest, 65535);
+    int interest_payment = muldiv(credit, interest, SHARE_BASIS);
     int validator_amount = balance - borrowed_amount;
     return (MIN_TONS_FOR_STORAGE + overdue_fine + elector_fine + interest_payment,
             validator_amount);

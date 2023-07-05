@@ -232,7 +232,7 @@ describe('Controller & Pool', () => {
             });
             const loan = await pool.getLoan(0, deployer.address);
             const { interestRate } = await pool.getFinanceData()
-            const expectedInterest = loanRequestParams[1] * BigInt(interestRate) / 65536n;
+            const expectedInterest = loanRequestParams[1] * BigInt(interestRate) / (256n * 256n * 256n);
             expect(loan.borrowed).toEqual(loanRequestParams[1]);
             expect(loan.interestAmount).toEqual(expectedInterest);
         });
