@@ -368,7 +368,7 @@ type PayoutMint = {
     amount: bigint,
     notification: bigint,
     forward: bigint
-    payload: Cell | null
+    payload?: Cell | null
 };
 export const parsePayoutMint = (data: Cell) : PayoutMint => {
     const ds = data.beginParse().skip(32 + 64);
@@ -377,7 +377,7 @@ export const parsePayoutMint = (data: Cell) : PayoutMint => {
         amount: ds.loadCoins(),
         notification: ds.loadCoins(),
         forward: ds.loadCoins(),
-        payload: ds.loadMaybeRef()
+        // payload: ds.loadMaybeRef()
     };
 }
 export const testPayoutMint = (body: Cell, match: Partial<PayoutMint>) => {
