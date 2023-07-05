@@ -4,6 +4,7 @@ import { Blockchain, BlockchainTransaction, MessageParams, SendMessageResult, Sm
 import { computeMessageForwardFees, MsgPrices } from "./fees";
 import { Op } from "./PoolConstants";
 import { MessageValue } from "ton-core/dist/types/Message";
+import { compareTransaction, flattenTransaction, FlatTransactionComparable } from "@ton-community/test-utils";
 
 
 const randomAddress = (wc: number = 0) => {
@@ -334,11 +335,17 @@ const testPartial = (cmp: any, match: any) => {
         }
 
         if(match[key] instanceof Address) {
+            if(!(cmp[key] instanceof Address)) {
+                return false
+            }
             if(!(match[key] as Address).equals(cmp[key])) {
                 return false
             }
         }
         else if(match[key] instanceof Cell) {
+            if(!(cmp[key] instanceof Cell)) {
+                return false;
+            }
             if(!(match[key] as Cell).equals(cmp[key])) {
                 return false;
             }
@@ -380,9 +387,16 @@ export const parsePayoutMint = (data: Cell) : PayoutMint => {
         // payload: ds.loadMaybeRef()
     };
 }
-export const testPayoutMint = (body: Cell, match: Partial<PayoutMint>) => {
+export const testMintMsg = (body: Cell, match: Partial<PayoutMint>) => {
     const res = parsePayoutMint(body);
     return testPartial(res, match);
+}
+
+export const findTransaction = (txs: BlockchainTransaction[], match: FlatTransactionComparable) => {
+    return txs.find(x => compareTransaction(flattenTransaction(x), match));
+}
+export const filterTransaction = (txs: BlockchainTransaction[], match: FlatTransactionComparable) => {
+    return txs.filter(x => compareTransaction(flattenTransaction(x), match));
 }
 
 
