@@ -4,6 +4,7 @@ import { compile } from '@ton-community/blueprint';
 import '@ton-community/test-utils';
 import { keyPairFromSeed, getSecureRandomBytes, getSecureRandomWords, KeyPair } from 'ton-crypto';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
+import { JettonWallet as DAOWallet } from '../wrappers/JettonWallet';
 import { Pool, PoolConfig } from '../wrappers/Pool';
 import { Controller } from '../wrappers/Controller';
 import { Elector } from "../wrappers/Elector";
@@ -12,7 +13,7 @@ import { setConsigliere } from "../wrappers/PayoutMinter.compile";
 import { Conf, ControllerState, Errors, Op } from "../PoolConstants";
 import { PayoutCollection, Conf as NFTConf, Op as NFTOp } from "../wrappers/PayoutNFTCollection";
 import { PayoutItem } from "../wrappers/PayoutNFTItem";
-import { testJettonTransfer, buff2bigint, computedGeneric, getRandomTon, testControllerMeta, getExternals, testLog, testLogRepayment, testMintMsg, assertLog, muldivExtra, testJettonNotification, filterTransaction, findTransaction } from "../utils";
+import { testJettonTransfer, buff2bigint, computedGeneric, getRandomTon, testControllerMeta, getExternals, testLog, testLogRepayment, testMintMsg, assertLog, muldivExtra, testJettonNotification, filterTransaction, findTransaction, testJettonBurnNotification } from "../utils";
 import { ElectorTest } from "../wrappers/ElectorTest";
 import { getElectionsConf, getStakeConf, getValidatorsConf, getVset, loadConfig, packStakeConf, packValidatorsConf } from "../wrappers/ValidatorUtils";
 import { ConfigTest } from "../wrappers/ConfigTest";
@@ -24,12 +25,13 @@ type Validator = {
   wallet: SandboxContract<TreasuryContract>,
   keys: KeyPair
 };
-type Nominator = {
+type MintChunk = {
     address: Address,
     item: Address,
     index: number,
     amount: bigint
 }
+type BillState = Awaited<ReturnType<PayoutCollection['getTotalBill']>>;
 
 describe('Integrational tests', () => {
     let bc: Blockchain;
@@ -74,14 +76,23 @@ describe('Integrational tests', () => {
                               amount: bigint,
                               dest: Address) => Promise<Address>;
     let assertRoundDeposit: (txs: BlockchainTransaction[],
-                             depositors: Nominator[],
+                             depositors: MintChunk[],
+                             supply:bigint,
                              balance:bigint,
-                             amount: bigint,
                              minterAddr:Address) => Promise<bigint>;
+    let assertRoundWithdraw: (txs: BlockchainTransaction[],
+                              withdrawals: MintChunk[],
+                              supply:bigint,
+                              balance:bigint,
+                              minterAddr:Address) => Promise<bigint>
+    let assertBurn:(txs: BlockchainTransaction[],
+                    items: MintChunk[],
+                    minter: Address,
+                    post?: (txs: BlockchainTransaction[], mint: MintChunk) => Promise<void>) => Promise<void>
     let assertRound:(txs: BlockchainTransaction[],
                      round:number,
-                     depositers: Nominator[],
-                     withdrawals:  Nominator[],
+                     depositers: MintChunk[],
+                     withdrawals:  MintChunk[],
                      borrowed: bigint,
                      expected: bigint,
                      returned: bigint,
@@ -90,11 +101,24 @@ describe('Integrational tests', () => {
                      depositMinter: Address | null,
                      withdrawMinter: Address | null,
                     ) => Promise<bigint>;
+    let assertNewPayout:(txs: BlockchainTransaction[],
+                         expectNew: boolean,
+                         prevPayout: Address | null,
+                         deposit: boolean,
+                         dst: Address) => Promise<SandboxContract<PayoutCollection>>;
+    let assertPayoutMint:(txs: BlockchainTransaction[],
+                          payout: SandboxContract<PayoutCollection>,
+                          billBefore: BillState,
+                          dest: Address,
+                          amount: bigint, index: number) => Promise<MintChunk>
     let assertDeposit:(via: Sender,
                        amount: bigint,
                        index:number,
-                       new_minter:boolean) => Promise<Nominator>;
-    let assertWithdraw:(via: Sender, amount:bigint, new_minter: boolean) => Promise<void>;
+                       new_minter:boolean) => Promise<MintChunk>;
+    let assertWithdraw:(via: Sender,
+                        amount:bigint,
+                        index:number,
+                        new_minter: boolean) => Promise<MintChunk>;
 
 
     beforeAll(async () => {
@@ -417,8 +441,43 @@ describe('Integrational tests', () => {
             return depositWallet;
         }
 
+        assertBurn = async (txs: BlockchainTransaction[],
+                            mints: MintChunk[], minter: Address,
+                            post?: (txs: BlockchainTransaction[], mint: MintChunk) => Promise<void>) => {
+            // Filter burn related transactions
+            const burnTxs = filterTransaction(txs, {
+                op: (x) => x! == NFTOp.burn || x! == NFTOp.burn_notification,
+            });
+            expect(burnTxs.length).toBeGreaterThanOrEqual(2); // At least one burn and notification
+            // Burning deposit jettons
+            for (let i = 0; i < mints.length; i++) {
+                const burnSource = i == 0 ? minter : mints[i - 1].item
+                expect(burnTxs).toHaveTransaction({
+                    from: burnSource,
+                    to: mints[i].item,
+                    op: NFTOp.burn,
+                    value: Conf.burnRequestValue,
+                    success: true,
+                    actionResultCode: 0
+                });
+                expect(burnTxs).toHaveTransaction({
+                    from: mints[i].item,
+                    to: minter,
+                    op: NFTOp.burn_notification,
+                    success: true,
+                    actionResultCode: 0
+                });
+                // Expect item to be destroyed
+                const itemSmc = await bc.getContract(mints[i].item);
+                expect(itemSmc.balance).toBe(0n);
+                expect(itemSmc.accountState).toBeUndefined();
+
+                if(post)
+                    await post(txs, mints[i]);
+            }
+        }
         assertRoundDeposit = async (txs: BlockchainTransaction[],
-                                    depositors: Nominator[],
+                                    depositors: MintChunk[],
                                     supply: bigint,
                                     balance: bigint,
                                     minterAddr: Address) => {
@@ -427,34 +486,9 @@ describe('Integrational tests', () => {
             const amount  = muldivExtra(deposit, supply, balance);
             const depositWallet =  await assertPoolJettonMint(txs, amount, minterAddr);
 
-            // Filter burn related transactions
-            const burnTxs = filterTransaction(txs, {
-                op: (x) => x! == NFTOp.burn || x! == NFTOp.burn_notification,
-            });
-            expect(burnTxs.length).toBeGreaterThanOrEqual(2); // At least one burn and notification
-            // Burning deposit jettons
-            for (let i = 0; i < depositors.length; i++) {
-                const burnSource = i == 0 ? minterAddr : depositors[i - 1].item
-                expect(burnTxs).toHaveTransaction({
-                    from: burnSource,
-                    to: depositors[i].item,
-                    op: NFTOp.burn,
-                    value: Conf.burnRequestValue,
-                    success: true,
-                    actionResultCode: 0
-                });
-                expect(burnTxs).toHaveTransaction({
-                    from: depositors[i].item,
-                    to: minterAddr,
-                    op: NFTOp.burn_notification,
-                    success: true,
-                    actionResultCode: 0
-                });
-                // Expect item to be destroyed
-                const itemSmc = await bc.getContract(depositors[i].item);
-                expect(itemSmc.balance).toBe(0n);
-                expect(itemSmc.accountState).toBeUndefined();
-                const depoJetton = await poolJetton.getWalletAddress(depositors[i].address);
+            await assertBurn(txs, depositors, minterAddr,async (txs: BlockchainTransaction[],
+                                                                mint: MintChunk) => {
+                const depoJetton = await poolJetton.getWalletAddress(mint.address);
                 // Transfering pool jettons to depositor wallet
                 expect(txs).toHaveTransaction({
                     from: depositWallet,
@@ -465,15 +499,17 @@ describe('Integrational tests', () => {
                     }),
                     success: true,
                 });
+                // Pool jetton transfer notification
                 expect(txs).toHaveTransaction({
-                    from: depoJetton,
-                    to: depositors[i].address,
+                    from:depoJetton,
+                    to: mint.address,
                     op: Op.jetton.transfer_notification,
                     body: (x) => testJettonNotification(x!, {
                         amount
-                    }),
+                    })
                 });
-            }
+
+            });
             // No action phase failures
             expect(txs).not.toHaveTransaction({
                 actionResultCode: (x) => x! !== undefined && x! !== 0
@@ -487,10 +523,21 @@ describe('Integrational tests', () => {
             expect(await poolJetton.getTotalSupply()).toEqual(supply + amount);
             return amount;
         }
+        assertRoundWithdraw = async (txs: BlockchainTransaction[],
+                                     withdrawals: MintChunk[],
+                                     supply: bigint,
+                                     balance: bigint,
+                                     minterAddr: Address) => {
+            const withdraw = withdrawals.reduce((total, cur) => total + cur.amount, 0n);
+            const amount   = muldivExtra(withdraw, balance, supply);
+            await assertBurn(txs, withdrawals, minterAddr);
+
+            return 0n;
+        }
         assertRound   = async (txs: BlockchainTransaction[],
                                round: number,
-                               depositors: Nominator[],
-                               withdrawals:  Nominator[],
+                               depositors: MintChunk[],
+                               withdrawals:  MintChunk[],
                                borrowed: bigint,
                                expected: bigint,
                                returned: bigint,
@@ -501,6 +548,7 @@ describe('Integrational tests', () => {
             let fee        = 0n;
             let sentDuring = Conf.serviceNotificationAmount;
             const profit   = returned - borrowed - Conf.finalizeRoundFee;
+            const curBalance = totalBalance + profit;
             if(profit > 0) {
                 fee = Conf.governanceFee * profit / 65536n;
             }
@@ -520,10 +568,11 @@ describe('Integrational tests', () => {
             });
             if(depositors.length > 0) {
                 expect(depositMinter).not.toBe(null);
-                supply += await assertRoundDeposit(txs, depositors, supply, totalBalance, depositMinter!);
+                supply += await assertRoundDeposit(txs, depositors, supply, curBalance, depositMinter!);
             }
             if(withdrawals.length > 0n) {
                 expect(withdrawMinter).not.toBe(null);
+                supply -= await assertRoundWithdraw(txs, withdrawals, supply, curBalance, withdrawMinter!);
             }
             if(fee > Conf.serviceNotificationAmount) {
                 expect(txs).toHaveTransaction({
@@ -543,91 +592,155 @@ describe('Integrational tests', () => {
 
             return sentDuring;
         }
-        assertDeposit = async (via: Sender, amount: bigint, index: number, new_round: boolean) => {
-            // Assert deposit/withdraw jettons mint and effects
-            const dataBefore = await pool.getFullData();
-            let   minter: SandboxContract<PayoutCollection> | undefined = undefined;
-            let   billBefore: Awaited<ReturnType<PayoutCollection['getTotalBill']>> | null;
-            if(!new_round) {
-                minter     = bc.openContract(await pool.getDepositMinter());
-                billBefore = await minter.getTotalBill();
-            }
-            else {
-                billBefore = null;
-            }
-            const res    = await pool.sendDeposit(via, amount);
-            const newMinter = bc.openContract(await pool.getDepositMinter());
-            //console.log("Minter:", newMinter);
-            // Just in case
-            expect(res.transactions).not.toHaveTransaction({
-                success: false
-            });
-            if(new_round) {
-                expect(res.transactions).toHaveTransaction({
+        assertNewPayout  = async(txs: BlockchainTransaction[],
+                                 expectNew: boolean,
+                                 prevPayout: Address | null,
+                                 deposit: boolean,
+                                 dst: Address) => {
+            let payout = deposit ? await pool.getDepositMinter()
+                                 : await pool.getWithdrawalMinter();
+            if(expectNew) {
+                expect(txs).toHaveTransaction({
                     from: pool.address,
-                    to: newMinter.address,
-                    op: Op.payout.init,
-                    initCode: payout_minter_code,
+                    to: payout.address,
                     deploy: true,
                     success: true
                 });
             }
             else {
-                const same_minter = minter!.address.equals(newMinter.address);
-                expect(same_minter).toBe(!new_round);
-
-                expect(res.transactions).not.toHaveTransaction({
+                expect(txs).not.toHaveTransaction({
                     from: pool.address,
-                    to: newMinter.address,
-                    op: Op.payout.init,
+                    to: payout.address,
                     deploy: true
                 });
             }
+            if(prevPayout !== null) {
+                expect(prevPayout.equals(payout.address)).toBe(!expectNew);
+            }
 
-            minter = newMinter;
+            return bc.openContract(payout);
+        }
+        assertPayoutMint = async(txs: BlockchainTransaction[],
+                                 payout: SandboxContract<PayoutCollection>,
+                                 billBefore: BillState,
+                                 dest: Address,
+                                 amount: bigint, index: number) => {
+            // Testing mint of new payout jettons
             const item   = bc.openContract(
-                PayoutItem.createFromAddress(await minter.getNFTAddress(BigInt(index))
+                PayoutItem.createFromAddress(await payout.getNFTAddress(BigInt(index))
             ));
-            expect(res.transactions).toHaveTransaction({
+            expect(txs).toHaveTransaction({
                 from: pool.address,
-                to: minter.address,
+                to: payout.address,
                 op: Op.payout.mint,
                 body: (x) => testMintMsg(x!, {
-                    dest: via.address,
-                    amount: amount- Conf.poolDepositFee,
+                    dest,
+                    amount: amount,
                     notification: NFTConf.transfer_notification_amount
                 }),
                 success: true
             });
-            expect(res.transactions).toHaveTransaction({
-                from: minter.address,
+            expect(txs).toHaveTransaction({
+                from: payout.address,
                 to: item.address,
                 deploy: true,
                 success: true
             });
-            const expDepo   = amount - Conf.poolDepositFee;
+
             const itemData = await item.getNFTData();
-            expect(itemData.collection).toEqualAddress(minter.address);
+            expect(itemData.collection).toEqualAddress(payout.address);
             expect(itemData.index).toEqual(index);
             expect(itemData.inited).toBe(true);
-            expect(itemData.owner).toEqualAddress(via.address!);
-            expect(await item.getBillAmount()).toEqual(expDepo);
+            expect(itemData.owner).toEqualAddress(dest);
+            expect(await item.getBillAmount()).toEqual(amount);
+
+            const billAfter = await payout.getTotalBill();
+            expect(billAfter.billsCount).toEqual(billBefore.billsCount + 1n);
+            expect(billAfter.totalBill).toEqual(billBefore.totalBill + amount);
+
+            return {
+                address: dest,
+                item: item.address,
+                index,
+                amount
+            }
+        }
+        assertDeposit = async (via: Sender, amount: bigint, index: number, new_round: boolean) => {
+            // Assert deposit/withdraw jettons mint and effects
+            const dataBefore = await pool.getFullData();
+            const prevMinter = dataBefore.depositPayout;
+            let   billBefore: BillState;
+            if(new_round) {
+                billBefore = {
+                    totalBill: 0n,
+                    billsCount: 0n
+                };
+            }
+            else {
+                const tmpMinter = bc.openContract(await pool.getDepositMinter());
+                billBefore = await tmpMinter.getTotalBill();
+            }
+
+            const res    = await pool.sendDeposit(via, amount);
+            const minter = await assertNewPayout(res.transactions,
+                                                 new_round,
+                                                 prevMinter,
+                                                 true, via.address!);
+            const expDepo  = amount - Conf.poolDepositFee;
+            const nm       = await assertPayoutMint(res.transactions,
+                                                    minter,
+                                                    billBefore,
+                                                    via.address!,
+                                                    expDepo,
+                                                    index);
 
             const dataAfter = await pool.getFullData();
             expect(dataAfter.requestedForDeposit).toEqual(dataBefore.requestedForDeposit + expDepo);
             expect(dataAfter.totalBalance).toEqual(dataBefore.totalBalance);
             expect(dataAfter.depositPayout).toEqualAddress(minter.address);
-            if(!new_round) {
-                const billAfter = await minter.getTotalBill();
-                expect(billAfter.billsCount).toEqual(billBefore!.billsCount + 1n);
-                expect(billAfter.totalBill).toEqual(billBefore!.totalBill + expDepo);
+
+            return nm;
+        }
+        assertWithdraw = async (via:Sender, amount:bigint, index: number, new_round: boolean) => {
+            const withdrawAddr = via.address!;
+            // Withdraw is burning pool jettons pTONs
+            const withdrawJetton = bc.openContract(DAOWallet.createFromAddress(
+                await poolJetton.getWalletAddress(withdrawAddr)
+            ));
+            const dataBefore = await pool.getFullData();
+            const prevMinter = dataBefore.withdrawalPayout;
+
+            let   billBefore: BillState;
+            if(new_round) {
+                billBefore = {
+                    totalBill: 0n,
+                    billsCount: 0n
+                };
             }
-            return {
-                address: via.address!,
-                item: item.address,
-                index,
-                amount: expDepo
+            else {
+                const tmpMinter = bc.openContract(await pool.getDepositMinter());
+                billBefore = await tmpMinter.getTotalBill();
             }
+
+            const res = await withdrawJetton.sendBurnWithParams(via, toNano('1.05'),
+                                                                amount,
+                                                                withdrawAddr, false, false);
+            const minter = await assertNewPayout(res.transactions,
+                                                 new_round,
+                                                 prevMinter,
+                                                 false, via.address!);
+            const nm     = await assertPayoutMint(res.transactions,
+                                                  minter,
+                                                  billBefore,
+                                                  via.address!,
+                                                  amount,
+                                                  index);
+            const dataAfter = await pool.getFullData();
+            expect(dataAfter.requestedForWithdrawal).toEqual(dataBefore.requestedForWithdrawal + amount);
+            expect(dataAfter.totalBalance).toEqual(dataBefore.totalBalance);
+            expect(dataAfter.withdrawalPayout).toEqualAddress(minter.address);
+
+            return nm;
         }
     });
 
@@ -683,11 +796,30 @@ describe('Integrational tests', () => {
                           0n,
                           0n,
                           0n,
-                          0n,
                           poolData.supply,
+                          poolData.totalBalance,
                           poolData.depositPayout,
                           poolData.withdrawalPayout);
         // expect(res.transactions).not.toHaveTransaction({success: false});
+    });
+    it.only('Simple withdraw', async() => {
+        await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
+        const nm = await bc.treasury('Depo:0');
+        const withdrawRes = await assertWithdraw(nm.getSender(), toNano('1'), 0, true);
+        const poolData    = await pool.getFullData();
+        await nextRound();
+        const res = await pool.sendTouch(deployer.getSender());
+        await assertRound(res.transactions,
+                          1,
+                          [],
+                          [withdrawRes],
+                          0n,
+                          0n,
+                          0n,
+                          poolData.supply,
+                          poolData.totalBalance,
+                          poolData.depositPayout,
+                          poolData.withdrawalPayout);
     });
     it('Deposit to pool', async () => {
         let deposited: bigint;
