@@ -328,6 +328,31 @@ export const parseTransferNotification = (body: Cell) => {
     }
 }
 
+type JettonBurnNotification = {
+    amount: bigint,
+    from: Address,
+    response_address: Address | null,
+    request_immediate?: boolean,
+    fill_or_kill?: boolean
+}
+export const parseBurnNotification = (body: Cell) => {
+    const ds = body.beginParse().skip(64 + 32);
+    let res ={
+        amount: ds.loadCoins(),
+        from: ds.loadAddress(),
+        response_address: ds.loadAddressAny(),
+    };
+    if(ds.remainingBits >= 2) {
+        return {...res,
+            request_immediate: ds.loadBit(),
+            fill_or_kill: ds.loadBit()
+        };
+    }
+    return res;
+}
+
+
+
 const testPartial = (cmp: any, match: any) => {
     for (let key in match) {
         if(!(key in cmp)) {
@@ -355,6 +380,10 @@ const testPartial = (cmp: any, match: any) => {
         }
     }
     return true;
+}
+export const testJettonBurnNotification = (body: Cell, match: Partial<JettonBurnNotification>) => {
+    const res= parseBurnNotification(body);
+    return testPartial(res, match);
 }
 export const testControllerMeta = (meta: Cell, match: Partial<ControllerStaticData>) => {
     const res = parseControllerStatic(meta);
