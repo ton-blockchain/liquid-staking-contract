@@ -389,7 +389,7 @@ describe('Cotroller mock', () => {
           async () => controller.sendRequestLoan(deployer.getSender(),
                                                  toNano('100000'),
                                                  toNano('200000'),
-                                                 Math.floor(65535 * 0.1)),
+                                                 Math.floor(256 * 256 * 256 * 0.1)),
           async () => controller.sendReturnUnusedLoan(deployer.getSender())
         ];
 
@@ -548,7 +548,7 @@ describe('Cotroller mock', () => {
     });
  
     describe('Request loan', () => {
-      const interest = Math.floor(0.05 * 65535);
+      const interest = Math.floor(0.05 * 256 * 256 * 256);
       let approved : BlockchainSnapshot;
       let reqReady : BlockchainSnapshot;
 
@@ -590,7 +590,7 @@ describe('Cotroller mock', () => {
         snapStates.set('borrowing_req', bc.snapshot());
       });
       it('Only validator can request loan', async () => {
-        const interest = Math.floor(0.05 * 65535);
+        const interest = Math.floor(0.05 * 256*256*256);
         await testRequestLoan(Errors.wrong_sender,
                               deployer.getSender(),
                               toNano('100000'),
@@ -691,7 +691,8 @@ describe('Cotroller mock', () => {
         // Test that changes of interest changes required balance
         let   higherInterest = BigInt(interest * 2);
         let   higherReq      = await controller.getBalanceForLoan(maxLoan, higherInterest);
-        let   expStakeGrow   = maxLoan * BigInt(interest) / 65535n;
+        let   expStakeGrow   = maxLoan * BigInt( 2 * interest) / (256n*256n*256n) -
+                               maxLoan * BigInt( interest) / (256n*256n*256n);
         expect(higherReq).toBeGreaterThan(baseReq);
         expect(higherReq - baseReq).toEqual(expStakeGrow);
       });
@@ -1852,7 +1853,7 @@ describe('Cotroller mock', () => {
       it('Request loan is only allowed in REST state', async () => {
         const minLoan = toNano('100000');
         const maxLoan = toNano('200000');
-        const interest = Math.floor(0.1 * 65535);
+        const interest = Math.floor(0.1 * 256*256*256);
         const testCb = async () => controller.sendRequestLoan(validator.wallet.getSender(), minLoan, maxLoan, interest);
         await testStates(statesAvailable.filter(x => x !== InitialState), wrongState, testCb);
         await bc.loadFrom(InitialState);
