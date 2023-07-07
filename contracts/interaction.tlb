@@ -52,7 +52,7 @@ deposit#47d54391 query_id:uint64 = InternalMsgBody;
 withdraw#319b0cdc query_id:uint64 jetton_amount:Coins from_address:MsgAddress response_address:MsgAddress wait_till_round_end:Bool fill_or_kill:Bool = InternalMsgBody;
 withdrawal#0a77535c query_id:uint64 = InternalMsgBody;
 
-set_roles#5e517f36 query_id:uint64 governor:(Maybe MsgAddress) interest_manager:(Maybe MsgAddress) halter:(Maybe MsgAddress) = InternalMsgBody;
+set_roles#5e517f36 query_id:uint64 governor:(Maybe MsgAddress) interest_manager:(Maybe MsgAddress) halter:(Maybe MsgAddress) approver:(Maybe MsgAddress) = InternalMsgBody;
 
 set_deposit_settings#9bf5561c query_id:uint64 optimistic_deposit_withdrawals:Bool deposits_open:Bool = InternalMsgBody;
 deploy_controller#b27edcad controller_id:uint32 query_id:uint64 = InternalMsgBody;

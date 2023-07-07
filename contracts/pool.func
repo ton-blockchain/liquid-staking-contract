@@ -248,6 +248,9 @@ int muldiv_extra(int a, int b, int c) inline {
                 if(in_msg_body~load_bool()) {
                     halter = in_msg_body~load_msg_addr();
                 }
+                if(in_msg_body~load_bool()) {
+                    approver = in_msg_body~load_msg_addr();
+                }
     } elseif(op == governor::set_deposit_settings) {
                 assert_sender!(sender_address, governor);
                 optimistic_deposit_withdrawals = in_msg_body~load_bool();

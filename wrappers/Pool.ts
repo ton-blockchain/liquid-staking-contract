@@ -336,14 +336,27 @@ export class Pool implements Contract {
         });
     }
 
+    async sendSetInterest(provider: ContractProvider, via: Sender, interest:number) {
+        await provider.internal(via, {
+            value: toNano('0.3'),
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                     .storeUint(Op.interestManager.set_interest, 32) // op = touch
+                     .storeUint(1, 64) // query id
+                     .storeUint(Math.floor(interest * (2**24)), 24)
+                  .endCell(),
+        });
+    }
+
     async sendSetRoles(provider: ContractProvider, via: Sender,
                        governor: Address | null,
                        interestManager: Address | null,
-                       halter: Address | null) {
+                       halter: Address | null,
+                       approver: Address | null) {
         let body = beginCell()
                      .storeUint(Op.governor.set_roles, 32)
                      .storeUint(1, 64);
-        for (let role of [governor, interestManager, halter]) {
+        for (let role of [governor, interestManager, halter, approver]) {
             if(role) {
               body = body.storeBit(true).storeAddress(role!);
             } else {
