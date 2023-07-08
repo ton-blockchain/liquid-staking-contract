@@ -39,7 +39,7 @@ const int start_distribution_gas_usage = ONE_COIN / 100;
   slice admin = ds~load_msg_addr();
   cell distribution = ds~load_maybe_ref();
   cell collection_content = ds~load_ref();
-  if(issued_bills) {
+  if(ds.slice_refs()) {
     ds = ds.preload_ref().begin_parse();
     int next_index = ds~load_uint(64);
     (slice prev, slice current, slice next) =
@@ -59,7 +59,7 @@ const int start_distribution_gas_usage = ONE_COIN / 100;
                       .store_slice(admin)
                       .store_maybe_ref(distribution)
                       .store_ref(collection_content);
-  if(issued_bills) {
+  if(next_item_index > 0) {
     cell nfts = begin_cell()
                              .store_uint(next_item_index, 64)
                              .store_slice(prev)
