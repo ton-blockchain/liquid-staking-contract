@@ -995,7 +995,7 @@ describe('Cotroller mock', () => {
 
       it('New stake too high', async () => {
         // tripple hash update cost
-        const overDue   = (Conf.hashUpdateFine * 3n) - Conf.stakeRecoverFine;
+        const overDue   = (Conf.hashUpdateFine * 3n) + Conf.stakeRecoverFine;
         const minAmount = Conf.minStorage + overDue;
         const balance   = (await bc.getContract(controller.address)).balance;
         const msgVal    = toNano('10');
@@ -1035,7 +1035,7 @@ describe('Cotroller mock', () => {
       it('Validator stake should have enough to handle punishment from elector', async () => {
         const deposit = toNano('100000');
         const validatorAmount = await controller.getValidatorAmount();
-        const overDueFine   = Conf.hashUpdateFine * 3n - Conf.stakeRecoverFine;
+        const overDueFine   = Conf.hashUpdateFine * 3n + Conf.stakeRecoverFine;
         const stakeBase     = deposit - Conf.electorOpValue + overDueFine + Conf.minStorage;
         let   maxPunishment = await controller.getMaxPunishment(stakeBase);
         if(maxPunishment <= validatorAmount) {
