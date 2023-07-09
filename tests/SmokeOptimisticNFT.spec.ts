@@ -1,4 +1,4 @@
-import { Blockchain, SandboxContract, TreasuryContract } from '@ton-community/sandbox';
+import { Blockchain, SandboxContract, TreasuryContract, prettyLogTransactions } from '@ton-community/sandbox';
 import { Cell, toNano, Dictionary, beginCell } from 'ton-core';
 import { Pool } from '../wrappers/Pool';
 import { Controller } from '../wrappers/Controller';
@@ -7,10 +7,8 @@ import { JettonWallet as PoolJettonWallet } from '../wrappers/JettonWallet';
 import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
 import { Conf, Op } from "../PoolConstants";
+import { getElectionsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
 
-const loadConfig = (config:Cell) => {
-          return config.beginParse().loadDictDirect(Dictionary.Keys.Int(32), Dictionary.Values.Cell());
-        };
 
 describe('Pool', () => {
     let pool_code: Cell;
@@ -28,8 +26,24 @@ describe('Pool', () => {
     let poolJetton: SandboxContract<DAOJettonMinter>;
     let deployer: SandboxContract<TreasuryContract>;
 
+    const newVset = () => {
+        const confDict = loadConfig(blockchain.config);
+        const vset = getVset(confDict, 34);
+        const eConf = getElectionsConf(confDict);
+        if(!blockchain.now)
+          blockchain.now = 100;
+        vset.utime_since = blockchain.now + 1
+        vset.utime_unitl = vset.utime_since + eConf.elected_for;
+        const newSet = packValidatorsSet(vset);
+        blockchain.now += 100;
+        confDict.set(34, newSet);
+        blockchain.setConfig(beginCell().storeDictDirect(confDict).endCell());
+        return newSet;
+    }
+
     beforeAll(async () => {
         blockchain = await Blockchain.create();
+        blockchain.now = 100;
         deployer = await blockchain.treasury('deployer', {balance: toNano("1000000000")});
 
         payout_collection = await compile('PayoutNFTCollection');
@@ -220,5 +234,84 @@ describe('Pool', () => {
          oldBalance = (await blockchain.getContract(deployer.address)).balance;
 
     });
+
+    it('should not withdraw zero optimistically', async () => {
+         newVset();
+         //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
+         let depositResult = await pool.sendDeposit(deployer.getSender(), toNano('10'));
+         let myPoolJettonWalletAddress = await poolJetton.getWalletAddress(deployer.address);
+         let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
+
+         let oldJettonAmount = await myPoolJettonWallet.getJettonBalance();
+         let withdrawalAmount = 1n;
+         let oldBalance = (await blockchain.getContract(deployer.address)).balance;
+
+         // rate is lower than 1, burning 1nanoJetton leads to issuing zero nanoTONs
+         let burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.0'), withdrawalAmount, deployer.address, false, false);
+         expect(burnResult.transactions).toHaveTransaction({
+            on: deployer.address,
+            op: Op.jetton.transfer_notification,
+         });
+         expect(burnResult.transactions).not.toHaveTransaction({
+            on: deployer.address,
+            op: Op.pool.withdrawal,
+         });
+         // 1 nanoTON deposit -> ~1 nanoJetton issuing, should pass
+         depositResult = await pool.sendDeposit(deployer.getSender(), toNano('1') + 1n);
+         expect(depositResult.transactions).toHaveTransaction({
+            on: pool.address,
+            success: true,
+         });
+    });
+
+    it('should not withdraw zero through NFT', async () => {
+         newVset();
+
+         //await blockchain.setVerbosityForAddress(pool.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
+         let depositResult = await pool.sendDeposit(deployer.getSender(), toNano('10'));
+         let myPoolJettonWalletAddress = await poolJetton.getWalletAddress(deployer.address);
+         let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
+
+         let oldJettonAmount = await myPoolJettonWallet.getJettonBalance();
+         let withdrawalAmount = 0n;
+         let oldBalance = (await blockchain.getContract(deployer.address)).balance;
+
+         // rate is lower than 1, burning 1nanoJetton leads to issuing zero nanoTONs
+         let burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.0'), withdrawalAmount, deployer.address, true, false);
+         expect(burnResult.transactions).toHaveTransaction({
+            on: deployer.address,
+            op: Op.jetton.transfer_notification,
+         });
+         expect(burnResult.transactions).not.toHaveTransaction({
+            on: deployer.address,
+            op: Op.nft.ownership_assigned,
+         });
+         // 1 nanoTON deposit -> ~1 nanoJetton issuing, should pass
+         depositResult = await pool.sendDeposit(deployer.getSender(), toNano('1') + 1n);
+         expect(depositResult.transactions).toHaveTransaction({
+            on: deployer.address,
+            op: Op.jetton.transfer_notification,
+         });
+    });
+
+    it('should not deposit zero optimistically', async () => {
+         newVset();
+         let myPoolJettonWalletAddress = await poolJetton.getWalletAddress(deployer.address);
+         let myPoolJettonWallet = blockchain.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
+         await pool.sendDonate(deployer.getSender(), toNano('1000'));
+         // now rate is higher than 1, opposite situation
+         let burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.0'), 1n, deployer.address, false, false);
+         expect(burnResult.transactions).toHaveTransaction({
+            on: pool.address,
+            success: true,
+         });
+         let depositResult = await pool.sendDeposit(deployer.getSender(), toNano('1') + 1n);
+         expect(depositResult.transactions).toHaveTransaction({
+            on: pool.address,
+            success: false,
+         });
+    });
+
+
 
 });

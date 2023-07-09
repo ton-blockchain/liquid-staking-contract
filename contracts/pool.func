@@ -199,6 +199,7 @@ int muldiv_extra(int a, int b, int c) inline {
                     request_immediate_withdrawal_if_possible &
                     (state == state::NORMAL) &
                     (balance - msg_value - MIN_TONS_FOR_STORAGE > approximate_amount)) {
+                throw_unless(error::output_amount_is_zero, approximate_amount);
                 total_balance -= approximate_amount;
                 supply -= jetton_amount;
                 raw_reserve(balance - msg_value - approximate_amount - sent_during_rotation, 0);
@@ -211,6 +212,7 @@ int muldiv_extra(int a, int b, int c) inline {
                 send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE);
             } else {
                 throw_if(105, fill_or_kill);
+                throw_unless(error::output_amount_is_zero, jetton_amount);
                 raw_reserve(balance - msg_value - sent_during_rotation, 0);
                 request_to_mint_withdrawal(from_address, jetton_amount, query_id);
             }
@@ -248,6 +250,9 @@ int muldiv_extra(int a, int b, int c) inline {
                 if(in_msg_body~load_bool()) {
                     halter = in_msg_body~load_msg_addr();
                 }
+                if(in_msg_body~load_bool()) {
+                    approver = in_msg_body~load_msg_addr();
+                }
     } elseif(op == governor::set_deposit_settings) {
                 assert_sender!(sender_address, governor);
                 optimistic_deposit_withdrawals = in_msg_body~load_bool();
@@ -275,6 +280,7 @@ int muldiv_extra(int a, int b, int c) inline {
                     (int expected_balance, int expected_supply) = _get_projected_conversion_ratio();
 
                     int amount = muldiv_extra(deposit_amount, expected_supply, expected_balance);
+                    throw_unless(error::output_amount_is_zero, amount);
                     request_to_mint_pool_jettons(sender_address, amount, query_id, true);
                     total_balance += deposit_amount;
                 } else {

@@ -16,6 +16,7 @@ const int error::borrowing_request_in_closed_round = 0xf104;
 
 const int error::deposit_amount_too_low = 0xf200;
 const int error::deposits_are_closed = 0xf201;
+const int error::output_amount_is_zero = 0xf202;
 
 const int error::not_enough_TON_to_process = 0xf300;
 

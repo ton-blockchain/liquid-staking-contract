@@ -4,7 +4,7 @@
 - `halted` - `bool` - wether operation of the pool is stopped. `0` means pool is working normally
 - `total_balance` - `uint` - summ of all TON accounted by Pool
 - `supply` - `uint` -  number of issued pool jettons
-- `interest_rate` - `uint` - interest rate **per round** encoded as 16 bit number. In other words, after borrowing X TON validator need to return `X*( 65536 + interest_rate) / 65536 TON`
+- `interest_rate` - `uint` - interest rate **per round** encoded as 24 bit number. In other words, after borrowing X TON validator need to return `X*( 2**24 + interest_rate) / 2**24 TON`
 - `optimistic_deposit_withdrawals` - `bool` - wether optimistic (instantaneous) mode of deposit/withdrawals is on
 - `deposits_open?` - `bool` - wether deposits are open
 - `saved_validator_set_hash` - `uint` - last accounted validator set hash
@@ -19,7 +19,7 @@
 - `current_round_borrowers` - `[cell, int, int, int, int, int, int]` - data of current lending round
 - `min_loan_per_validator` - `int` - minimal amount of TON which can be borrowed by controller
 - `max_loan_per_validator` - `int` - maximal amount of TON which can be borrowed by controller
-- `governance_fee` - `int` - share of pool profit which is sent to governance encoded as 16 bit number
+- `governance_fee` - `int` - share of pool profit which is sent to governance encoded as 24 bit number
 - `jetton_minter` - `slice` - address of pool jetton root
 - `supply` - `int` - amount of issues pool jettons
 - `deposit_payout` - `slice | null` - address of deployed deposit payout of current round (`null` if not deployed)

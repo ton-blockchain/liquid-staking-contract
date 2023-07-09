@@ -5,7 +5,7 @@
 
 - `state`
 - `total_balance` - amount of TONs accounted when deposit, withdraw and profit
-- `interest_rate` - surplus of credit that should be returned with credit body. Set as integer equal share of credit volume times 65536
+- `interest_rate` - surplus of credit that should be returned with credit body. Set as integer equal share of credit volume times `2**24`
 - `optimistic_deposit_withdrawals?` - flag notifies whether optimistic mode is enabled
 - `deposits_open?` - flag notifies whether deposits are open
 - `current_round_borrowers` - Current _round\_data_
