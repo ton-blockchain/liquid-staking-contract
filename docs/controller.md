@@ -84,7 +84,7 @@ Validator sends messages to
 
 ## Validator duty
 1. Validator must perform `update_validator_hash` when funds are staken. If validators doesn't update it during `GRACE` period, anybody can `update_validator_hash` and get `HASH_UPDATE_FINE`. The rule is as following:
-> If controller is in "funds staken" state, `validator_set_changes_count < 3`, `borrowed_amount > 0` and `now() - utime_since > GRACE_PERIOD`, anybody can trigger `update_validator_hash` and get reward
+> If controller is in "funds staken" state, `validator_set_changes_count < 3`, `borrowed_amount > 0`, `current_validator_hash != saved_validator_set_hash` (equivalent to `validator_set_change_time < utime_since`) and `now() - utime_since > GRACE_PERIOD`, anybody can trigger `update_validator_hash` and get reward
 
 2. Validator must recover funds from elector after it being released. Otherwise, anybody can `recover_stake` and get `STAKE_RECOVER_FINE`, in particular:
 > If controller is in "funds staken" state, `validator_set_changes_count >= 2`, `borrowed_amount > 0` and `now() - validator_set_changes_time > stake_held_for + GRACE_PERIOD`, anybody can trigger `recover_stake` and get reward
