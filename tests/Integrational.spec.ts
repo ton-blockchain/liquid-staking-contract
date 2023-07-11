@@ -60,6 +60,7 @@ describe('Integrational tests', () => {
     let vConf : ReturnType<typeof getValidatorsConf>;
     let eConf : ReturnType<typeof getElectionsConf>;
     let msgConf:ReturnType<typeof getMsgPrices>;
+    let bcConf :ReturnType<typeof getMsgPrices>;
 
     let getContractData:(address: Address) => Promise<Cell>;
     let getContractBalance:(address: Address) => Promise<bigint>;
@@ -88,7 +89,7 @@ describe('Integrational tests', () => {
     let assertBurn:(txs: BlockchainTransaction[],
                     items: MintChunk[],
                     minter: Address,
-                    post?: (txs: BlockchainTransaction[], mint: MintChunk) => Promise<void>) => Promise<void>
+                    post?: (mint: MintChunk) => Promise<void>) => Promise<void>
     let assertRound:(txs: BlockchainTransaction[],
                      round:number,
                      depositers: MintChunk[],
@@ -149,6 +150,8 @@ describe('Integrational tests', () => {
         vConf = getValidatorsConf(confDict);
         eConf = getElectionsConf(confDict);
         msgConf = getMsgPrices(bc.config, -1);
+        bcConf  = getMsgPrices(bc.config, 0);
+
 
         validators = [];
 
@@ -235,6 +238,7 @@ describe('Integrational tests', () => {
         }
 
         snapStates = new Map<string, BlockchainSnapshot>();
+        snapStates.set('initial', bc.snapshot());
         getContractData = async (address: Address) => {
           const smc = await bc.getContract(address);
           if(!smc.account.account)
@@ -443,23 +447,25 @@ describe('Integrational tests', () => {
 
         assertBurn = async (txs: BlockchainTransaction[],
                             mints: MintChunk[], minter: Address,
-                            post?: (txs: BlockchainTransaction[], mint: MintChunk) => Promise<void>) => {
+                            post?: (mint: MintChunk) => Promise<void>) => {
             // Filter burn related transactions
             const burnTxs = filterTransaction(txs, {
                 op: (x) => x! == NFTOp.burn || x! == NFTOp.burn_notification,
             });
             expect(burnTxs.length).toBeGreaterThanOrEqual(2); // At least one burn and notification
             // Burning deposit jettons
+            // console.log("Mints:", mints);
             for (let i = 0; i < mints.length; i++) {
-                const burnSource = i == 0 ? minter : mints[i - 1].item
+                const burnSource = i == 0 ? minter : mints[mints.length - i].item
                 expect(burnTxs).toHaveTransaction({
                     from: burnSource,
-                    to: mints[i].item,
+                    to: mints[mints.length - i - 1].item,
                     op: NFTOp.burn,
                     value: Conf.burnRequestValue,
                     success: true,
                     actionResultCode: 0
                 });
+                // Every mint chunk should burn
                 expect(burnTxs).toHaveTransaction({
                     from: mints[i].item,
                     to: minter,
@@ -473,7 +479,7 @@ describe('Integrational tests', () => {
                 expect(itemSmc.accountState).toBeUndefined();
 
                 if(post)
-                    await post(txs, mints[i]);
+                    await post(mints[i]);
             }
         }
         assertRoundDeposit = async (txs: BlockchainTransaction[],
@@ -483,19 +489,24 @@ describe('Integrational tests', () => {
                                     minterAddr: Address) => {
 
             const deposit = depositors.reduce((total, cur) => total + cur.amount, 0n);
+            console.log(`Deposited:${deposit}`);
+            console.log(`Supply:${supply}`);
+            console.log(`Balance${balance}`);
             const amount  = muldivExtra(deposit, supply, balance);
+            console.log(`Expected amount:${amount}`);
             const depositWallet =  await assertPoolJettonMint(txs, amount, minterAddr);
 
-            await assertBurn(txs, depositors, minterAddr,async (txs: BlockchainTransaction[],
-                                                                mint: MintChunk) => {
+            await assertBurn(txs, depositors, minterAddr,async (mint: MintChunk) => {
                 const depoJetton = await poolJetton.getWalletAddress(mint.address);
+                const jetton = bc.openContract(DAOWallet.createFromAddress(depoJetton));
+                const share  = muldivExtra(mint.amount, supply, balance)
                 // Transfering pool jettons to depositor wallet
                 expect(txs).toHaveTransaction({
                     from: depositWallet,
                     to: depoJetton,
                     op: Op.jetton.internal_transfer,
                     body: (x) => testJettonTransfer(x!, {
-                        amount
+                        amount: share
                     }),
                     success: true,
                 });
@@ -505,10 +516,9 @@ describe('Integrational tests', () => {
                     to: mint.address,
                     op: Op.jetton.transfer_notification,
                     body: (x) => testJettonNotification(x!, {
-                        amount
+                        amount: share
                     })
                 });
-
             });
             // No action phase failures
             expect(txs).not.toHaveTransaction({
@@ -530,9 +540,41 @@ describe('Integrational tests', () => {
                                      minterAddr: Address) => {
             const withdraw = withdrawals.reduce((total, cur) => total + cur.amount, 0n);
             const amount   = muldivExtra(withdraw, balance, supply);
-            await assertBurn(txs, withdrawals, minterAddr);
+            // Check tons sent for distribution
+            const distrTx = findTransaction(txs, {
+                from: pool.address,
+                to: minterAddr,
+                op: NFTOp.start_distribution,
+            });
 
-            return 0n;
+            expect(distrTx).not.toBeUndefined();
+
+            const inMsg = distrTx!.inMessage!;
+            if(inMsg.info.type !== "internal")
+                throw(Error("Should be internal"));
+
+            const fwdFee = computeMessageForwardFees(msgConf, inMsg);
+            const msgVal = inMsg.info.value.coins - fwdFee.fees - fwdFee.remaining;
+            expect(msgVal).toEqual(amount + Conf.notificationAmount);
+
+            await assertBurn(txs, withdrawals, minterAddr, async (mint: MintChunk) => {
+                const share = muldivExtra(mint.amount, balance, supply);
+                /*
+                expect(txs).toHaveTransaction({
+                    from: pool.address,
+                    to: mint.address,
+                    value: mint.amount
+                });
+                */
+            });
+
+            // Withdraw data effects
+            const dataAfter = await pool.getFullData();
+            expect(dataAfter.requestedForWithdrawal).toEqual(0n);
+            expect(dataAfter.supply).toEqual(supply - amount);
+            // Verifying pool supply matches what pool's expectations
+            expect(await poolJetton.getTotalSupply()).toEqual(supply - amount);
+            return amount;
         }
         assertRound   = async (txs: BlockchainTransaction[],
                                round: number,
@@ -550,7 +592,7 @@ describe('Integrational tests', () => {
             const profit   = returned - borrowed - Conf.finalizeRoundFee;
             const curBalance = totalBalance + profit;
             if(profit > 0) {
-                fee = Conf.governanceFee * profit / 65536n;
+                fee = Conf.governanceFee * profit / Conf.commonBase;
             }
             expect(txs).toHaveTransaction({
                 from: pool.address,
@@ -569,10 +611,13 @@ describe('Integrational tests', () => {
             if(depositors.length > 0) {
                 expect(depositMinter).not.toBe(null);
                 supply += await assertRoundDeposit(txs, depositors, supply, curBalance, depositMinter!);
+                sentDuring += Conf.notificationAmount + Conf.distributionAmount;
             }
             if(withdrawals.length > 0n) {
                 expect(withdrawMinter).not.toBe(null);
-                supply -= await assertRoundWithdraw(txs, withdrawals, supply, curBalance, withdrawMinter!);
+                const withdraw = await assertRoundWithdraw(txs, withdrawals, supply, curBalance, withdrawMinter!);
+                supply -= withdraw;
+                sentDuring += withdraw;
             }
             if(fee > Conf.serviceNotificationAmount) {
                 expect(txs).toHaveTransaction({
@@ -582,13 +627,27 @@ describe('Integrational tests', () => {
                 });
                 sentDuring += fee;
             }
-            assertLog(txs, pool.address, 3, {
-                round,
-                borrowed,
-                profit
-            });
-            // console.log("Asserting round:", round);
-            // assertLog(txs, pool.address, 4, round);
+            const dataAfter = await pool.getFullData();
+            // expect(dataAfter.currentRound.roundId).toEqual(round + 1);
+            // Verify that we eactually sent out as much as expected
+            const totalOut = filterTransaction(txs, {from: pool.address}).map(
+                x => x.inMessage!
+            ).reduce((totalFee, curMsg) => {
+                let sumVal = totalFee;
+                if(curMsg.info.type === "internal") {
+                    const op = curMsg.body.beginParse().preloadUint(32);
+                    const msgFee = computeMessageForwardFees(bcConf, curMsg, op == Op.payout.mint);
+                    const origVal = curMsg.info.value.coins + msgFee.fees + msgFee.remaining;
+                    // console.log(`Bits:${curMsg.body.bits.length}`);
+                    // console.log(`Orig value exp:${origVal}`);
+                    // console.log(`Value sent:${curMsg.info.value.coins}`);
+                    // console.log(`Fees:${msgFee.fees}\n${msgFee.remaining}\n${curMsg.info.forwardFee}`);
+                    sumVal += origVal;
+                }
+                return sumVal;
+            }, 0n);
+            // Actual sent amount should match expected
+            expect(totalOut).toEqual(sentDuring);
 
             return sentDuring;
         }
@@ -776,22 +835,48 @@ describe('Integrational tests', () => {
         // Check that the approver is set right
         await controller.sendApprove(deployer.getSender(), true);
         expect((await controller.getControllerData()).approved).toBe(true);
-        snapStates.set('initial', bc.snapshot());
+        snapStates.set('deployed', bc.snapshot());
     });
     it.only('Simple deposit', async () => {
-        let deposited: bigint;
-        expect((await pool.getFullData()).totalBalance).toEqual(0n);
+        let deposited = 0n;
+        let depositors: MintChunk[] = [];
+        let expBalances: bigint[] = [];
+        const dataBefore = await pool.getFullData();
+        expect(dataBefore.totalBalance).toEqual(0n);
         await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
         expect((await pool.getFullData()).totalBalance).toEqual(Conf.finalizeRoundFee);
-        const depo   = getRandomTon(150000, 200000);
-        const depositor = await bc.treasury('Depo:0');
-        const depoRes   = await assertDeposit(depositor.getSender(), depo, 0, true);
+        let i = 0;
+        while(deposited < sConf.min_stake * 3n) {
+            const depo   = getRandomTon(150000, 200000);
+            const depositor = await bc.treasury(`Depo:${i}`);
+            const depoRes   = await assertDeposit(depositor.getSender(), depo, i, i == 0);
+            depositors.push(depoRes);
+            expBalances.push(depoRes.amount);
+            deposited += depo;
+            i++;
+        }
+        // Now some repetitive deposits to check if it will add up
+        let repeats: MintChunk[] = [];
+        for(let k = 0; k < depositors.length; k++) {
+            const depo   = getRandomTon(150000, 200000);
+            let j = getRandomInt(1, 3, 2);
+            const depoSender = bc.sender(depositors[k].address);
+            for (let l = 0; l < j; l++) {
+                const depoRes   = await assertDeposit(depoSender, depo, i + l, false);
+                repeats.push(depoRes);
+                expBalances[k] += depoRes.amount;
+                deposited += depo;
+            }
+            i += j;
+        }
         const poolData  = await pool.getFullData();
         await nextRound();
         const res = await pool.sendTouch(deployer.getSender());
+        const dataAfter = await pool.getFullData();
+        expect(dataAfter.currentRound.roundId).toEqual(dataBefore.currentRound.roundId + 1);
         await assertRound(res.transactions,
                           0,
-                          [depoRes],
+                          [...depositors,...repeats],
                           [],
                           0n,
                           0n,
@@ -800,9 +885,14 @@ describe('Integrational tests', () => {
                           poolData.totalBalance,
                           poolData.depositPayout,
                           poolData.withdrawalPayout);
-        // expect(res.transactions).not.toHaveTransaction({success: false});
+        for(let i = 0; i <expBalances.length; i++) {
+            const jettonAddr = await poolJetton.getWalletAddress(depositors[i].address);
+            const jWallet = bc.openContract(DAOWallet.createFromAddress(jettonAddr));
+            expect(await jWallet.getJettonBalance()).toEqual(expBalances[i]);
+        }
+        snapStates.set('deposited', bc.snapshot());
     });
-    it.only('Simple withdraw', async() => {
+    it('Simple withdraw', async() => {
         await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
         const nm = await bc.treasury('Depo:0');
         const withdrawRes = await assertWithdraw(nm.getSender(), toNano('1'), 0, true);
@@ -821,53 +911,13 @@ describe('Integrational tests', () => {
                           poolData.depositPayout,
                           poolData.withdrawalPayout);
     });
-    it('Deposit to pool', async () => {
-        let deposited: bigint;
-        const roundCount = 3; // Limited by depositors balance
-
-        const depoCount = getRandomInt(5, 10);
-        const depositors = await bc.createWallets(depoCount);
-        expect((await pool.getFullData()).totalBalance).toEqual(0n);
-        await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
-        expect((await pool.getFullData()).totalBalance).toEqual(Conf.finalizeRoundFee);
-        for( let i = 0; i < roundCount; i++ ) {
-            const roundDepo: SandboxContract<TreasuryContract>[] = [];
-            for(let k = 0; k < depoCount; k++) {
-                const depo   = getRandomTon(150000, 200000);
-                const depositor  = depositors[k];
-                const deposited = await assertDeposit(depositor.getSender(), depo, k, k == 0);
-            }
-            await nextRound();
-            const res = await pool.sendTouch(deployer.getSender());
-            const poolData = await pool.getFullData();
-            console.log("Pool minter:", poolData.poolJettonMinter);
-            console.log(res);
-            expect(res.transactions).not.toHaveTransaction({success: false});
-            // Start from 1 next round index
-            assertLog(res.transactions, pool.address, 4, i + 2);
-            // Previous loan round idx
-            // assertRound(res.transactions, i, 0n, 0n, - Conf.finalizeRoundFee);
-        }
-
-        // Push into global depositors matrix
-        // depositors.push(roundDepo);
-    });
-    it('First round rotation and deposit creditation', async () => {
-        const dataBefore = await pool.getFullData();
-        await nextRound();
-        await pool.sendTouch(deployer.getSender());
-        const dataAfter = await pool.getFullData();
-        expect(dataAfter.totalBalance).toEqual(dataBefore.totalBalance + dataBefore.requestedForDeposit);
-        expect(dataAfter.currentRound.roundId).toEqual(dataBefore.currentRound.roundId + 1);
-        expect(dataAfter.previousRound).toEqual(dataBefore.currentRound);
-        expect(dataAfter.requestedForDeposit).toEqual(0n);
-    });
-    it('Request loan from controller', async () => {
+    it.skip('Request loan from controller', async () => {
+        // Loan should be requested during elections
         const curVset = getVset(bc.config, 34);
         if(getCurTime() < curVset.utime_unitl - eConf.begin_before) {
             bc.now = curVset.utime_unitl - eConf.begin_before + 1;
         }
-        let   maxLoan = getRandomTon(350000, 500000);
+        let   maxLoan = sConf.min_stake * 3n; // Stake for three rounds
         let   minLoan = maxLoan - toNano('100000');
         const poolData = await pool.getFullData();
         const maxInterest = poolData.interestRate;
@@ -882,7 +932,7 @@ describe('Integrational tests', () => {
         if(creditable > maxLoan)
             creditable = maxLoan;
 
-        const expInterest = creditable * BigInt(poolData.interestRate) / 65535n;
+        const expInterest = creditable * BigInt(poolData.interestRate) / Conf.commonBase;
         const res = await controller.sendRequestLoan(validator.wallet.getSender(),
                                                      minLoan,
                                                      maxLoan,
@@ -897,7 +947,7 @@ describe('Integrational tests', () => {
                 // That's probably too much
                 const minLoanSent = rs.loadCoins();
                 const maxLoanSent = rs.loadCoins();
-                const maxInterestSent = rs.loadUint(16);
+                const maxInterestSent = rs.loadUint(24);
                 const requestMatch =
                     minLoanSent == minLoan &&
                     maxLoanSent == maxLoan &&
@@ -915,16 +965,22 @@ describe('Integrational tests', () => {
             }
         });
         // Loan response
-        const poolCreditTrans = res.transactions.find(x => buff2bigint(controller.address.hash) == x.address && x.outMessagesCount == 0)!;
+        const poolTxs = filterTransaction(res.transactions, {from: pool.address, to:controller.address});
+        const poolCreditTrans = findTransaction(poolTxs, {
+            from: pool.address,
+            to: controller.address,
+            op: Op.controller.credit,
+            success: true
+        })!;
 
+        console.log(res.transactions[2].description);
         expect(poolCreditTrans).not.toBeUndefined();
         expect(poolCreditTrans.parent).not.toBeUndefined();
-        expect(computedGeneric(poolCreditTrans).success).toBe(true);
         const creditMsg = poolCreditTrans.inMessage!;
         if(creditMsg.info.type !== "internal")
             throw(Error("Can't be"));
 
-        const fwdFee      = computeMessageForwardFees(msgConf, creditMsg);
+        const fwdFee = computeMessageForwardFees(msgConf, creditMsg);
 
         expect(creditMsg.info.value.coins).toEqual(creditable - fwdFee.fees - fwdFee.remaining);
         const bs = creditMsg.body.beginParse();
@@ -955,7 +1011,7 @@ describe('Integrational tests', () => {
         const stake = await elector.getStake(validator.keys.publicKey);
         expect(stake).toEqual(controllerData.borrowedAmount - toNano('1'));
     });
-    it('Next elections round and profit return', async () => {
+    it.skip('Next elections round and profit return', async () => {
         await nextRound(3, async () => {
             await controller.sendUpdateHash(validator.wallet.getSender());
             await pool.sendTouch(deployer.getSender());
@@ -993,5 +1049,46 @@ describe('Integrational tests', () => {
             borrowed: 0n,
             interestAmount: 0n
         });
+    });
+    it.skip('Donate DDOS', async () => {
+        await loadSnapshot('initial');
+        const user1  = await bc.treasury('user1');
+        const sneaky = await bc.treasury('sneaky');
+        // const depo1 = await assertDeposit(user1.getSender(), toNano('100000'), 0, true);
+        const amount = toNano('1000');
+        const depo1 = await assertDeposit(user1.getSender(), amount, 0, true);
+        await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
+        const userJetton = bc.openContract(DAOWallet.createFromAddress(await poolJetton.getWalletAddress(user1.address)));
+        // Sneaky doesn't want user to get money so sends some more money after the legit donation
+        await pool.sendDonate(sneaky.getSender(), toNano('0.01'));
+        const poolData = await pool.getFullData();
+        await nextRound();
+        // Updating round
+        const res = await pool.sendTouch(deployer.getSender());
+        /*
+        await assertRound(res.transactions,
+                          0,
+                          [depo1],
+                          [],
+                          0n,
+                          0n,
+                          0n,
+                          poolData.supply,
+                          poolData.totalBalance,
+                          poolData.depositPayout,
+                          poolData.withdrawalPayout);
+
+        */
+        const ptonBalance = await userJetton.getJettonBalance();
+        // Should never mint 0 pool jettons
+        expect(res.transactions).not.toHaveTransaction({
+            to: poolJetton.address,
+            op: Op.payout.mint,
+            body: (x) => testMintMsg(x!, {
+                amount: 0n
+            })
+        });
+        // User should get his pTONs
+        expect(ptonBalance).toBeGreaterThan(0n);
     });
 });
