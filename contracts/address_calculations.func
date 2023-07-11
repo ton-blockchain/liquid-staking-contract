@@ -60,6 +60,7 @@ cell calculate_payout_state_init(slice pool_address, int round_id, int distribut
   content_dict~udict_set_ref(256, "symbol"H, pack_metadata_value("⏲️"));
   content_dict~udict_set_ref(256, "uri"H, pack_metadata_value("my-custom-stake-address.ton"));
   content_dict~udict_set_ref(256, "image"H, pack_metadata_value("my-custom-stake-address.ton/icon.img"));
+  content_dict~udict_set_ref(256, "render_type"H, pack_metadata_value("hidden"));
   cell onchain_content = begin_cell().store_uint(0, 8).store_dict(content_dict).end_cell();
   
   

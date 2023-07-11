@@ -32,6 +32,7 @@ const int error::too_low_recover_stake_value = 0xf602;
 const int error::not_enough_money_to_pay_fine = 0xf603;
 
 const int error::too_much_validator_set_counts = 0xf700;
+const int error::no_new_hash = 0xf701;
 
 const int error::withdrawal_while_credited = 0xf800;
 const int error::incorrect_withdrawal_amount = 0xf801;

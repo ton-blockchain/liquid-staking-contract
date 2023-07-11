@@ -139,6 +139,7 @@ export abstract class Errors {
  static readonly not_enough_money_to_pay_fine = 0xf603;
 
  static readonly too_much_validator_set_counts = 0xf700;
+ static readonly no_new_hash = 0xf701;
 
  static readonly withdrawal_while_credited = 0xf800;
  static readonly incorrect_withdrawal_amount = 0xf801;
