@@ -18,6 +18,7 @@ export abstract class Conf {
     static readonly distributionAmount = toNano('0.2');
     static readonly burnNotificationAmount = toNano('0.01');
     static readonly burnRequestValue = toNano('0.01');
+    static readonly commonBase       = BigInt(256*256*256); // divisor?
 };
 
 export abstract class Op {
