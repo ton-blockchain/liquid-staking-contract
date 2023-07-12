@@ -251,7 +251,6 @@ int check_new_stake_msg(slice cs);
                     } else {
                       if(balance - msg_value - STAKE_RECOVER_FINE >= MIN_TONS_FOR_STORAGE) {
                         ifnot( equal_slice_bits(sender_address, validator)) {
-                          throw_unless(error::no_credit, borrowed_amount);
                           send_msg(sender_address, STAKE_RECOVER_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
                         }
                       }
@@ -275,7 +274,6 @@ int check_new_stake_msg(slice cs);
                     } else {
                       if(balance - HASH_UPDATE_FINE >= MIN_TONS_FOR_STORAGE) {
                         ifnot( equal_slice_bits(sender_address, validator)) {
-                          throw_unless(error::no_credit, borrowed_amount);
                           send_msg(sender_address, HASH_UPDATE_FINE, null(), msgflag::NON_BOUNCEABLE, sendmode::IGNORE_ERRORS);
                         }
                       }
