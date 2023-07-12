@@ -158,6 +158,8 @@ slice calculate_nft_item_address(cell state_init) {
 
 
     if (op == op::transfer_notification) { ;; accept only as jetton distribution start
+        ;; theoretically we should not throw on getting jetton transfer because it may lead
+        ;; to lost jettons. On practice in most cases we can not correctly handle untimely transfers
         throw_if(error::distribution_already_started, distribution_started);
         int jettons? = distr~load_bool();
         throw_unless(error::cannot_distribute_jettons, jettons?);
