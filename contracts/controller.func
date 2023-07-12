@@ -524,6 +524,30 @@ int get_max_punishment(int stake) method_id {
     return max_recommended_punishment_for_validator_misbehaviour(stake);
 }
 
+int get_max_stake_value() method_id {
+    load_data();
+    ifnot(state == state::REST) {
+        return -1;
+    }
+    int balance = pair_first(get_balance());
+    int overdue_fine = (HASH_UPDATE_FINE * 3) + STAKE_RECOVER_FINE;
+    ;; we add ELECTOR_OPERATION_VALUE to ensure room for storage fees and so on
+    int value = balance - MIN_TONS_FOR_STORAGE - overdue_fine - ELECTOR_OPERATION_VALUE;
+    if(value < MIN_STAKE_TO_SEND) {
+        return -1;
+    }
+    if (borrowed_amount) {
+        (_, stake_held_for, int elections_end_before) = get_validator_config();
+        (int utime_since, int utime_until, cell vset) = get_current_validator_set();
+        ;; it is allowed to use credit funds only in the same round when they were obtained
+        if((borrowing_time > utime_since) & (now() < utime_until - elections_end_before)) {
+            return -1;
+        }
+    }
+    ;; currently we skip checks related to max_recommended_punishment_for_validator_misbehaviour
+    return value;
+}
+
 (int, int) required_balance_for_loan(int credit, int interest) method_id {
     load_data();
     int balance = pair_first(get_balance());
