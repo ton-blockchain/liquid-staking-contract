@@ -182,7 +182,9 @@ int check_new_stake_msg(slice cs);
                 }
                 borrowed_amount += in_msg_body~load_coins();
                 in_msg_body.end_parse();
-                state = state::REST;
+                if(state == state::SENT_BORROWING_REQUEST) {
+                  state = state::REST;
+                }
             } elseif (op == controller::approve) {
                 assert_sender!(sender_address, approver);
                 approved? = true;
