@@ -33,6 +33,11 @@ type MintChunk = {
 }
 type BillState = Awaited<ReturnType<PayoutCollection['getTotalBill']>>;
 
+type DistriutionResult = {
+    burnt: bigint,
+    distributed: bigint,
+}
+
 describe('Integrational tests', () => {
     let bc: Blockchain;
     let deployer:SandboxContract<TreasuryContract>;
@@ -69,10 +74,10 @@ describe('Integrational tests', () => {
     let getCreditable:() => Promise<bigint>;
     let updateConfig:() => Promise<Cell>;
     let announceElections:() => Promise<number>;
-    let runElections:() => Promise<void>;
+    let runElections:(profitable?: boolean) => Promise<void>;
     let waitNextRound:() => Promise<void>;
     let waitUnlock:(since: number) => void;
-    let nextRound:(count?: number, post?:() => Promise<void>) => Promise<void>;
+    let nextRound:(profitable?: boolean, count?: number, post?:() => Promise<void>) => Promise<void>;
     let assertPoolJettonMint:(txs: BlockchainTransaction[],
                               amount: bigint,
                               dest: Address) => Promise<Address>;
@@ -80,16 +85,16 @@ describe('Integrational tests', () => {
                              depositors: MintChunk[],
                              supply:bigint,
                              balance:bigint,
-                             minterAddr:Address) => Promise<bigint>;
+                             minterAddr:Address) => Promise<DistriutionResult>;
     let assertRoundWithdraw: (txs: BlockchainTransaction[],
                               withdrawals: MintChunk[],
                               supply:bigint,
                               balance:bigint,
-                              minterAddr:Address) => Promise<bigint>
+                              minterAddr:Address) => Promise<DistriutionResult>
     let assertBurn:(txs: BlockchainTransaction[],
                     items: MintChunk[],
                     minter: Address,
-                    post?: (mint: MintChunk) => Promise<void>) => Promise<void>
+                    post?: (mint: MintChunk) => Promise<void>) => Promise<bigint>
     let assertRound:(txs: BlockchainTransaction[],
                      round:number,
                      depositers: MintChunk[],
@@ -255,15 +260,16 @@ describe('Integrational tests', () => {
         };
         getCurTime = () => bc.now ?? Math.floor(Date.now() / 1000);
         getCreditable = async () => {
-            const poolData    = await pool.getFullData();
-            let cred: bigint;
-            if(poolData.totalBalance == poolData.supply) {
-                cred = poolData.supply - Conf.minStorage;
-            }
-            else {
-                cred = poolData.requestedForWithdrawal * poolData.totalBalance / poolData.supply;
-            }
-            return  cred - Conf.minStorage;
+            const poolData = await pool.getFullData();
+            const poolBalance = await getContractBalance(pool.address);
+            const cred = poolBalance - muldivExtra(poolData.requestedForWithdrawal,
+                                                   poolData.totalBalance,
+                                                   poolData.supply) - Conf.minStorage;
+            // console.log(`Pool balance:${poolBalance}`);
+            // console.log(`Cred:${cred}`);
+            const balanced = BigInt(256 + Conf.disbalanceTolerance) * poolData.totalBalance / 512n;
+            // console.log(`Balanced:${balanced}`);
+            return  cred < balanced ? cred : balanced;
         };
         updateConfig = async () => {
           // Loading data from config contract and setting as sandbox config
@@ -318,16 +324,19 @@ describe('Integrational tests', () => {
           return curElections;
         }
 
-        runElections = async () => {
+        runElections = async (profitable: boolean = true) => {
 
           await announceElections();
-          // Elector profits
-          await bc.sendMessage(internal({
-            from: new Address(-1, Buffer.alloc(32, 0)),
-            to: elector.address,
-            body: beginCell().endCell(),
-            value: toNano('100000'),
-          }));
+
+          if(profitable) {
+            // Elector profits
+            await bc.sendMessage(internal({
+              from: new Address(-1, Buffer.alloc(32, 0)),
+              to: elector.address,
+              body: beginCell().endCell(),
+              value: toNano('100000'),
+            }));
+          }
 
           let electState  = await elector.getParticipantListExtended();
           const partCount = electState.list.length;
@@ -381,9 +390,9 @@ describe('Integrational tests', () => {
           await elector.sendTickTock("tock");
         }
 
-        nextRound = async (count:number = 1, post?:() => void) => {
+        nextRound = async (profitable: boolean = true, count:number = 1, post?:() => void) => {
             while(count--) {
-                await runElections();
+                await runElections(profitable);
                 await updateConfig();
                 await waitNextRound();
                 if(post) {
@@ -409,6 +418,12 @@ describe('Integrational tests', () => {
                 }),
                 success: true
             });
+            if(mintTx === undefined) {
+            // No action phase failures
+            expect(txs).not.toHaveTransaction({
+                actionResultCode: (x) => x! !== undefined && x! !== 0
+            });
+            }
             expect(mintTx).not.toBeUndefined();
             const inMsg = mintTx!.inMessage!;
             // Meh
@@ -455,6 +470,7 @@ describe('Integrational tests', () => {
             expect(burnTxs.length).toBeGreaterThanOrEqual(2); // At least one burn and notification
             // Burning deposit jettons
             // console.log("Mints:", mints);
+            let burnTotal = 0n;
             for (let i = 0; i < mints.length; i++) {
                 const burnSource = i == 0 ? minter : mints[mints.length - i].item
                 expect(burnTxs).toHaveTransaction({
@@ -470,9 +486,13 @@ describe('Integrational tests', () => {
                     from: mints[i].item,
                     to: minter,
                     op: NFTOp.burn_notification,
+                    body: (x) => testJettonBurnNotification(x!, {
+                        amount: mints[i].amount,
+                    }),
                     success: true,
                     actionResultCode: 0
                 });
+                burnTotal += mints[i].amount;
                 // Expect item to be destroyed
                 const itemSmc = await bc.getContract(mints[i].item);
                 expect(itemSmc.balance).toBe(0n);
@@ -481,6 +501,8 @@ describe('Integrational tests', () => {
                 if(post)
                     await post(mints[i]);
             }
+
+            return burnTotal;
         }
         assertRoundDeposit = async (txs: BlockchainTransaction[],
                                     depositors: MintChunk[],
@@ -489,14 +511,11 @@ describe('Integrational tests', () => {
                                     minterAddr: Address) => {
 
             const deposit = depositors.reduce((total, cur) => total + cur.amount, 0n);
-            console.log(`Deposited:${deposit}`);
-            console.log(`Supply:${supply}`);
-            console.log(`Balance${balance}`);
             const amount  = muldivExtra(deposit, supply, balance);
-            console.log(`Expected amount:${amount}`);
             const depositWallet =  await assertPoolJettonMint(txs, amount, minterAddr);
 
-            await assertBurn(txs, depositors, minterAddr,async (mint: MintChunk) => {
+            let distributed = 0n;
+            const burnt = await assertBurn(txs, depositors, minterAddr,async (mint: MintChunk) => {
                 const depoJetton = await poolJetton.getWalletAddress(mint.address);
                 const jetton = bc.openContract(DAOWallet.createFromAddress(depoJetton));
                 const share  = muldivExtra(mint.amount, supply, balance)
@@ -519,6 +538,7 @@ describe('Integrational tests', () => {
                         amount: share
                     })
                 });
+                distributed += share;
             });
             // No action phase failures
             expect(txs).not.toHaveTransaction({
@@ -528,10 +548,13 @@ describe('Integrational tests', () => {
             // Verifying deposit affected data
             const dataAfter = await pool.getFullData();
             expect(dataAfter.requestedForDeposit).toEqual(0n);
-            expect(dataAfter.supply).toEqual(supply + amount);
+            expect(dataAfter.supply).toEqual(supply + distributed);
             // Verifying pool supply matches what pool's expectations
-            expect(await poolJetton.getTotalSupply()).toEqual(supply + amount);
-            return amount;
+            expect(await poolJetton.getTotalSupply()).toEqual(supply + distributed);
+            return {
+                burnt,
+                distributed
+            };
         }
         assertRoundWithdraw = async (txs: BlockchainTransaction[],
                                      withdrawals: MintChunk[],
@@ -540,6 +563,10 @@ describe('Integrational tests', () => {
                                      minterAddr: Address) => {
             const withdraw = withdrawals.reduce((total, cur) => total + cur.amount, 0n);
             const amount   = muldivExtra(withdraw, balance, supply);
+            // console.log(`Requested:${withdraw}`);
+            // console.log(`Supply:${supply}`);
+            // console.log(`Balance:${balance}`);
+            // console.log(`Withdraw amount:${amount}`);
             // Check tons sent for distribution
             const distrTx = findTransaction(txs, {
                 from: pool.address,
@@ -553,28 +580,36 @@ describe('Integrational tests', () => {
             if(inMsg.info.type !== "internal")
                 throw(Error("Should be internal"));
 
-            const fwdFee = computeMessageForwardFees(msgConf, inMsg);
-            const msgVal = inMsg.info.value.coins - fwdFee.fees - fwdFee.remaining;
+            const fwdFee = computeMessageForwardFees(bcConf, inMsg);
+            const rawVal = inMsg.info.value.coins;
+            const msgVal = rawVal + fwdFee.fees + fwdFee.remaining;
+            // console.log(`Msg val:${msgVal}`);
+            // console.log(`Raw value:${inMsg.info.value.coins}`);
+            // console.log(`Amount and fee:${amount + Conf.notificationAmount}`);
             expect(msgVal).toEqual(amount + Conf.notificationAmount);
 
-            await assertBurn(txs, withdrawals, minterAddr, async (mint: MintChunk) => {
+            const burnt = await assertBurn(txs, withdrawals, minterAddr, async (mint: MintChunk) => {
                 const share = muldivExtra(mint.amount, balance, supply);
-                /*
                 expect(txs).toHaveTransaction({
-                    from: pool.address,
+                    from: minterAddr,
                     to: mint.address,
-                    value: mint.amount
+                    op: NFTOp.distributed_asset,
+                    value: (x) => x! >= share
                 });
-                */
             });
 
             // Withdraw data effects
             const dataAfter = await pool.getFullData();
             expect(dataAfter.requestedForWithdrawal).toEqual(0n);
-            expect(dataAfter.supply).toEqual(supply - amount);
+            expect(dataAfter.supply).toEqual(supply - burnt);
+            expect(dataAfter.totalBalance).toEqual(balance - amount);
+            expect(dataAfter.withdrawalPayout).toBe(null);
             // Verifying pool supply matches what pool's expectations
-            expect(await poolJetton.getTotalSupply()).toEqual(supply - amount);
-            return amount;
+            expect(await poolJetton.getTotalSupply()).toEqual(supply - burnt);
+            return {
+                burnt,
+                distributed: amount,
+            };
         }
         assertRound   = async (txs: BlockchainTransaction[],
                                round: number,
@@ -592,7 +627,8 @@ describe('Integrational tests', () => {
             const profit   = returned - borrowed - Conf.finalizeRoundFee;
             const curBalance = totalBalance + profit;
             if(profit > 0) {
-                fee = Conf.governanceFee * profit / Conf.commonBase;
+                fee = Conf.governanceFee * profit / Conf.shareBase;
+                console.log(`Governance fee:${fee}`);
             }
             expect(txs).toHaveTransaction({
                 from: pool.address,
@@ -603,6 +639,9 @@ describe('Integrational tests', () => {
                     const borrowedSent = bs.loadCoins();
                     const expectedSent = bs.loadCoins();
                     const returnedSent = bs.loadCoins();
+                    console.log(`BorrowedSent:${borrowedSent}`);
+                    console.log(`expectedSent:${expectedSent}`);
+                    console.log(`returnedSent:${returnedSent}`);
                     return borrowedSent == borrowed
                            && expectedSent == expected
                            && returnedSent == returned;
@@ -610,14 +649,18 @@ describe('Integrational tests', () => {
             });
             if(depositors.length > 0) {
                 expect(depositMinter).not.toBe(null);
-                supply += await assertRoundDeposit(txs, depositors, supply, curBalance, depositMinter!);
+                const depoRes = await assertRoundDeposit(txs, depositors, supply, curBalance, depositMinter!);
+                supply += depoRes.distributed;
+                console.log("Depositors message sent during");
                 sentDuring += Conf.notificationAmount + Conf.distributionAmount;
             }
             if(withdrawals.length > 0n) {
                 expect(withdrawMinter).not.toBe(null);
                 const withdraw = await assertRoundWithdraw(txs, withdrawals, supply, curBalance, withdrawMinter!);
-                supply -= withdraw;
-                sentDuring += withdraw;
+                supply -= withdraw.burnt;
+
+                console.log("Withdrawls message sent during");
+                sentDuring += withdraw.distributed + Conf.notificationAmount;
             }
             if(fee > Conf.serviceNotificationAmount) {
                 expect(txs).toHaveTransaction({
@@ -635,18 +678,22 @@ describe('Integrational tests', () => {
             ).reduce((totalFee, curMsg) => {
                 let sumVal = totalFee;
                 if(curMsg.info.type === "internal") {
+                    console.log(curMsg.info);
                     const op = curMsg.body.beginParse().preloadUint(32);
-                    const msgFee = computeMessageForwardFees(bcConf, curMsg, op == Op.payout.mint);
+                    const chainConf = curMsg.info.dest.workChain == 0 ? bcConf : msgConf;
+                    const msgFee = computeMessageForwardFees(chainConf, curMsg);
                     const origVal = curMsg.info.value.coins + msgFee.fees + msgFee.remaining;
-                    // console.log(`Bits:${curMsg.body.bits.length}`);
+                    console.log(`Bits:${curMsg.body.bits.length}`);
                     // console.log(`Orig value exp:${origVal}`);
                     // console.log(`Value sent:${curMsg.info.value.coins}`);
-                    // console.log(`Fees:${msgFee.fees}\n${msgFee.remaining}\n${curMsg.info.forwardFee}`);
+                    console.log(`Fees:${msgFee.fees}\n${msgFee.remaining}\n${curMsg.info.forwardFee}`);
                     sumVal += origVal;
                 }
                 return sumVal;
             }, 0n);
             // Actual sent amount should match expected
+            console.log(`Total out:${totalOut}`);
+            console.log(`Expected:${sentDuring}`);
             expect(totalOut).toEqual(sentDuring);
 
             return sentDuring;
@@ -803,6 +850,7 @@ describe('Integrational tests', () => {
         }
     });
 
+    describe('Simple', () => {
     it('Deploy controller', async () => {
         const res = await pool.sendRequestControllerDeploy(validator.wallet.getSender(), Conf.minStorage + toNano('1'), 0);
         expect(res.transactions).toHaveTransaction({
@@ -837,7 +885,7 @@ describe('Integrational tests', () => {
         expect((await controller.getControllerData()).approved).toBe(true);
         snapStates.set('deployed', bc.snapshot());
     });
-    it.only('Simple deposit', async () => {
+    it('Simple deposit', async () => {
         let deposited = 0n;
         let depositors: MintChunk[] = [];
         let expBalances: bigint[] = [];
@@ -892,32 +940,14 @@ describe('Integrational tests', () => {
         }
         snapStates.set('deposited', bc.snapshot());
     });
-    it('Simple withdraw', async() => {
-        await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
-        const nm = await bc.treasury('Depo:0');
-        const withdrawRes = await assertWithdraw(nm.getSender(), toNano('1'), 0, true);
-        const poolData    = await pool.getFullData();
-        await nextRound();
-        const res = await pool.sendTouch(deployer.getSender());
-        await assertRound(res.transactions,
-                          1,
-                          [],
-                          [withdrawRes],
-                          0n,
-                          0n,
-                          0n,
-                          poolData.supply,
-                          poolData.totalBalance,
-                          poolData.depositPayout,
-                          poolData.withdrawalPayout);
-    });
-    it.skip('Request loan from controller', async () => {
+
+    it('Request loan from controller', async () => {
         // Loan should be requested during elections
         const curVset = getVset(bc.config, 34);
         if(getCurTime() < curVset.utime_unitl - eConf.begin_before) {
             bc.now = curVset.utime_unitl - eConf.begin_before + 1;
         }
-        let   maxLoan = sConf.min_stake * 3n; // Stake for three rounds
+        let   maxLoan = sConf.min_stake;
         let   minLoan = maxLoan - toNano('100000');
         const poolData = await pool.getFullData();
         const maxInterest = poolData.interestRate;
@@ -932,7 +962,7 @@ describe('Integrational tests', () => {
         if(creditable > maxLoan)
             creditable = maxLoan;
 
-        const expInterest = creditable * BigInt(poolData.interestRate) / Conf.commonBase;
+        const expInterest = creditable * BigInt(poolData.interestRate) / Conf.shareBase;
         const res = await controller.sendRequestLoan(validator.wallet.getSender(),
                                                      minLoan,
                                                      maxLoan,
@@ -962,18 +992,17 @@ describe('Integrational tests', () => {
                 });
 
                 return requestMatch && metaMatch;
-            }
+            },
+            success: true
         });
         // Loan response
-        const poolTxs = filterTransaction(res.transactions, {from: pool.address, to:controller.address});
-        const poolCreditTrans = findTransaction(poolTxs, {
+        const poolCreditTrans = findTransaction(res.transactions, {
             from: pool.address,
             to: controller.address,
             op: Op.controller.credit,
             success: true
         })!;
 
-        console.log(res.transactions[2].description);
         expect(poolCreditTrans).not.toBeUndefined();
         expect(poolCreditTrans.parent).not.toBeUndefined();
         const creditMsg = poolCreditTrans.inMessage!;
@@ -983,13 +1012,14 @@ describe('Integrational tests', () => {
         const fwdFee = computeMessageForwardFees(msgConf, creditMsg);
 
         expect(creditMsg.info.value.coins).toEqual(creditable - fwdFee.fees - fwdFee.remaining);
-        const bs = creditMsg.body.beginParse();
-        expect(bs.loadUint(32)).toEqual(Op.controller.credit);
-        bs.skip(64);
+        const bs = creditMsg.body.beginParse().skip(64 + 32);
         expect(bs.loadCoins()).toEqual(creditable + expInterest);
         const controllerData = await controller.getControllerData();
         expect(controllerData.borrowedAmount).toEqual(creditable + expInterest);
         expect(controllerData.borrowingTime).toEqual(poolCreditTrans.parent!.now);
+        const loanData = await pool.getLoan(0, validator.wallet.address, false);
+        expect(loanData.borrowed).toEqual(creditable);
+        expect(loanData.interestAmount).toEqual(expInterest);
         assertLog(res.transactions, pool.address, 1, {
             lender: controller.address,
             amount: creditable
@@ -997,9 +1027,14 @@ describe('Integrational tests', () => {
     });
     it('Controller deposit to elector', async () => {
         const controllerData = await controller.getControllerData();
+        let   prevElect      = 0;
+
         const curElect = await announceElections();
+        expect(prevElect).not.toEqual(curElect);
+        prevElect      = curElect;
+        const depo     = sConf.min_stake + toNano('1');
         const res      = await controller.sendNewStake(validator.wallet.getSender(),
-                                                       controllerData.borrowedAmount,
+                                                       depo,
                                                        validator.keys.publicKey,
                                                        validator.keys.secretKey,
                                                        curElect);
@@ -1008,23 +1043,37 @@ describe('Integrational tests', () => {
             to: controller.address,
             op: Op.elector.new_stake_ok
         });
+        const controllerAfter = await controller.getControllerData();
+        expect(controllerAfter.validatorSetChangeCount).toEqual(0);
+        expect(controllerAfter.validatorSetChangeTime).toEqual(getVset(bc.config, 34).utime_since);
         const stake = await elector.getStake(validator.keys.publicKey);
-        expect(stake).toEqual(controllerData.borrowedAmount - toNano('1'));
+        expect(stake).toEqual(depo - toNano('1'));
+        // Run elections and update hashes
+        await nextRound();
+        await controller.sendUpdateHash(validator.wallet.getSender());
+        //console.log(updRes.transactions[1].description);
+        expect((await controller.getControllerData()).validatorSetChangeCount).toEqual(1);
+        await pool.sendTouch(deployer.getSender());
     });
-    it.skip('Next elections round and profit return', async () => {
-        await nextRound(3, async () => {
-            await controller.sendUpdateHash(validator.wallet.getSender());
-            await pool.sendTouch(deployer.getSender());
-        });
-
+    it('Next elections round and profit return', async () => {
         const controllerData = await controller.getControllerData();
         const dataBefore     = await pool.getFullData();
+        expect(controllerData.validatorSetChangeCount).toEqual(1); // Only round we participated in
         const curLoan        = await pool.getLoan(0, validator.wallet.address, true);
 
         expect(curLoan.borrowed).toBeGreaterThan(0n);
         expect(curLoan.interestAmount).toBeGreaterThan(0n);
 
-        const res = await controller.sendRecoverStake(validator.wallet.getSender());
+        // Skip one
+        await nextRound();
+        let res = await controller.sendUpdateHash(validator.wallet.getSender());
+        waitUnlock(res.transactions[1].now);
+        await elector.sendTickTock("tock"); // Announce elecitons
+        await elector.sendTickTock("tock"); // Update credits
+
+        console.log("Before send recovery");
+        res = await controller.sendRecoverStake(validator.wallet.getSender());
+        console.log("After send recovery");
         // Should get more than borrowed
         expect(res.transactions).toHaveTransaction({
             from: elector.address,
@@ -1038,16 +1087,58 @@ describe('Integrational tests', () => {
             from: controller.address,
             to: pool.address,
             op: Op.pool.loan_repayment,
-            value: (x) => x == controllerData.borrowedAmount,
+            value: controllerData.borrowedAmount,
             success: true
         });
         assertLog(res.transactions, pool.address, 2, {
             lender: controller.address,
+            amount: curLoan.borrowed,
+            profit: curLoan.interestAmount
         });
+        await assertRound(res.transactions,
+                    1,
+                    [],
+                    [],
+                    curLoan.borrowed,
+                    controllerData.borrowedAmount,
+                    controllerData.borrowedAmount,
+                    dataBefore.supply,
+                    dataBefore.totalBalance,
+                    null,
+                    null)
+
 
         expect(await pool.getLoan(0, validator.wallet.address, true)).toEqual({
             borrowed: 0n,
             interestAmount: 0n
+        });
+    });
+    it('Simple withdraw', async() => {
+        await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
+        const nm = await bc.treasury('Depo:0');
+        const poolBefore  = await pool.getFullData();
+        const withdrawRes = await assertWithdraw(nm.getSender(), toNano('1'), 0, true);
+        const poolData    = await pool.getFullData();
+        await nextRound();
+        const res = await pool.sendTouch(deployer.getSender());
+        await assertRound(res.transactions,
+                          1,
+                          [],
+                          [withdrawRes],
+                          0n,
+                          0n,
+                          0n,
+                          poolBefore.supply,
+                          poolBefore.totalBalance,
+                          poolData.depositPayout,
+                          poolData.withdrawalPayout);
+    });
+    });
+    describe('Optimistic', () => {
+        beforeAll(async () => {
+            await loadSnapshot('deployed');
+        });
+        it('Optimistic deposit', async () => {
         });
     });
     it.skip('Donate DDOS', async () => {
