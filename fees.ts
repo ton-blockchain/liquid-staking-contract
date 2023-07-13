@@ -119,29 +119,47 @@ export function computeExternalMessageFees(msgPrices: MsgPrices, cell: Cell) {
     return computeFwdFees(msgPrices, BigInt(storageStats.cells), BigInt(storageStats.bits));
 }
 
-export function computeMessageForwardFees(msgPrices: MsgPrices, msg: Message, bodyRef: boolean = false) {
+export function computeMessageForwardFees(msgPrices: MsgPrices, msg: Message) {
     // let msg = loadMessageRelaxed(cell.beginParse());
     let storageStats: { bits: number, cells: number } = { bits: 0, cells: 0 };
 
+    if( msg.info.type !== "internal") {
+        throw Error("Helper intended for internal messages");
+    }
+    const defaultFwd = computeDefaultForwardFee(msgPrices);
+    // If message forward fee matches default than msg cell is flat
+    let   skipRef    = msg.info.forwardFee == defaultFwd;
     // Init
     if (msg.init) {
-        const code = collectCellStats(msg.init.code as Cell);
-        const data = collectCellStats(msg.init.data as Cell);
-        storageStats.bits  += code.bits + data.bits;
-        storageStats.cells += 2 + code.cells + data.cells;
+        if(msg.init.code) {
+            const code = collectCellStats(msg.init.code);
+            storageStats.bits += code.bits;
+            storageStats.cells += code.cells;
+        }
+        if(msg.init.data) {
+            const data = collectCellStats(msg.init.data);
+            storageStats.bits += data.bits;
+            storageStats.cells += data.cells;
+        }
+        // If message remaining fee exceeds fees fraction from  init data, than body is by ref
+        const tempFees = computeFwdFees(msgPrices, BigInt(storageStats.cells), BigInt(storageStats.bits));
+        const tempFrac = tempFees - ((tempFees * msgPrices.firstFrac) >> BigInt(16));
+        skipRef = tempFrac == msg.info.forwardFee
     }
 
     // Body
-    let bc    = collectCellStats(msg.body, !bodyRef);
-    storageStats.bits += bc.bits;
+    let bc = collectCellStats(msg.body, skipRef);
+    storageStats.bits  += bc.bits;
     storageStats.cells += bc.cells;
 
     // NOTE: Extra currencies are ignored for now
-
     let fees = computeFwdFees(msgPrices, BigInt(storageStats.cells), BigInt(storageStats.bits));
     let res  = (fees * msgPrices.firstFrac) >> BigInt(16);
     let remaining = fees - res;
     return { fees: res, remaining };
+}
+export function computeDefaultForwardFee(msgPrices: MsgPrices) {
+    return msgPrices.lumpPrice - ((msgPrices.lumpPrice * msgPrices.firstFrac) >> BigInt(16));
 }
 
 export function collectCellStats(cell: Cell, skipRoot: boolean = false): { bits: number, cells: number } {
