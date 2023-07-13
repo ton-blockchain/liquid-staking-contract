@@ -12,13 +12,14 @@ export abstract class Conf {
     static readonly gracePeriod    = 600;
     static readonly sudoQuarantine = 86400;
     static readonly serviceNotificationAmount = toNano('0.02');
-    static readonly governanceFee  = BigInt(1 << 16);
+    static readonly governanceFee  = 155n;
     static readonly finalizeRoundFee = toNano('1');
     static readonly notificationAmount = toNano('0.1');
     static readonly distributionAmount = toNano('0.2');
     static readonly burnNotificationAmount = toNano('0.01');
     static readonly burnRequestValue = toNano('0.01');
-    static readonly commonBase       = BigInt(256*256*256); // divisor?
+    static readonly disbalanceTolerance = 30;
+    static readonly shareBase = BigInt(256*256*256); // divisor?
 };
 
 export abstract class Op {
