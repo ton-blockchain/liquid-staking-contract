@@ -66,6 +66,7 @@ describe('Integrational tests', () => {
     let eConf : ReturnType<typeof getElectionsConf>;
     let msgConf:ReturnType<typeof getMsgPrices>;
     let bcConf :ReturnType<typeof getMsgPrices>;
+    let depositors: MintChunk[];
 
     let getContractData:(address: Address) => Promise<Cell>;
     let getContractBalance:(address: Address) => Promise<bigint>;
@@ -824,7 +825,7 @@ describe('Integrational tests', () => {
                 };
             }
             else {
-                const tmpMinter = bc.openContract(await pool.getDepositMinter());
+                const tmpMinter = bc.openContract(await pool.getWithdrawalMinter());
                 billBefore = await tmpMinter.getTotalBill();
             }
 
@@ -887,7 +888,7 @@ describe('Integrational tests', () => {
     });
     it('Simple deposit', async () => {
         let deposited = 0n;
-        let depositors: MintChunk[] = [];
+        depositors = [];
         let expBalances: bigint[] = [];
         const dataBefore = await pool.getFullData();
         expect(dataBefore.totalBalance).toEqual(0n);
@@ -1071,9 +1072,7 @@ describe('Integrational tests', () => {
         await elector.sendTickTock("tock"); // Announce elecitons
         await elector.sendTickTock("tock"); // Update credits
 
-        console.log("Before send recovery");
         res = await controller.sendRecoverStake(validator.wallet.getSender());
-        console.log("After send recovery");
         // Should get more than borrowed
         expect(res.transactions).toHaveTransaction({
             from: elector.address,
@@ -1114,17 +1113,31 @@ describe('Integrational tests', () => {
         });
     });
     it('Simple withdraw', async() => {
-        await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
-        const nm = await bc.treasury('Depo:0');
         const poolBefore  = await pool.getFullData();
-        const withdrawRes = await assertWithdraw(nm.getSender(), toNano('1'), 0, true);
+        let withdrawals: MintChunk[] = [];
+        let totalCount = 0;
+        for( let i = 0; i < depositors.length; i++) {
+            const sender = bc.sender(depositors[i].address);
+            const jettonWallet = bc.openContract(DAOWallet.createFromAddress(
+                await poolJetton.getWalletAddress(depositors[i].address)
+            ));
+
+            const withdrawCount = getRandomInt(1, 3);
+            for(let k = 0; k < withdrawCount; k++) {
+                const amount = getRandomTon(10000, 50000);
+                const idx    = totalCount + k;
+                console.log(`Index:${idx}`);
+                withdrawals.push(await assertWithdraw(sender, amount, idx, idx == 0));
+            }
+            totalCount += withdrawCount;
+        }
         const poolData    = await pool.getFullData();
         await nextRound();
         const res = await pool.sendTouch(deployer.getSender());
         await assertRound(res.transactions,
                           1,
                           [],
-                          [withdrawRes],
+                          withdrawals,
                           0n,
                           0n,
                           0n,
@@ -1137,6 +1150,18 @@ describe('Integrational tests', () => {
     describe('Optimistic', () => {
         beforeAll(async () => {
             await loadSnapshot('deployed');
+        });
+        it('Should set optimistic', async () => {
+            const poolBefore = await pool.getFullData();
+            expect(poolBefore.optimisticDepositWithdrawals).toBe(false);
+            const res = await pool.sendDepositSettings(deployer.getSender(), true, true);
+            expect(res.transactions).toHaveTransaction({
+                from: deployer.address,
+                to: pool.address,
+                success: true
+            });
+            expect((await pool.getFullData()).optimisticDepositWithdrawals).toBe(true);
+            snapStates.set('optimistic', bc.snapshot());
         });
         it('Optimistic deposit', async () => {
         });
