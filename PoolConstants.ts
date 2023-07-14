@@ -12,7 +12,7 @@ export abstract class Conf {
     static readonly gracePeriod    = 600;
     static readonly sudoQuarantine = 86400;
     static readonly serviceNotificationAmount = toNano('0.02');
-    static readonly governanceFee  = 155n;
+    static readonly governanceFee  = 155n * BigInt(2 ** 8);
     static readonly finalizeRoundFee = toNano('1');
     static readonly notificationAmount = toNano('0.1');
     static readonly distributionAmount = toNano('0.2');

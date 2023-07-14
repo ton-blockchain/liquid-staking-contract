@@ -105,7 +105,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeInt(0n, 1) // halted?
               .storeCoins(0) // total_balance
               .storeRef(mintersData)
-              .storeUint(100, 24) // minimal interest_rate
+              .storeUint(100 * (2 ** 8), 24) // minimal interest_rate
               .storeInt(config.optimistic_deposit_withdrawals, 1) // optimistic_deposit_withdrawals
               .storeInt(-1n, 1) // deposits_open?
               .storeUint(0, 256) // saved_validator_set_hash
@@ -117,7 +117,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               )
               .storeCoins(100 * 1000000000) // min_loan_per_validator
               .storeCoins(1000000 * 1000000000) // max_loan_per_validator
-              .storeUint(155, 24) // governance fee
+              .storeUint(155 * (2 ** 8), 24) // governance fee
               .storeRef(roles)
               .storeRef(codes)
            .endCell();
