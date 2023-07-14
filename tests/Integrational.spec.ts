@@ -130,7 +130,7 @@ describe('Integrational tests', () => {
 
     beforeAll(async () => {
         bc = await Blockchain.create();
-        deployer = await bc.treasury('deployer', {balance: toNano("1000000000")});
+        deployer = await bc.treasury('deployer', {workchain: -1, balance: toNano("1000000000")});
         controller_code = await compile('Controller');
         pool_code = await compile('Pool');
         await setConsigliere(deployer.address);
