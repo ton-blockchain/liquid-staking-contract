@@ -387,6 +387,20 @@ export class Pool implements Contract {
         });
     }
 
+    async sendDepositSettings(provider:ContractProvider, via:Sender, optimistic:boolean, open:boolean) {
+
+      await provider.internal(via, {
+        value: toNano('0.15'),
+        sendMode: SendMode.PAY_GAS_SEPARATELY,
+        body: beginCell()
+                .storeUint(Op.governor.set_deposit_settings, 32)
+                .storeUint(1, 64)
+                .storeBit(optimistic)
+                .storeBit(open)
+              .endCell(),
+      });
+    }
+
     // Get methods
     /*
     async getDepositPayout(provider: ContractProvider) {
