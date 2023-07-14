@@ -640,9 +640,9 @@ describe('Integrational tests', () => {
                     const borrowedSent = bs.loadCoins();
                     const expectedSent = bs.loadCoins();
                     const returnedSent = bs.loadCoins();
-                    console.log(`BorrowedSent:${borrowedSent}`);
-                    console.log(`expectedSent:${expectedSent}`);
-                    console.log(`returnedSent:${returnedSent}`);
+                    // console.log(`BorrowedSent:${borrowedSent}`);
+                    // console.log(`expectedSent:${expectedSent}`);
+                    // console.log(`returnedSent:${returnedSent}`);
                     return borrowedSent == borrowed
                            && expectedSent == expected
                            && returnedSent == returned;
@@ -660,7 +660,6 @@ describe('Integrational tests', () => {
                 const withdraw = await assertRoundWithdraw(txs, withdrawals, supply, curBalance, withdrawMinter!);
                 supply -= withdraw.burnt;
 
-                console.log("Withdrawls message sent during");
                 sentDuring += withdraw.distributed + Conf.notificationAmount;
             }
             if(fee > Conf.serviceNotificationAmount) {
@@ -679,22 +678,22 @@ describe('Integrational tests', () => {
             ).reduce((totalFee, curMsg) => {
                 let sumVal = totalFee;
                 if(curMsg.info.type === "internal") {
-                    console.log(curMsg.info);
+                    // console.log(curMsg.info);
                     const op = curMsg.body.beginParse().preloadUint(32);
                     const chainConf = curMsg.info.dest.workChain == 0 ? bcConf : msgConf;
                     const msgFee = computeMessageForwardFees(chainConf, curMsg);
                     const origVal = curMsg.info.value.coins + msgFee.fees + msgFee.remaining;
-                    console.log(`Bits:${curMsg.body.bits.length}`);
+                    //console.log(`Bits:${curMsg.body.bits.length}`);
                     // console.log(`Orig value exp:${origVal}`);
                     // console.log(`Value sent:${curMsg.info.value.coins}`);
-                    console.log(`Fees:${msgFee.fees}\n${msgFee.remaining}\n${curMsg.info.forwardFee}`);
+                    //console.log(`Fees:${msgFee.fees}\n${msgFee.remaining}\n${curMsg.info.forwardFee}`);
                     sumVal += origVal;
                 }
                 return sumVal;
             }, 0n);
             // Actual sent amount should match expected
-            console.log(`Total out:${totalOut}`);
-            console.log(`Expected:${sentDuring}`);
+            // console.log(`Total out:${totalOut}`);
+            // console.log(`Expected:${sentDuring}`);
             expect(totalOut).toEqual(sentDuring);
 
             return sentDuring;
