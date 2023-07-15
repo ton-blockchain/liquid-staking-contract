@@ -178,7 +178,7 @@ int muldiv_extra(int a, int b, int c) inline {
     }
 
     if (op == halter::halt) {
-        return process_halt_request(sender_address);
+        process_halt_request(sender_address);
     } elseif (op == pool::withdraw) {
         assert_sender!(sender_address, jetton_minter);
         int jetton_amount = in_msg_body~load_coins();
