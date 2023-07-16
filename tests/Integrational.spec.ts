@@ -71,6 +71,7 @@ describe('Integrational tests', () => {
 
     let getContractData:(address: Address) => Promise<Cell>;
     let getContractBalance:(address: Address) => Promise<bigint>;
+    let getUserJettonBalance:(address: Address) => Promise<bigint>;
     let loadSnapshot:(snap:string) => Promise<void>;
     let getCurTime:() => number;
     let getCreditable:() => Promise<bigint>;
@@ -260,6 +261,19 @@ describe('Integrational tests', () => {
             const smc = await bc.getContract(address);
             return smc.balance;
         };
+        getUserJettonBalance = async (address) => {
+            const walletSmc = await bc.getContract(address);
+            console.log("Wallet smc:",walletSmc);
+            // If not minted
+            if(walletSmc.accountState === undefined) {
+                return 0n;
+            }
+
+            const walletContract = bc.openContract(DAOWallet.createFromAddress(
+                    await poolJetton.getWalletAddress(address)
+            ));
+            return await walletContract.getJettonBalance()
+        }
         getCurTime = () => bc.now ?? Math.floor(Date.now() / 1000);
         getCreditable = async () => {
             const poolData = await pool.getFullData();
