@@ -1,0 +1,5 @@
+#include "auto/git-hash.func";
+
+int get_code_version() method_id {
+    return git_hash;
+}
