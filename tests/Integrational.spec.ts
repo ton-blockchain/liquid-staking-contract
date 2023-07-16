@@ -20,6 +20,7 @@ import { ConfigTest } from "../wrappers/ConfigTest";
 import { computeMessageForwardFees, getMsgPrices } from "../fees";
 import { getRandomInt, randomAddress } from "../contracts/jetton_dao/tests/utils";
 import { PayoutCollectionConfig } from "../wrappers/PayoutNFTCollection";
+import { flattenTransaction } from "@ton-community/test-utils";
 
 type Validator = {
   wallet: SandboxContract<TreasuryContract>,
@@ -421,9 +422,12 @@ describe('Integrational tests', () => {
             });
             if(mintTx === undefined) {
             // No action phase failures
-            expect(txs).not.toHaveTransaction({
-                actionResultCode: (x) => x! !== undefined && x! !== 0
-            });
+                console.log(`Pool:${pool.address}`);
+                console.log(`Minter:${poolJetton.address}`);
+                console.log(txs.map(x => flattenTransaction(x)));
+                expect(txs).not.toHaveTransaction({
+                    actionResultCode: (x) => x! !== undefined && x! !== 0
+                });
             }
             expect(mintTx).not.toBeUndefined();
             const inMsg = mintTx!.inMessage!;
@@ -629,7 +633,7 @@ describe('Integrational tests', () => {
             const curBalance = totalBalance + profit;
             if(profit > 0) {
                 fee = Conf.governanceFee * profit / Conf.shareBase;
-                console.log(`Governance fee:${fee}`);
+                // console.log(`Governance fee:${fee}`);
             }
             expect(txs).toHaveTransaction({
                 from: pool.address,
@@ -652,7 +656,6 @@ describe('Integrational tests', () => {
                 expect(depositMinter).not.toBe(null);
                 const depoRes = await assertRoundDeposit(txs, depositors, supply, curBalance, depositMinter!);
                 supply += depoRes.distributed;
-                console.log("Depositors message sent during");
                 sentDuring += Conf.notificationAmount + Conf.distributionAmount;
             }
             if(withdrawals.length > 0n) {
@@ -849,7 +852,6 @@ describe('Integrational tests', () => {
             return nm;
         }
     });
-
     describe('Simple', () => {
     it('Deploy controller', async () => {
         const res = await pool.sendRequestControllerDeploy(validator.wallet.getSender(), Conf.minStorage + toNano('1'), 0);
@@ -906,7 +908,7 @@ describe('Integrational tests', () => {
         // Now some repetitive deposits to check if it will add up
         let repeats: MintChunk[] = [];
         for(let k = 0; k < depositors.length; k++) {
-            const depo   = getRandomTon(150000, 200000);
+            const depo = getRandomTon(15000, 20000);
             let j = getRandomInt(1, 3, 2);
             const depoSender = bc.sender(depositors[k].address);
             for (let l = 0; l < j; l++) {
@@ -1125,7 +1127,6 @@ describe('Integrational tests', () => {
             for(let k = 0; k < withdrawCount; k++) {
                 const amount = getRandomTon(10000, 50000);
                 const idx    = totalCount + k;
-                console.log(`Index:${idx}`);
                 withdrawals.push(await assertWithdraw(sender, amount, idx, idx == 0));
             }
             totalCount += withdrawCount;
@@ -1165,7 +1166,7 @@ describe('Integrational tests', () => {
         it('Optimistic deposit', async () => {
         });
     });
-    it.skip('Donate DDOS', async () => {
+    it('Donate DoS', async () => {
         await loadSnapshot('initial');
         const user1  = await bc.treasury('user1');
         const sneaky = await bc.treasury('sneaky');
@@ -1180,20 +1181,6 @@ describe('Integrational tests', () => {
         await nextRound();
         // Updating round
         const res = await pool.sendTouch(deployer.getSender());
-        /*
-        await assertRound(res.transactions,
-                          0,
-                          [depo1],
-                          [],
-                          0n,
-                          0n,
-                          0n,
-                          poolData.supply,
-                          poolData.totalBalance,
-                          poolData.depositPayout,
-                          poolData.withdrawalPayout);
-
-        */
         const ptonBalance = await userJetton.getJettonBalance();
         // Should never mint 0 pool jettons
         expect(res.transactions).not.toHaveTransaction({
@@ -1205,5 +1192,6 @@ describe('Integrational tests', () => {
         });
         // User should get his pTONs
         expect(ptonBalance).toBeGreaterThan(0n);
+    });
     });
 });
