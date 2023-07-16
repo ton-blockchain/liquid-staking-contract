@@ -127,7 +127,8 @@ describe('Integrational tests', () => {
     let assertWithdraw:(via: Sender,
                         amount:bigint,
                         index:number,
-                        new_minter: boolean) => Promise<MintChunk>;
+                        new_minter: boolean,
+                        fill_or_kill?: boolean) => Promise<MintChunk>
 
 
     beforeAll(async () => {
@@ -824,7 +825,7 @@ describe('Integrational tests', () => {
 
             return nm;
         }
-        assertWithdraw = async (via:Sender, amount:bigint, index: number, new_round: boolean) => {
+        assertWithdraw = async (via:Sender,amount:bigint, index: number, new_round: boolean, fill_or_kill:boolean = false) => {
             const withdrawAddr = via.address!;
             // Withdraw is burning pool jettons pTONs
             const withdrawJetton = bc.openContract(DAOWallet.createFromAddress(
