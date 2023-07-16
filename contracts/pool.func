@@ -199,7 +199,7 @@ int muldiv_extra(int a, int b, int c) inline {
                     request_immediate_withdrawal_if_possible &
                     (state == state::NORMAL) &
                     (balance - msg_value - MIN_TONS_FOR_STORAGE > approximate_amount)) {
-                throw_unless(error::output_amount_is_zero, approximate_amount);
+                throw_unless(error::output_amount_is_zero, approximate_amount > 0);
                 total_balance -= approximate_amount;
                 supply -= jetton_amount;
                 raw_reserve(balance - msg_value - approximate_amount - sent_during_rotation, 0);
