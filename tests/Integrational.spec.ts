@@ -1229,12 +1229,7 @@ describe('Integrational tests', () => {
                 i++;
             }
             for(i = 0; i < expBalances.length; i++) {
-                const ptonWallet = bc.openContract(
-                    DAOWallet.createFromAddress(
-                        await poolJetton.getWalletAddress(depoAddresses[i])
-                    )
-                );
-                expect(expBalances[i]).toEqual(await ptonWallet.getJettonBalance());
+                expect(expBalances[i]).toEqual(await getUserJettonBalance(depoAddresses[i]));
             }
         });
     });
