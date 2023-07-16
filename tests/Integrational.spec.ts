@@ -1163,8 +1163,33 @@ describe('Integrational tests', () => {
     });
     });
     describe('Optimistic', () => {
+        let assertOptimisticDeposit:(via:Sender, amount:bigint, expected_profit:bigint) => Promise<bigint>;
+        let assertOptimisticWithdraw:(via: Sender, amount: bigint, immediate:boolean, fill_or_kill: boolean) => Promise<bigint>;
         beforeAll(async () => {
             await loadSnapshot('deployed');
+            assertOptimisticDeposit = async (via, amount, expected_profit) => {
+                const poolBefore = await pool.getFullData();
+                const res = await pool.sendDeposit(via, amount)
+                const balanceAfter = poolBefore.totalBalance + expected_profit;
+                const expectedBalance = balanceAfter > 0n ? balanceAfter : 0n;
+                const mintAmount      = muldivExtra(amount - Conf.poolDepositFee, poolBefore.supply, expectedBalance);
+                const walletSmc = await bc.getContract(
+                    await poolJetton.getWalletAddress(via.address!)
+                );
+                // Should not deploy anything
+                expect(res.transactions).not.toHaveTransaction({
+                    from: pool.address,
+                    deploy: true
+                });
+                await assertPoolJettonMint(res.transactions, mintAmount, via.address!);
+
+                const poolAfter = await pool.getFullData();
+                // Minters if any, should not change
+                expect(poolAfter.depositPayout).toEqual(poolBefore.depositPayout);
+                expect(poolAfter.withdrawalPayout).toEqual(poolAfter.withdrawalPayout);
+
+                return mintAmount;
+            }
         });
         it('Should set optimistic', async () => {
             const poolBefore = await pool.getFullData();
@@ -1179,6 +1204,40 @@ describe('Integrational tests', () => {
             snapStates.set('optimistic', bc.snapshot());
         });
         it('Optimistic deposit', async () => {
+            const depoAddresses: Address[] = [];
+            let   expBalances: bigint[] = [];
+            await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
+            let deposited = 0n;
+            let i = 0;
+            while(deposited < Conf.minStake * 3n) {
+                const depoCount  = getRandomInt(1, 3);
+                const depositor  = await bc.treasury(`Depo:${i}`);
+                for(let k = 0; k < depoCount; k++) {
+                    const depo       = k == 0 ? getRandomTon(150000, 200000) : getRandomTon(10000, 20000);
+                    depoAddresses.push(depositor.address);
+                    const mintAmount = await assertOptimisticDeposit(depositor.getSender(),
+                                                                     depo,
+                                                                     - Conf.finalizeRoundFee);
+                    deposited += depo;
+                    if(k == 0) {
+                        expBalances.push(mintAmount);
+                    }
+                    else {
+                        expBalances[i] += mintAmount;
+                    }
+                }
+                i++;
+            }
+            for(i = 0; i < expBalances.length; i++) {
+                const ptonWallet = bc.openContract(
+                    DAOWallet.createFromAddress(
+                        await poolJetton.getWalletAddress(depoAddresses[i])
+                    )
+                );
+                expect(expBalances[i]).toEqual(await ptonWallet.getJettonBalance());
+            }
+        });
+    });
         });
     });
     it('Donate DoS', async () => {
