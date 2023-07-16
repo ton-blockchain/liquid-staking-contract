@@ -1238,6 +1238,31 @@ describe('Integrational tests', () => {
             }
         });
     });
+    describe.skip('Attacks', () => {
+    it('Should not faiil on total balance = 0 and supply > 0', async() => {
+        await loadSnapshot('initial');
+        const depositor = await bc.treasury('Depo');
+        await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
+        const depoRes   = await assertDeposit(depositor.getSender(), Conf.poolDepositFee + 1n, 0, true);
+        let poolData  = await pool.getFullData();
+        expect(poolData.totalBalance).toEqual(Conf.finalizeRoundFee);
+        expect(poolData.requestedForDeposit).toEqual(1n);
+        await nextRound();
+        await pool.sendTouch(deployer.getSender());
+        // Now creditated
+        poolData = await pool.getFullData();
+        expect(poolData.totalBalance).toEqual(1n);
+        expect(poolData.supply).toEqual(1n);
+        // Next rotation we would have supply = 1 and balance 0
+        // That might trigger division by zero error
+        // To trigger pTON distribution we need to deposit some more
+
+        await assertDeposit(depositor.getSender(), Conf.poolDepositFee + 1n, 0, true);
+        await nextRound();
+        const res = await pool.sendTouch(deployer.getSender());
+        expect(res.transactions).not.toHaveTransaction({
+            exitCode: 4,
+            success: false
         });
     });
     it('Donate DoS', async () => {
