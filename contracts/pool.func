@@ -216,6 +216,7 @@ int muldiv_extra(int a, int b, int c) inline {
                 raw_reserve(balance - msg_value - sent_during_rotation, 0);
                 request_to_mint_withdrawal(from_address, jetton_amount, query_id);
             }
+            throw_unless(error::total_withdrawal_is_forbidden, (supply > 0) & (supply > requested_for_withdrawal));
         } catch (exc_arg, exc_num) {
             ;; note that sent_during_rotation is null because
             ;; effect of update_round is reverted in catch
