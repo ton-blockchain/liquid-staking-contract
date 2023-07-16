@@ -1275,6 +1275,65 @@ describe('Integrational tests', () => {
                 expect(expBalances[i]).toEqual(await getUserJettonBalance(depoAddresses[i]));
             }
         });
+        it('Should be able to withdraw same amount - fee in same round', async() => {
+            const prevState = bc.snapshot();
+            // Since no extra fee is paid yet, burned jettons should covert 1/1
+            for(let i = 0; i < depoAddresses.length; i++) {
+                // Burn share
+                const share = BigInt(getRandomInt(2, 4, 2));
+                const pton       = bc.openContract(
+                    DAOWallet.createFromAddress(
+                        await poolJetton.getWalletAddress(depoAddresses[i])
+                    )
+                );
+                const burnAmount = await pton.getJettonBalance() / share;
+                const owner      = bc.sender(depoAddresses[i]);
+                const res        = await pton.sendBurnWithParams(owner,
+                                                                 toNano('1.05'),
+                                                                 burnAmount,
+                                                                 depoAddresses[i], false, false);
+                expect(res.transactions).toHaveTransaction({
+                    to: depoAddresses[i],
+                    value: (x) => x! >= burnAmount
+                });
+            }
+
+        });
+        it('Should be able to use balance in the same round', async() => {
+            // Optimists don't wait
+            const poolBefore = await pool.getFullData();
+            await controller.sendTopUp(validator.wallet.getSender(), sConf.min_stake);
+            const governance = Conf.governanceFee * Conf.finalizeRoundFee / Conf.shareBase;
+            console.log(`Total profit: ${Conf.finalizeRoundFee + governance}`);
+            const loanAmount = await getLoanWithExpProfit(controller, Conf.finalizeRoundFee + governance);
+            const poolAfter  = await pool.getFullData();
+            // Projected balance should not change because loan profit compensates for finalize round fee
+            const loan       = await pool.getLoan(0, validator.wallet.address);
+            expect(loan.interestAmount).toEqual(Conf.finalizeRoundFee);
+            // One can even participate in the elections if in a hurry
+            const electId = await announceElections();
+            const res = await controller.sendNewStake(validator.wallet.getSender(),
+                                                      sConf.min_stake + toNano('1'),
+                                                      validator.keys.publicKey,
+                                                      validator.keys.secretKey,
+                                                      electId);
+            expect(res.transactions).toHaveTransaction({
+                from: elector.address,
+                to: controller.address,
+                op: Op.elector.new_stake_ok
+            });
+            snapStates.set('opt_pre_withdraw', bc.snapshot());
+        });
+        it('Should be able to withdraw exactly same amount', async() => {
+            // Because loan compensates fees, all jettons should be excanged back 1/1
+            const poolBefore = await pool.getFullDataRaw();
+            await nextRound();
+            await controller.sendUpdateHash(validator.wallet.getSender());
+            // Switched round and current_round loans are now expected to return
+            await pool.sendTouch(deployer.getSender());
+            const poolAfter = await pool.getFullData();
+            expect(poolAfter.projectedTotalBalance).toEqual(poolBefore.totalBalance + Conf.finalizeRoundFee);
+        });
     });
     describe.skip('Attacks', () => {
     it('Should not faiil on total balance = 0 and supply > 0', async() => {
