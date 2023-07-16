@@ -129,6 +129,8 @@ describe('Integrational tests', () => {
                         index:number,
                         new_minter: boolean,
                         fill_or_kill?: boolean) => Promise<MintChunk>
+    let assertPoolBalanceNotChanged:(balance: bigint) => Promise<void>;
+    let getLoanWithExpProfit:(controller: SandboxContract<Controller>, exp_profit: bigint) => Promise<bigint>;
 
 
     beforeAll(async () => {
@@ -264,7 +266,6 @@ describe('Integrational tests', () => {
         };
         getUserJettonBalance = async (address) => {
             const walletSmc = await bc.getContract(address);
-            console.log("Wallet smc:",walletSmc);
             // If not minted
             if(walletSmc.accountState === undefined) {
                 return 0n;
@@ -866,6 +867,43 @@ describe('Integrational tests', () => {
 
             return nm;
         }
+        assertPoolBalanceNotChanged = async (balance) => {
+            const poolData = await pool.getFullDataRaw();
+            const poolBalance = await getContractBalance(pool.address);
+            const poolFunds   = poolBalance - poolData.totalBalance;
+            expect(poolFunds).toEqual(balance);
+        }
+        getLoanWithExpProfit = async (lender, exp_profit) => {
+            const poolData   = await pool.getFullData();
+            const controllerData = await lender.getControllerData();
+            const validator = bc.sender(controllerData.validator);
+            if(controllerData.state != ControllerState.REST)
+                throw(Error("Controller is not in REST state"));
+            const loanAmount = exp_profit * Conf.shareBase / BigInt(poolData.interestRate);
+            const creditable = await getCreditable();
+            if(creditable < loanAmount)
+                throw(Error("Pool doesn't have enough ton to spare"));
+
+            // Just in case
+            await controller.sendUpdateHash(validator);
+            const curVset = getVset(bc.config, 34);
+            if(getCurTime() < curVset.utime_unitl - eConf.begin_before) {
+                bc.now = curVset.utime_unitl - eConf.begin_before + 1;
+            }
+
+            const reqBalance = await lender.getBalanceForLoan(loanAmount, poolData.interestRate);
+            const controllerBalance = await getContractBalance(lender.address);
+            if(controllerBalance < reqBalance) {
+                await lender.sendTopUp(validator, reqBalance - controllerBalance + toNano('1'));
+            }
+            const res =await lender.sendRequestLoan(validator, loanAmount, loanAmount, poolData.interestRate);
+            expect(res.transactions).toHaveTransaction({
+                from: pool.address,
+                to: controller.address,
+                op: Op.controller.credit
+            });
+            return loanAmount;
+        }
     });
     describe('Simple', () => {
     it('Deploy controller', async () => {
@@ -1163,6 +1201,7 @@ describe('Integrational tests', () => {
     });
     });
     describe('Optimistic', () => {
+        let depoAddresses: Address[];
         let assertOptimisticDeposit:(via:Sender, amount:bigint, expected_profit:bigint) => Promise<bigint>;
         let assertOptimisticWithdraw:(via: Sender, amount: bigint, immediate:boolean, fill_or_kill: boolean) => Promise<bigint>;
         beforeAll(async () => {
@@ -1190,6 +1229,10 @@ describe('Integrational tests', () => {
 
                 return mintAmount;
             }
+            // Start fresh round
+            await nextRound();
+            pool.sendTouch(deployer.getSender());
+            controller.sendUpdateHash(validator.wallet.getSender());
         });
         it('Should set optimistic', async () => {
             const poolBefore = await pool.getFullData();
@@ -1204,7 +1247,7 @@ describe('Integrational tests', () => {
             snapStates.set('optimistic', bc.snapshot());
         });
         it('Optimistic deposit', async () => {
-            const depoAddresses: Address[] = [];
+            depoAddresses = [];
             let   expBalances: bigint[] = [];
             await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
             let deposited = 0n;
