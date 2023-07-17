@@ -349,6 +349,7 @@ cell get_nft_content(int index, cell individual_nft_content) method_id {
   } else {
       content~udict_set_ref(256, "description"H, pack_metadata_value("DO NOT SEND ON CONTRACTS: Converts burned Pool Jettons to TON when ready"));
   }
+  content~udict_set_ref(256, "render_type"H, pack_metadata_value("hidden"));
   cell onchain_content = begin_cell().store_uint(0, 8).store_dict(content).end_cell();
   return onchain_content;
 }
