@@ -13,7 +13,7 @@ import { setConsigliere } from "../wrappers/PayoutMinter.compile";
 import { Conf, ControllerState, Errors, Op } from "../PoolConstants";
 import { PayoutCollection, Conf as NFTConf, Op as NFTOp } from "../wrappers/PayoutNFTCollection";
 import { PayoutItem } from "../wrappers/PayoutNFTItem";
-import { testJettonTransfer, buff2bigint, computedGeneric, getRandomTon, testControllerMeta, getExternals, testLog, testLogRepayment, testMintMsg, assertLog, muldivExtra, testJettonNotification, filterTransaction, findTransaction, testJettonBurnNotification } from "../utils";
+import { testJettonTransfer, buff2bigint, computedGeneric, getRandomTon, testControllerMeta, getExternals, testLog, testLogRepayment, testMintMsg, assertLog, muldivExtra, testJettonNotification, filterTransaction, findTransaction, testJettonBurnNotification, approximatelyEqual } from "../utils";
 import { ElectorTest } from "../wrappers/ElectorTest";
 import { getElectionsConf, getStakeConf, getValidatorsConf, getVset, loadConfig, packStakeConf, packValidatorsConf } from "../wrappers/ValidatorUtils";
 import { ConfigTest } from "../wrappers/ConfigTest";
@@ -71,7 +71,7 @@ describe('Integrational tests', () => {
 
     let getContractData:(address: Address) => Promise<Cell>;
     let getContractBalance:(address: Address) => Promise<bigint>;
-    let getUserJettonBalance:(address: Address) => Promise<bigint>;
+    let getUserJettonBalance:(address: Address | SandboxContract<TreasuryContract>) => Promise<bigint>;
     let loadSnapshot:(snap:string) => Promise<void>;
     let getCurTime:() => number;
     let getCreditable:() => Promise<bigint>;
@@ -81,6 +81,7 @@ describe('Integrational tests', () => {
     let waitNextRound:() => Promise<void>;
     let waitUnlock:(since: number) => void;
     let nextRound:(profitable?: boolean, count?: number, post?:() => Promise<void>) => Promise<void>;
+    let compareBalance:(contractA: Address | SandboxContract<TreasuryContract>, contractB: Address | SandboxContract<TreasuryContract>, jetton?: boolean) => Promise<boolean>;
     let assertPoolJettonMint:(txs: BlockchainTransaction[],
                               amount: bigint,
                               dest: Address) => Promise<Address>;
@@ -130,7 +131,8 @@ describe('Integrational tests', () => {
                         new_minter: boolean,
                         fill_or_kill?: boolean) => Promise<MintChunk>
     let assertPoolBalanceNotChanged:(balance: bigint) => Promise<void>;
-    let getLoanWithExpProfit:(controller: SandboxContract<Controller>, exp_profit: bigint) => Promise<bigint>;
+    let assertGetLoan:(controller: SandboxContract<Controller>, amount: bigint, exp_success: boolean, min_amount?:bigint) => Promise<SendMessageResult>;
+    // let getLoanWithExpProfit:(controller: SandboxContract<Controller>, exp_profit: bigint) => Promise<bigint>;
 
 
     beforeAll(async () => {
@@ -264,15 +266,16 @@ describe('Integrational tests', () => {
             const smc = await bc.getContract(address);
             return smc.balance;
         };
-        getUserJettonBalance = async (address) => {
-            const walletSmc = await bc.getContract(address);
+        getUserJettonBalance = async (contract) => {
+            const walletAddr = contract instanceof Address ? contract : contract.address
+            const walletSmc = await bc.getContract(walletAddr);
             // If not minted
             if(walletSmc.accountState === undefined) {
                 return 0n;
             }
 
             const walletContract = bc.openContract(DAOWallet.createFromAddress(
-                    await poolJetton.getWalletAddress(address)
+                    await poolJetton.getWalletAddress(walletAddr)
             ));
             return await walletContract.getJettonBalance()
         }
@@ -417,6 +420,25 @@ describe('Integrational tests', () => {
                     await post()
                 }
             }
+        };
+        compareBalance = async (contractA, contractB, jetton: boolean = false) => {
+            let cmp: boolean;
+            let getBalance = async (contract: Address | SandboxContract<TreasuryContract>) => {
+                let balance;
+                if(jetton) {
+                    balance = await getUserJettonBalance(contract);
+                }
+                else if(contract instanceof Address) {
+                    balance = await getContractBalance(contract);
+                }
+                else {
+                    balance = await contract.getBalance();
+                }
+                return balance;
+            }
+            const balanceA = await getBalance(contractA);
+            const balanceB = await getBalance(contractB);
+            return balanceA == balanceB;
         };
         assertPoolJettonMint = async(txs: BlockchainTransaction[],
                                      amount:bigint,
@@ -866,6 +888,35 @@ describe('Integrational tests', () => {
             expect(dataAfter.withdrawalPayout).toEqualAddress(minter.address);
 
             return nm;
+        }
+        assertGetLoan = async (lender, amount, exp_success, min_amount?) => {
+            const poolData = await pool.getFullDataRaw();
+            const controllerData = await controller.getControllerData();
+            const vSender = bc.sender(controllerData.validator);
+            await controller.sendUpdateHash(vSender);
+            const curVset = getVset(bc.config, 34);
+            if(getCurTime() < curVset.utime_unitl - eConf.begin_before) {
+                bc.now = curVset.utime_unitl - eConf.begin_before + 1;
+            }
+
+            const reqBalance = await lender.getBalanceForLoan(amount, poolData.interestRate);
+            const controllerBalance = await getContractBalance(lender.address);
+            if(controllerBalance < reqBalance) {
+                await lender.sendTopUp(vSender, reqBalance - controllerBalance + toNano('1'));
+            }
+            const res =await lender.sendRequestLoan(vSender, amount, amount, poolData.interestRate);
+            const succcesTx = {
+                from: pool.address,
+                to: controller.address,
+                op: Op.controller.credit
+            };
+            if(exp_success) {
+                expect(res.transactions).toHaveTransaction(succcesTx);
+            }
+            else {
+                expect(res.transactions).not.toHaveTransaction(succcesTx);
+            }
+            return res;
         }
         assertPoolBalanceNotChanged = async (balance) => {
             const poolData = await pool.getFullDataRaw();
