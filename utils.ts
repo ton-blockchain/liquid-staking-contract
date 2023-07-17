@@ -353,6 +353,12 @@ export const parseBurnNotification = (body: Cell) => {
 
 
 
+// Some fuzzy logic here
+export const approximatelyEqual = (a: bigint, b: bigint, threshold: bigint) => {
+    let delta = a < b ? b - a : a - b;
+    console.log(`Delta:${delta}`);
+    return delta <= threshold;
+}
 const testPartial = (cmp: any, match: any) => {
     for (let key in match) {
         if(!(key in cmp)) {
