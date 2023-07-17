@@ -71,6 +71,7 @@ describe('Integrational tests', () => {
 
     let getContractData:(address: Address) => Promise<Cell>;
     let getContractBalance:(address: Address) => Promise<bigint>;
+    let getUserJetton:(address: Address | SandboxContract<TreasuryContract>) => Promise<SandboxContract<DAOWallet>>;
     let getUserJettonBalance:(address: Address | SandboxContract<TreasuryContract>) => Promise<bigint>;
     let loadSnapshot:(snap:string) => Promise<void>;
     let getCurTime:() => number;
@@ -266,6 +267,14 @@ describe('Integrational tests', () => {
             const smc = await bc.getContract(address);
             return smc.balance;
         };
+        getUserJetton = async (contract) => {
+            const walletAddr = contract instanceof Address ? contract : contract.address;
+            return bc.openContract(
+                DAOWallet.createFromAddress(
+                    await poolJetton.getWalletAddress(walletAddr)
+                )
+            );
+        }
         getUserJettonBalance = async (contract) => {
             const walletAddr = contract instanceof Address ? contract : contract.address
             const walletSmc = await bc.getContract(walletAddr);
