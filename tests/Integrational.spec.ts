@@ -34,10 +34,13 @@ type MintChunk = {
 }
 type BillState = Awaited<ReturnType<PayoutCollection['getTotalBill']>>;
 
-type DistriutionResult = {
+type DistrubutionResult = DistributionComplete | DistributionDelayed;
+type DistributionComplete = {
     burnt: bigint,
     distributed: bigint,
 }
+
+type DistributionDelayed = MintChunk;
 
 describe('Integrational tests', () => {
     let bc: Blockchain;
@@ -90,12 +93,12 @@ describe('Integrational tests', () => {
                              depositors: MintChunk[],
                              supply:bigint,
                              balance:bigint,
-                             minterAddr:Address) => Promise<DistriutionResult>;
+                             minterAddr:Address) => Promise<DistributionComplete>;
     let assertRoundWithdraw: (txs: BlockchainTransaction[],
                               withdrawals: MintChunk[],
                               supply:bigint,
                               balance:bigint,
-                              minterAddr:Address) => Promise<DistriutionResult>
+                              minterAddr:Address) => Promise<DistributionComplete>
     let assertBurn:(txs: BlockchainTransaction[],
                     items: MintChunk[],
                     minter: Address,
@@ -115,8 +118,7 @@ describe('Integrational tests', () => {
     let assertNewPayout:(txs: BlockchainTransaction[],
                          expectNew: boolean,
                          prevPayout: Address | null,
-                         deposit: boolean,
-                         dst: Address) => Promise<SandboxContract<PayoutCollection>>;
+                         deposit: boolean) => Promise<SandboxContract<PayoutCollection>>;
     let assertPayoutMint:(txs: BlockchainTransaction[],
                           payout: SandboxContract<PayoutCollection>,
                           billBefore: BillState,
@@ -751,8 +753,7 @@ describe('Integrational tests', () => {
         assertNewPayout  = async(txs: BlockchainTransaction[],
                                  expectNew: boolean,
                                  prevPayout: Address | null,
-                                 deposit: boolean,
-                                 dst: Address) => {
+                                 deposit: boolean) => {
             let payout = deposit ? await pool.getDepositMinter()
                                  : await pool.getWithdrawalMinter();
             if(expectNew) {
@@ -841,7 +842,7 @@ describe('Integrational tests', () => {
             const minter = await assertNewPayout(res.transactions,
                                                  new_round,
                                                  prevMinter,
-                                                 true, via.address!);
+                                                 true);
             const expDepo  = amount - Conf.poolDepositFee;
             const nm       = await assertPayoutMint(res.transactions,
                                                     minter,
@@ -933,13 +934,18 @@ describe('Integrational tests', () => {
             const poolFunds   = poolBalance - poolData.totalBalance;
             expect(poolFunds).toEqual(balance);
         }
+        /*
         getLoanWithExpProfit = async (lender, exp_profit) => {
             const poolData   = await pool.getFullData();
             const controllerData = await lender.getControllerData();
             const validator = bc.sender(controllerData.validator);
             if(controllerData.state != ControllerState.REST)
                 throw(Error("Controller is not in REST state"));
-            const loanAmount = exp_profit * Conf.shareBase / BigInt(poolData.interestRate);
+            const profitWithFinalize = exp_profit + Conf.finalizeRoundFee;
+            const profitFee = Conf.governanceFee * exp_profit / Conf.shareBase;
+            const totalProfit = profitWithFinalize + profitFee;
+            console.log(`Total profit:${totalProfit}`);
+            const loanAmount = totalProfit * Conf.shareBase / BigInt(poolData.interestRate); //Rounding errors?
             const creditable = await getCreditable();
             if(creditable < loanAmount)
                 throw(Error("Pool doesn't have enough ton to spare"));
@@ -962,10 +968,10 @@ describe('Integrational tests', () => {
                 to: controller.address,
                 op: Op.controller.credit
             });
-            return loanAmount;
+            return totalProfit;
         }
+        */
     });
-    describe('Simple', () => {
     it('Deploy controller', async () => {
         const res = await pool.sendRequestControllerDeploy(validator.wallet.getSender(), Conf.minStorage + toNano('1'), 0);
         expect(res.transactions).toHaveTransaction({
