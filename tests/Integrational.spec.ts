@@ -34,13 +34,12 @@ type MintChunk = {
 }
 type BillState = Awaited<ReturnType<PayoutCollection['getTotalBill']>>;
 
-type DistrubutionResult = DistributionComplete | DistributionDelayed;
 type DistributionComplete = {
     burnt: bigint,
     distributed: bigint,
 }
-
 type DistributionDelayed = MintChunk;
+type DistributionResult = DistributionComplete | DistributionDelayed;
 
 describe('Integrational tests', () => {
     let bc: Blockchain;
@@ -74,6 +73,7 @@ describe('Integrational tests', () => {
 
     let getContractData:(address: Address) => Promise<Cell>;
     let getContractBalance:(address: Address) => Promise<bigint>;
+    let getNewController:(txs: BlockchainTransaction[]) => SandboxContract<Controller>;
     let getUserJetton:(address: Address | SandboxContract<TreasuryContract>) => Promise<SandboxContract<DAOWallet>>;
     let getUserJettonBalance:(address: Address | SandboxContract<TreasuryContract>) => Promise<bigint>;
     let loadSnapshot:(snap:string) => Promise<void>;
@@ -128,11 +128,15 @@ describe('Integrational tests', () => {
                        amount: bigint,
                        index:number,
                        new_minter:boolean) => Promise<MintChunk>;
-    let assertWithdraw:(via: Sender,
+    let assertWithdraw:(<T extends boolean, K extends boolean>(via: Sender,
                         amount:bigint,
-                        index:number,
-                        new_minter: boolean,
-                        fill_or_kill?: boolean) => Promise<MintChunk>
+                        optimistic: T,
+                        fill_or_kill: K,
+                        balance: bigint,
+                        supply:  bigint,
+                        index: number,
+                        new_minter: boolean) => Promise<K extends true ? DistributionComplete : T extends false ? DistributionDelayed : DistributionResult>);
+
     let assertPoolBalanceNotChanged:(balance: bigint) => Promise<void>;
     let assertGetLoan:(controller: SandboxContract<Controller>, amount: bigint, exp_success: boolean, min_amount?:bigint) => Promise<SendMessageResult>;
     // let getLoanWithExpProfit:(controller: SandboxContract<Controller>, exp_profit: bigint) => Promise<bigint>;
@@ -276,6 +280,19 @@ describe('Integrational tests', () => {
                     await poolJetton.getWalletAddress(walletAddr)
                 )
             );
+        }
+        getNewController = (txs) => {
+            const deployTx = findTransaction(txs, {
+                from: pool.address,
+                initCode: controller_code,
+                deploy: true,
+                success: true
+            })!;
+            expect(deployTx).not.toBeUndefined();
+            const deployMsg = deployTx.inMessage!;
+            if(deployMsg.info.type !== "internal")
+                throw(Error("Internal expected"));
+            return bc.openContract(Controller.createFromAddress(deployMsg.info.dest));;
         }
         getUserJettonBalance = async (contract) => {
             const walletAddr = contract instanceof Address ? contract : contract.address
@@ -871,7 +888,12 @@ describe('Integrational tests', () => {
 
             return nm;
         }
-        assertWithdraw = async (via:Sender,amount:bigint, index: number, new_round: boolean, fill_or_kill:boolean = false) => {
+        assertWithdraw = async (via,
+                                amount,
+                                optimistic,
+                                fill_or_kill, balance, supply, index, new_round) => {
+
+
             const withdrawAddr = via.address!;
             // Withdraw is burning pool jettons pTONs
             const withdrawJetton = bc.openContract(DAOWallet.createFromAddress(
@@ -891,14 +913,13 @@ describe('Integrational tests', () => {
                 const tmpMinter = bc.openContract(await pool.getWithdrawalMinter());
                 billBefore = await tmpMinter.getTotalBill();
             }
-
             const res = await withdrawJetton.sendBurnWithParams(via, toNano('1.05'),
                                                                 amount,
-                                                                withdrawAddr, false, false);
+                                                                withdrawAddr, !optimistic, fill_or_kill);
             const minter = await assertNewPayout(res.transactions,
                                                  new_round,
                                                  prevMinter,
-                                                 false, via.address!);
+                                                 false);
             const nm     = await assertPayoutMint(res.transactions,
                                                   minter,
                                                   billBefore,
@@ -910,10 +931,14 @@ describe('Integrational tests', () => {
             expect(dataAfter.totalBalance).toEqual(dataBefore.totalBalance);
             expect(dataAfter.withdrawalPayout).toEqualAddress(minter.address);
 
-            return nm;
+
+
+            // https://github.com/microsoft/TypeScript-Website/issues/1931
+            return nm as any;
         }
         assertGetLoan = async (lender, amount, exp_success, min_amount?) => {
             const poolData = await pool.getFullDataRaw();
+            const stateBefore = await getContractData(pool.address);
             const controllerData = await controller.getControllerData();
             const vSender = bc.sender(controllerData.validator);
             await controller.sendUpdateHash(vSender);
@@ -930,14 +955,18 @@ describe('Integrational tests', () => {
             const res =await lender.sendRequestLoan(vSender, amount, amount, poolData.interestRate);
             const succcesTx = {
                 from: pool.address,
-                to: controller.address,
+                to: lender.address,
                 op: Op.controller.credit
             };
             if(exp_success) {
+                const poolAfter = await pool.getFullData();
                 expect(res.transactions).toHaveTransaction(succcesTx);
+                expect(poolAfter.currentRound.activeBorrowers).toEqual(poolData.currentRound.activeBorrowers + 1n);
+                expect(poolAfter.currentRound.borrowed).toEqual(poolData.currentRound.borrowed + amount);
             }
             else {
                 expect(res.transactions).not.toHaveTransaction(succcesTx);
+                expect(await getContractData(pool.address)).toEqualCell(stateBefore);
             }
             return res;
         }
@@ -1035,11 +1064,12 @@ describe('Integrational tests', () => {
         await nextRound();
         // For simplicity donate again
         await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
+        const poolAfter = await pool.getFullData();
         const withdrawAmount = depoAmount / 3n;
         // Test jetton balance
         expect(await compareBalance(nm1, nm2, true)).toBe(true);
-        const withdrawRes1 = await assertWithdraw(nm1.getSender(), withdrawAmount, 0, true);
-        const withdrawRes2 = await assertWithdraw(nm2.getSender(), withdrawAmount, 1, false);
+        const withdrawRes1 = await assertWithdraw(nm1.getSender(), withdrawAmount, false, false, poolAfter.totalBalance, poolAfter.supply, 0, true)
+        const withdrawRes2 = await assertWithdraw(nm2.getSender(), withdrawAmount, false, false, poolAfter.totalBalance, poolAfter.supply, 1, false);
         expect(withdrawRes1.amount).toEqual(withdrawRes2.amount);
         await nextRound();
         const balanceBefore1 = await nm1.getBalance();
@@ -1348,7 +1378,12 @@ describe('Integrational tests', () => {
             for(let k = 0; k < withdrawCount; k++) {
                 const amount = getRandomTon(10000, 50000);
                 const idx    = totalCount + k;
-                withdrawals.push(await assertWithdraw(sender, amount, idx, idx == 0));
+                const wRes   = await assertWithdraw(sender, amount, false, false, poolBefore.totalBalance, poolBefore.supply, idx, idx == 0);
+                if(typeof wRes.amount != 'bigint') {
+                    console.log(wRes);
+                    throw(Error("WFT is wrong with you?"));
+                }
+                withdrawals.push(wRes);
             }
             totalCount += withdrawCount;
         }
@@ -1376,7 +1411,7 @@ describe('Integrational tests', () => {
                                       supply: bigint,
                                       balance: bigint,
                                       immediate:boolean,
-                                      fill_or_kill: boolean) => Promise<DistributionDelayed>;
+                                      fill_or_kill: boolean) => Promise<DistributionResult>;
         beforeAll(async () => {
             await loadSnapshot('deployed');
             assertOptimisticDeposit = async (via, amount, expected_profit) => {
@@ -1493,7 +1528,7 @@ describe('Integrational tests', () => {
                         expect(poolAfter.totalBalance).toEqual(poolBefore.totalBalance - tonAmount);
                         expect(poolAfter.supply).toEqual(poolBefore.supply - amount);
                         stateChange = {supply: poolAfter.supply, balance: poolAfter.totalBalance};
-                    } 
+                    }
                     else {
                         stateChange = await pessimisticFallback();
                     }
