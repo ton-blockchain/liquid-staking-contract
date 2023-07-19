@@ -1405,6 +1405,7 @@ describe('Integrational tests', () => {
     });
     describe('Optimistic', () => {
         let depoAddresses: Address[];
+        let depoAmounts: bigint[];
         let assertOptimisticDeposit:(via:Sender, amount:bigint, expected_profit:bigint) => Promise<bigint>;
         let assertOptimisticWithdraw:(via: Sender,
                                       amount: bigint,
@@ -1420,9 +1421,6 @@ describe('Integrational tests', () => {
                 const balanceAfter = poolBefore.totalBalance + expected_profit;
                 const expectedBalance = balanceAfter > 0n ? balanceAfter : 0n;
                 const mintAmount      = muldivExtra(amount - Conf.poolDepositFee, poolBefore.supply, expectedBalance);
-                const walletSmc = await bc.getContract(
-                    await poolJetton.getWalletAddress(via.address!)
-                );
                 // Should not deploy anything
                 expect(res.transactions).not.toHaveTransaction({
                     from: pool.address,
@@ -1432,11 +1430,22 @@ describe('Integrational tests', () => {
 
                 const poolAfter = await pool.getFullData();
                 // Minters if any, should not change
-                expect(poolAfter.depositPayout).toEqual(poolBefore.depositPayout);
-                expect(poolAfter.withdrawalPayout).toEqual(poolAfter.withdrawalPayout);
+                if(poolAfter.depositPayout == null) {
+                    expect(poolAfter.depositPayout).toEqual(poolBefore.depositPayout);
+                }
+                else {
+                    expect(poolAfter.depositPayout).toEqualAddress(poolBefore.depositPayout!);
+                }
+                if(poolAfter.withdrawalPayout == null) {
+                    expect(poolAfter.withdrawalPayout).toEqual(poolBefore.withdrawalPayout);
+                }
+                else {
+                    expect(poolAfter.withdrawalPayout).toEqualAddress(poolBefore.withdrawalPayout!);
+                }
 
                 return mintAmount;
             }
+            /*
             assertOptimisticWithdraw = async (via, amount, supply, balance, wait_round, fill_or_kill) => {
                 const poolBefore = await pool.getFullDataRaw();
                 const holder     = via.address!;
@@ -1558,24 +1567,30 @@ describe('Integrational tests', () => {
         });
         it('Optimistic deposit', async () => {
             depoAddresses = [];
+            depoAmounts   = [];
             let   expBalances: bigint[] = [];
             await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
             let deposited = 0n;
+            let minted    = 0n;
             let i = 0;
-            while(deposited < Conf.minStake * 3n) {
+            while(deposited < sConf.min_stake * 3n) {
                 const depoCount  = getRandomInt(1, 3);
                 const depositor  = await bc.treasury(`Depo:${i}`);
+                depoAddresses.push(depositor.address);
                 for(let k = 0; k < depoCount; k++) {
                     const depo       = k == 0 ? getRandomTon(150000, 200000) : getRandomTon(10000, 20000);
-                    depoAddresses.push(depositor.address);
+                    const pton = await getUserJetton(depositor.address);
                     const mintAmount = await assertOptimisticDeposit(depositor.getSender(),
                                                                      depo,
                                                                      - Conf.finalizeRoundFee);
                     deposited += depo;
+                    minted += mintAmount;
                     if(k == 0) {
+                        depoAmounts.push(depo);
                         expBalances.push(mintAmount);
                     }
                     else {
+                        depoAmounts[i] += depo;
                         expBalances[i] += mintAmount;
                     }
                 }
@@ -1584,6 +1599,7 @@ describe('Integrational tests', () => {
             for(i = 0; i < expBalances.length; i++) {
                 expect(expBalances[i]).toEqual(await getUserJettonBalance(depoAddresses[i]));
             }
+            snapStates.set('opt_depo', bc.snapshot());
         });
         it('Head to head optimistic deposit. Equal deposits should result in equal balances/withdrawals', async() => {
             const prevState  = bc.snapshot();
@@ -1642,10 +1658,11 @@ describe('Integrational tests', () => {
 
             const depoRes = await assertOptimisticDeposit(cat.getSender(), depo, - Conf.finalizeRoundFee);
             // Getting loan
+            snapStates.set('pre_withdraw', bc.snapshot());
             const loanRes = await assertGetLoan(controller, sConf.min_stake, true);
+            snapStates.set('has_loan', bc.snapshot());
             // Now pool funds are working, so not all of the deposit is available for withdraw
             const catPton = await getUserJetton(cat);
-            snapStates.set('pre_withdraw', bc.snapshot());
             const balanceBefore = await catPton.getJettonBalance();
             const res = await catPton.sendBurnWithParams(cat.getSender(), toNano('1.05'), depoRes, cat.address, false, true);
             // Burned
@@ -1664,8 +1681,7 @@ describe('Integrational tests', () => {
             await bc.loadFrom(prevState);
         });
         it('Should not be possible to fail distribution action phase', async() => {
-            const prevState = bc.snapshot();
-            await loadSnapshot('pre_withdraw');
+            await loadSnapshot('has_loan');
             const cat = await bc.treasury('FatCat');
             const catPton = await getUserJetton(cat);
             const poolBefore = await pool.getFullData();
@@ -1689,29 +1705,52 @@ describe('Integrational tests', () => {
                 op: Op.pool.withdrawal
             });
             expect((await pool.getFullData()).supply).toEqual(poolBefore.supply - 1n);
-            await bc.loadFrom(prevState);
-        });
-        it('Slow withdraw in optimistic mode should work', async() => {
-            await loadSnapshot('pre_withdraw');
+            await loadSnapshot('opt_depo');
         });
         it('Profit should impact projected jetton rate', async() => {
-            const prevState = bc.snapshot();
-            await bc.loadFrom(prevState);
+            await loadSnapshot('pre_withdraw');
+            const poolBefore = await pool.getFullData();
+            const interestRate = poolBefore.interestRate;
+            let controllers = [controller];
+            const loanCount = 5;
+            let controllerIdx  = 1;
+            let totalExpReturn = 0n;
+            let totalExpProfit = 0n;
+            for(let i = 0; i < loanCount; i++ ) {
+                let deploy = await pool.sendRequestControllerDeploy(validator.wallet.getSender(), toNano('1000'),  controllerIdx++);
+                const newController = getNewController(deploy.transactions)
+                controllers.push(newController);
+                // Loan amount doesn't matter
+                const loanAmount = getRandomTon(10000, 20000);
+                await newController.sendApprove(deployer.getSender());
+                await assertGetLoan(newController, loanAmount, true);
+                const interest  = loanAmount * BigInt(interestRate) / Conf.shareBase;
+                totalExpProfit += interest;
+                totalExpReturn += loanAmount + interest;
+            }
+            await nextRound();
+            await Promise.all(controllers.map(async x => await x.sendUpdateHash(validator.wallet.getSender())));
+            await pool.sendTouch(deployer.getSender());
+            // After this we expect total balance to reduce by finalizeRoundFee
+            const balanceBefore = poolBefore.totalBalance - Conf.finalizeRoundFee;
+            const poolAfter = await pool.getFullData();
+            expect(poolAfter.previousRound.expected).toEqual(poolBefore.currentRound.expected + totalExpReturn);
+            let projDelta   = totalExpProfit -  Conf.finalizeRoundFee;
+            projDelta      -= Conf.governanceFee * projDelta / Conf.shareBase;
+            expect(poolAfter.projectedTotalBalance).toEqual(balanceBefore + projDelta);
+            // Just in case test that exactly this rate is used while calculating deposit rate
+            const depositor = await bc.treasury('TotallyRandom');
+            await assertOptimisticDeposit(depositor.getSender(), getRandomTon(1000, 2000), totalExpProfit);
+            await loadSnapshot('pre_withdraw');
         });
         it.skip('Should be able to withdraw in same round', async() => {
-            const prevState = bc.snapshot();
-            // Since no extra fee is paid yet, burned jettons should covert 1/1
-            await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
-            console.log(`Pool:${pool.address}`);
+            await loadSnapshot('opt_depo');
             for(let i = 0; i < depoAddresses.length; i++) {
                 // Burn share
                 const share = BigInt(getRandomInt(2, 4, 2));
-                const pton       = bc.openContract(
-                    DAOWallet.createFromAddress(
-                        await poolJetton.getWalletAddress(depoAddresses[i])
-                    )
-                );
-                const burnAmount = await pton.getJettonBalance() / share;
+                const pton  = await getUserJetton(depoAddresses[i]);
+                const burnAmount = await pton.getJettonBalance(); // / share;
+                console.log(`Burning:${burnAmount}`);
                 const owner      = bc.sender(depoAddresses[i]);
                 const balanceBefore = await getContractBalance(depoAddresses[i]);
                 const res        = await pton.sendBurnWithParams(owner,
@@ -1724,6 +1763,8 @@ describe('Integrational tests', () => {
                     op: Op.pool.withdrawal,
                     value: (x) => x! >= burnAmount
                 })!;
+                console.log(`I:${i}`);
+                console.log(res.transactions.map(x => flattenTransaction(x)));
                 expect(withdrawTx).not.toBeUndefined();
                 const withdrawMsg = withdrawTx.inMessage!;
                 if(withdrawMsg.info.type !== "internal")
