@@ -1446,6 +1446,40 @@ describe('Integrational tests', () => {
                           poolData.withdrawalPayout);
         await bc.loadFrom(prevState);
     });
+    it('Withdraw in pessimistic mode with fill_or_kill true, should mint back', async () => {
+        const depoIdx = getRandomInt(0, depositors.length - 1);
+        const share   = BigInt(getRandomInt(2, 4));
+        const depositor = depositors[depoIdx];
+        const sender  = bc.sender(depositor.address);
+        const pton    = await getUserJetton(depositor.address);
+
+        const balanceBefore = await pton.getJettonBalance();
+        const burnAmount = balanceBefore / share;
+        const stateBefore = await getContractData(pool.address);
+        const poolBefore = await pool.getFullData();
+        let nftIdx = 0;
+        const newPayout = poolBefore.withdrawalPayout != null;
+        if(newPayout) {
+            const payout = bc.openContract(
+                PayoutCollection.createFromAddress(poolBefore.withdrawalPayout!)
+            );
+            nftIdx = Number((await payout.getCollectionData()).nextItemIndex);
+        }
+
+        const res = await assertWithdraw(sender,
+                                         burnAmount,
+                                         false, // pessimistic mode
+                                         true, // fill_or_kill
+                                         poolBefore.totalBalance, // not used in pessimistic
+                                         poolBefore.supply, // not used in pessimistic
+                                         nftIdx, // Nft idx.
+                                         newPayout);
+        expect(res.burnt).toEqual(0n);
+        expect(res.distributed).toEqual(0n);
+        // Transaction is not abborted so there is a possibility that data has changed
+        expect(stateBefore).toEqualCell(await getContractData(pool.address));
+        // Jetton balance hasn't changed
+        expect(await pton.getJettonBalance()).toEqual(balanceBefore);
     });
     });
     describe('Optimistic', () => {
