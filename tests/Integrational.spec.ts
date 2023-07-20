@@ -1590,7 +1590,7 @@ describe('Integrational tests', () => {
             expect(await nm1.getBalance()).toBeLessThanOrEqual(initialBalance);
             await bc.loadFrom(prevState);
         });
-        it('Should mint back if not enough balance available', async() => {
+        it('Should mint back if not enough balance available and fill_or_kill set', async() => {
             const prevState = bc.snapshot();
             await loadSnapshot('optimistic');
             // Going to use single fat nominator for simplicity
@@ -1621,7 +1621,7 @@ describe('Integrational tests', () => {
             expect(await balanceBefore).toEqual(await catPton.getJettonBalance());
             await bc.loadFrom(prevState);
         });
-        it('Should not be possible to fail distribution action phase', async() => {
+        it('Should not be possible to fail distribution action phase with low burn msg value', async() => {
             await loadSnapshot('has_loan');
             const cat = await bc.treasury('FatCat');
             const catPton = await getUserJetton(cat);
