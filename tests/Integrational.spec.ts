@@ -1592,6 +1592,7 @@ describe('Integrational tests', () => {
         });
         it('Should mint back if not enough balance available', async() => {
             const prevState = bc.snapshot();
+            await loadSnapshot('optimistic');
             // Going to use single fat nominator for simplicity
             const cat = await bc.treasury('FatCat');
             const depo = sConf.min_stake * 2n;
@@ -1648,7 +1649,7 @@ describe('Integrational tests', () => {
             await loadSnapshot('opt_depo');
         });
         it('Profit should impact projected jetton rate', async() => {
-            await loadSnapshot('pre_withdraw');
+            await loadSnapshot('opt_depo');
             const poolBefore = await pool.getFullData();
             const interestRate = poolBefore.interestRate;
             let controllers = [controller];
