@@ -982,7 +982,7 @@ describe('Integrational tests', () => {
 
 
             // https://github.com/microsoft/TypeScript-Website/issues/1931
-            return nm as DistributionDelayed;;
+            return nm as DistributionDelayed;
         }
         assertGetLoan = async (lender, amount, exp_success, min_amount?) => {
             const poolData = await pool.getFullDataRaw();
@@ -1235,9 +1235,7 @@ describe('Integrational tests', () => {
                           poolData.depositPayout,
                           poolData.withdrawalPayout);
         for(let i = 0; i <expBalances.length; i++) {
-            const jettonAddr = await poolJetton.getWalletAddress(depositors[i].address);
-            const jWallet = bc.openContract(DAOWallet.createFromAddress(jettonAddr));
-            expect(await jWallet.getJettonBalance()).toEqual(expBalances[i]);
+            expect(await getUserJettonBalance(depositors[i].address)).toEqual(expBalances[i]);
         }
         snapStates.set('deposited', bc.snapshot());
     });
@@ -1413,6 +1411,7 @@ describe('Integrational tests', () => {
         });
     });
     it('Simple withdraw', async() => {
+        const prevState   = bc.snapshot();
         const poolBefore  = await pool.getFullData();
         let withdrawals: MintChunk[] = [];
         let totalCount = 0;
@@ -1427,10 +1426,6 @@ describe('Integrational tests', () => {
                 const amount = getRandomTon(10000, 50000);
                 const idx    = totalCount + k;
                 const wRes   = await assertWithdraw(sender, amount, false, false, poolBefore.totalBalance, poolBefore.supply, idx, idx == 0);
-                if(typeof wRes.amount != 'bigint') {
-                    console.log(wRes);
-                    throw(Error("WFT is wrong with you?"));
-                }
                 withdrawals.push(wRes);
             }
             totalCount += withdrawCount;
@@ -1449,6 +1444,8 @@ describe('Integrational tests', () => {
                           poolBefore.totalBalance,
                           poolData.depositPayout,
                           poolData.withdrawalPayout);
+        await bc.loadFrom(prevState);
+    });
     });
     });
     describe('Optimistic', () => {
@@ -1689,23 +1686,21 @@ describe('Integrational tests', () => {
             const poolBefore = await pool.getFullData();
             let   balance    = poolBefore.totalBalance;
             let   supply     = poolBefore.supply;
-            console.log(`Total depositors:${depoAddresses.length}`);
             for(let i = 0; i < depoAddresses.length; i++) {
                 // Burn share
                 const share = BigInt(getRandomInt(2, 4, 2));
                 const pton  = await getUserJetton(depoAddresses[i]);
                 const burnAmount = await pton.getJettonBalance(); // / share;
                 const owner      = bc.sender(depoAddresses[i]);
-                console.log(`Burning:${burnAmount}:${i}`);
                 const res        = await assertWithdraw(owner, burnAmount, true, true, balance, supply, 0, false);
                 expect(res.burnt).toEqual(burnAmount);
                 expect(res.distributed).toBeGreaterThan(0n);
-                console.log(`Distributed:${res.distributed}`);
                 balance -= res.distributed;
                 supply  -= res.burnt;
             }
         });
-        it.skip('Should be able to use balance in the same round', async() => {
+        it('Should be able to use balance in the same round', async() => {
+            await loadSnapshot('opt_depo');
             // Optimists don't wait
             const poolBefore = await pool.getFullData();
             await controller.sendTopUp(validator.wallet.getSender(), sConf.min_stake);
