@@ -245,7 +245,7 @@ describe('Integrational tests', () => {
 
         pool = bc.openContract(Pool.createFromConfig(poolConfig, pool_code));
 
-        await pool.sendDeploy(deployer.getSender(),Conf.minStorage + toNano('1'));
+        await pool.sendDeploy(deployer.getSender(),Conf.minStoragePool + toNano('1'));
 
         await poolJetton.sendDeploy(deployer.getSender(), toNano('1.05'));
         await poolJetton.sendChangeAdmin(deployer.getSender(), pool.address);
@@ -313,7 +313,7 @@ describe('Integrational tests', () => {
             const poolBalance = await getContractBalance(pool.address);
             const cred = poolBalance - muldivExtra(poolData.requestedForWithdrawal,
                                                    poolData.totalBalance,
-                                                   poolData.supply) - Conf.minStorage;
+                                                   poolData.supply) - Conf.minStoragePool;
             // console.log(`Pool balance:${poolBalance}`);
             // console.log(`Cred:${cred}`);
             const balanced = BigInt(256 + Conf.disbalanceTolerance) * poolData.totalBalance / 512n;
@@ -1015,7 +1015,7 @@ describe('Integrational tests', () => {
         */
     });
     it('Deploy controller', async () => {
-        const res = await pool.sendRequestControllerDeploy(validator.wallet.getSender(), Conf.minStorage + toNano('1'), 0);
+        const res = await pool.sendRequestControllerDeploy(validator.wallet.getSender(), Conf.minStoragePool + toNano('1'), 0);
         expect(res.transactions).toHaveTransaction({
             from: validator.wallet.address,
             to: pool.address,
