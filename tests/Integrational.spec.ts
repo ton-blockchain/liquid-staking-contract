@@ -128,6 +128,8 @@ describe('Integrational tests', () => {
                        amount: bigint,
                        index:number,
                        new_minter:boolean) => Promise<MintChunk>;
+    let assertOptimisticDeposit:(via:Sender, amount:bigint, expected_profit:bigint) => Promise<bigint>;
+
     let assertWithdraw:(<T extends boolean, K extends boolean>(via: Sender,
                         amount:bigint,
                         optimistic: T,
@@ -876,6 +878,37 @@ describe('Integrational tests', () => {
 
             return nm;
         }
+        assertOptimisticDeposit = async (via, amount, expected_profit) => {
+            const poolBefore = await pool.getFullData();
+            const res = await pool.sendDeposit(via, amount)
+            const balanceAfter = poolBefore.totalBalance + expected_profit;
+            const expectedBalance = balanceAfter > 0n ? balanceAfter : 0n;
+            const mintAmount      = muldivExtra(amount - Conf.poolDepositFee, poolBefore.supply, expectedBalance);
+            // Should not deploy anything
+            expect(res.transactions).not.toHaveTransaction({
+                from: pool.address,
+                deploy: true
+            });
+            await assertPoolJettonMint(res.transactions, mintAmount, via.address!);
+
+            const poolAfter = await pool.getFullData();
+            // Minters if any, should not change
+            if(poolAfter.depositPayout == null) {
+                expect(poolAfter.depositPayout).toEqual(poolBefore.depositPayout);
+            }
+            else {
+                expect(poolAfter.depositPayout).toEqualAddress(poolBefore.depositPayout!);
+            }
+            if(poolAfter.withdrawalPayout == null) {
+                expect(poolAfter.withdrawalPayout).toEqual(poolBefore.withdrawalPayout);
+            }
+            else {
+                expect(poolAfter.withdrawalPayout).toEqualAddress(poolBefore.withdrawalPayout!);
+            }
+
+            return mintAmount;
+        }
+
         assertWithdraw = async (via,
                                 amount,
                                 optimistic,
@@ -1485,41 +1518,10 @@ describe('Integrational tests', () => {
     describe('Optimistic', () => {
         let depoAddresses: Address[];
         let depoAmounts: bigint[];
-        let assertOptimisticDeposit:(via:Sender, amount:bigint, expected_profit:bigint) => Promise<bigint>;
 
         beforeAll(async () => {
             await loadSnapshot('deployed');
-            assertOptimisticDeposit = async (via, amount, expected_profit) => {
-                const poolBefore = await pool.getFullData();
-                const res = await pool.sendDeposit(via, amount)
-                const balanceAfter = poolBefore.totalBalance + expected_profit;
-                const expectedBalance = balanceAfter > 0n ? balanceAfter : 0n;
-                const mintAmount      = muldivExtra(amount - Conf.poolDepositFee, poolBefore.supply, expectedBalance);
-                // Should not deploy anything
-                expect(res.transactions).not.toHaveTransaction({
-                    from: pool.address,
-                    deploy: true
-                });
-                await assertPoolJettonMint(res.transactions, mintAmount, via.address!);
-
-                const poolAfter = await pool.getFullData();
-                // Minters if any, should not change
-                if(poolAfter.depositPayout == null) {
-                    expect(poolAfter.depositPayout).toEqual(poolBefore.depositPayout);
-                }
-                else {
-                    expect(poolAfter.depositPayout).toEqualAddress(poolBefore.depositPayout!);
-                }
-                if(poolAfter.withdrawalPayout == null) {
-                    expect(poolAfter.withdrawalPayout).toEqual(poolBefore.withdrawalPayout);
-                }
-                else {
-                    expect(poolAfter.withdrawalPayout).toEqualAddress(poolBefore.withdrawalPayout!);
-                }
-
-                return mintAmount;
-            }
-                        // Start fresh round
+            // Start fresh round
             await nextRound();
             pool.sendTouch(deployer.getSender());
             controller.sendUpdateHash(validator.wallet.getSender());
