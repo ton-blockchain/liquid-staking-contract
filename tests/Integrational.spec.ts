@@ -1762,6 +1762,264 @@ describe('Integrational tests', () => {
             // snapStates.set('opt_pre_withdraw', bc.snapshot());
         });
     });
+    describe.skip('Long run', () => {
+        // Main idea is let system run with specified parameters
+        type RoundData = {
+            activeBorrowers: number,
+            borrowed: bigint,
+            profit: bigint
+        };
+        const validatorsCount = 1;
+        const nmPerValidator = 2;
+        const roundCount = 4;
+        const nmCount = 20;
+        let  optimistic = true;
+        let  fill_or_kill = false;
+
+        let roundId: number;
+        let curRound: RoundData
+        let interestRate: bigint;
+        let balance: bigint;
+        let supply: bigint;
+        let profit: bigint;
+        let depoReq: bigint;
+        let withdrawReq: bigint;
+        let depoCount: number;
+        let withdrawCount: number;
+        let validators: Validator[];
+        let startValue = toNano('100000');
+        let controllers:Map<string,SandboxContract<Controller>[]>;
+        let actors: {
+            nms: IterableIterator<SandboxContract<TreasuryContract>>
+            validstors: IterableIterator<Validator>
+        };
+        let depositors: SandboxContract<TreasuryContract>[];
+        let accountForDepo: (depo: MintChunk | bigint, amount: bigint) => number;
+        let runNmAction: (depositor: SandboxContract<TreasuryContract>) => Promise<void>;
+        let runVdAction: (validator: Validator) => Promise<void>;
+        let runVldActions: () => Promise<void>;
+        beforeAll(async () => {
+            await loadSnapshot('initial');
+            validators = [];
+            controllers = new Map<string, SandboxContract<Controller>[]>();
+            roundId = 0;
+            balance = 0n;
+            supply  = 0n;
+            depoReq = 0n;
+            withdrawReq = 0n;
+            profit  = - Conf.finalizeRoundFee;
+            depoCount   = 0;
+            withdrawCount = 0;
+            depositors  = await bc.createWallets(nmCount);
+            const depoIter = depositors[Symbol.iterator]();
+            let curId = 0;
+            await nextRound();
+            for(let i = 0; i < validatorsCount; i++) {
+                const newValidator = {
+                    wallet: await bc.treasury(`Validator:${i}`, {workchain: -1, balance: startValue * 10n}),
+                    keys: await keyPairFromSeed(await getSecureRandomBytes(32))
+                };
+                validators.push(newValidator);
+                let myControllers: SandboxContract<Controller>[] = [];
+                for (let k = 0; k <= nmPerValidator; k++) {
+                    const res = await pool.sendRequestControllerDeploy(newValidator.wallet.getSender(), startValue, curId++);
+                    const deployTx = findTransaction(res.transactions, {
+                        from: pool.address,
+                        deploy: true,
+                        initCode: controller_code
+                    })!;
+                    expect(deployTx).not.toBeUndefined();
+                    const deployMsg = deployTx.inMessage!;
+                    if(deployMsg.info.type !== "internal")
+                        throw(Error("Internal expected"));
+
+                    const newController = bc.openContract(
+                            Controller.createFromAddress(deployMsg.info.dest)
+                    );
+                    await newController.sendApprove(deployer.getSender());
+                    const dataAfter = await newController.getControllerData();
+                    expect(dataAfter.approved).toBe(true);
+                    myControllers.push(newController);
+                }
+                controllers.set(newValidator.wallet.address.toString(), myControllers);
+            }
+
+            await pool.sendSetDepositSettings(deployer.getSender(), toNano('1'), true, true);
+
+            accountForDepo = (depo, amount) => {
+                if(typeof depo == 'bigint') {
+                    supply  += depo;
+                    balance += amount - Conf.poolDepositFee;
+                }
+                else {
+                    depoReq += depo.amount;
+                }
+                return depoCount++;
+            }
+            runNmAction = async (depositor) => {
+                const sender    = depositor.getSender();
+                const ptonBalance = await getUserJettonBalance(depositor.address);
+                const tonBalance  = await depositor.getBalance();
+                let actionId: number;
+                if(roundId > 0) {
+                    if(ptonBalance == 0n) {
+                        // Can only deposit
+                        actionId = 0;
+                    }
+                    else if(tonBalance == 0n){
+                        // Nothing to deposit
+                        actionId = 1;
+                    }
+                    else {
+                        // Can do both
+                        actionId = getRandomInt(0, 1, 3);
+                    }
+                }
+                else {
+                    // Only depo on first round
+                    actionId = 0;
+                }
+                if(actionId == 0) {
+                    let depoRes: bigint | MintChunk;
+                    const depoAmount = getRandomTon(1n , tonBalance);
+                    if(optimistic) {
+                        depoRes = await assertOptimisticDeposit(sender, depoAmount, profit);
+                    }
+                    else {
+                        depoRes = await assertDeposit(sender, depoAmount, depoCount, depoCount == 0);
+                    }
+                    accountForDepo(depoRes, depoAmount);
+                }
+                else {
+                    let withdrawRes: DistributionResult;
+                    let done = false;
+                    const withdrawAmount = getRandomTon(1n , ptonBalance);
+
+                    withdrawRes = await assertWithdraw(sender,
+                                                       withdrawAmount,
+                                                       optimistic,
+                                                       fill_or_kill,
+                                                       balance,
+                                                       supply,
+                                                       withdrawCount,
+                                                       withdrawReq == 0n);
+                    if(optimistic) {
+                        if((withdrawRes as DistributionComplete).burnt !== undefined) {
+                            const res = withdrawRes as DistributionComplete;
+                            supply -= res.burnt;
+                            balance -= res.distributed;
+                            done = true;
+                        }
+                    }
+                    if(! done) {
+                        const res = withdrawRes as DistributionDelayed;
+                        withdrawReq += res.amount;
+                        withdrawCount++;
+                    }
+                }
+            }
+            runVdAction = async (validator) => {
+                const myControllers = controllers.get(validator.wallet.address.toString())!;
+                const shouldAct = (roundId & 1);
+                const vSender   = validator.wallet.getSender();
+                const curElect  = await announceElections();
+                for(let i = 0; i < nmPerValidator; i++) {
+                    let actingController = myControllers[i];
+                    await actingController.sendUpdateHash(vSender);
+                    if((i & 1) == shouldAct) {
+                        console.log(`Acting on ${i}`);
+                        const controllerData = await actingController.getControllerData();
+                        if(controllerData.state == ControllerState.FUNDS_STAKEN) {
+                            waitUnlock(controllerData.validatorSetChangeTime);
+                            console.log("Recovering loan");
+                            await elector.sendTickTock("tick");
+                            await elector.sendTickTock("tick");
+                            const res = await actingController.sendRecoverStake(vSender);
+                            expect(res.transactions).toHaveTransaction({
+                                from: elector.address,
+                                to: actingController.address,
+                                op: Op.elector.recover_stake_ok,
+                                value: (x) => x! >= sConf.min_stake
+                            });
+                        }
+                        else {
+                            console.log(`Controller state:${controllerData.state}`);
+                        }
+                        console.log(`Requesting loan ${i}`);
+                        await assertGetLoan(actingController, sConf.min_stake, true);
+                        const res = await actingController.sendNewStake(vSender, sConf.min_stake + toNano('1'),
+                                                                        validator.keys.publicKey,
+                                                                        validator.keys.secretKey,
+                                                                        curElect);
+                        expect(res.transactions).toHaveTransaction({
+                            from: elector.address,
+                            to: actingController.address,
+                            op: Op.elector.new_stake_ok,
+                            success: true
+                        });
+                        const controllerAfter = await actingController.getControllerData();
+                        expect(controllerAfter.state).toEqual(ControllerState.FUNDS_STAKEN);
+                    }
+                }
+            }
+        });
+        it('Pessimistic', async() => {
+            for(let i = 0; i < roundCount; i++) {
+                actors = {
+                    nms: depositors[Symbol.iterator](),
+                    validstors: validators[Symbol.iterator]()
+                }
+                let nmDone = false;
+                // Skip validators actions on first round
+                let vdDone = roundId == 0 && !optimistic;
+
+                if(i == 0) {
+                    await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
+                }
+
+                do {
+                    // Idea of that is that actions doesn't happen sequentially
+                    let whoActs: number;
+                    if(!(nmDone || vdDone)) {
+                        // If both queues are not done, pick at random
+                        whoActs = getRandomInt(0,1,3);
+                    }
+                    else {
+                        // Else whichever is not done
+                        whoActs = nmDone ? 1 : 0;
+                    }
+
+                    if(whoActs == 0) {
+                       const nextActor = actors.nms.next();
+                       if(!nextActor.done) {
+                        await runNmAction(nextActor.value);
+                       }
+                       else {
+                           nmDone = true;
+                       }
+                    }
+                    else {
+                       const nextActor = actors.validstors.next();
+                       if(!nextActor.done) {
+                           await runVdAction(nextActor.value);
+                       }
+                       else {
+                           vdDone = true;
+                       }
+                    }
+                } while(!(nmDone && vdDone));
+                await nextRound();
+                console.log(`Round:${roundId++}`);
+                balance += depoReq + profit;
+                depoCount = 0;
+                withdrawCount = 0;
+                withdrawReq = 0n;
+                depoReq = 0n;
+                // Meh don't like that, but otherwise all assert functions has to change once again
+                await pool.sendTouch(deployer.getSender());
+            }
+        })
+    });
     describe.skip('Attacks', () => {
     it('Should not faiil on total balance = 0 and supply > 0', async() => {
         await loadSnapshot('initial');
