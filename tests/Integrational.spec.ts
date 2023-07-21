@@ -1020,9 +1020,9 @@ describe('Integrational tests', () => {
         assertGetLoan = async (lender, amount, exp_success, min_amount?) => {
             const poolData = await pool.getFullDataRaw();
             const stateBefore = await getContractData(pool.address);
-            const controllerData = await controller.getControllerData();
+            const controllerData = await lender.getControllerData();
             const vSender = bc.sender(controllerData.validator);
-            await controller.sendUpdateHash(vSender);
+            await lender.sendUpdateHash(vSender);
             const curVset = getVset(bc.config, 34);
             if(getCurTime() < curVset.utime_unitl - eConf.begin_before) {
                 bc.now = curVset.utime_unitl - eConf.begin_before + 1;
@@ -1030,7 +1030,7 @@ describe('Integrational tests', () => {
 
             const reqBalance = await lender.getBalanceForLoan(amount, poolData.interestRate);
             const controllerBalance = await getContractBalance(lender.address);
-            if(controllerBalance < reqBalance) {
+            if(controllerBalance < reqBalance && exp_success) {
                 await lender.sendTopUp(vSender, reqBalance - controllerBalance + toNano('1'));
             }
             const res =await lender.sendRequestLoan(vSender, amount, amount, poolData.interestRate);
