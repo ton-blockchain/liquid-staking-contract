@@ -1,5 +1,5 @@
 import { Address, Tuple, TupleItem, TupleItemInt, TupleReader, toNano } from "ton";
-import { Cell, Slice, Sender, SenderArguments, ContractProvider, Message, beginCell, Dictionary, MessageRelaxed, Transaction } from "ton-core";
+import { Cell, Slice, Sender, SenderArguments, ContractProvider, Message, beginCell, Dictionary, MessageRelaxed, Transaction, fromNano } from "ton-core";
 import { Blockchain, BlockchainTransaction, MessageParams, SendMessageResult, SmartContract, SmartContractTransaction } from "@ton-community/sandbox";
 import { computeMessageForwardFees, MsgPrices } from "./fees";
 import { Op } from "./PoolConstants";
@@ -55,8 +55,30 @@ export const getRandomInt = (min:number, max:number, mode: roundMode = roundMode
     return res;
 }
 
-export const getRandomTon = (min:number, max:number): bigint => {
-    return toNano(getRandom(min, max).toFixed(9));
+export const getRandomTon = (min:number | string | bigint, max:number | string | bigint): bigint => {
+    let minVal: number;
+    let maxVal: number;
+    // Meh
+    if(typeof min == 'number') {
+        minVal = min;
+    }
+    else if(typeof min == 'string') {
+        minVal = Number(min);
+    }
+    else {
+        minVal = Number(fromNano(min));
+    }
+    if(typeof max == 'number') {
+        maxVal = max;
+    }
+    else if(typeof max == 'string') {
+        maxVal = Number(max.split('.')[0]);
+    }
+    else {
+        maxVal = Number(fromNano(max).split('.')[0]);
+    }
+
+    return toNano(getRandom(minVal, maxVal).toFixed(9));
 }
 
 export const buff2bigint = (buff: Buffer) : bigint => {
@@ -356,7 +378,6 @@ export const parseBurnNotification = (body: Cell) => {
 // Some fuzzy logic here
 export const approximatelyEqual = (a: bigint, b: bigint, threshold: bigint) => {
     let delta = a < b ? b - a : a - b;
-    console.log(`Delta:${delta}`);
     return delta <= threshold;
 }
 const testPartial = (cmp: any, match: any) => {
