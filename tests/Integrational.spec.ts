@@ -1803,7 +1803,7 @@ describe('Integrational tests', () => {
             // snapStates.set('opt_pre_withdraw', bc.snapshot());
         });
     });
-    describe.skip('Long run', () => {
+    describe('Long run', () => {
         // Main idea is let system run with specified parameters
         type RoundData = {
             activeBorrowers: number,
@@ -1972,7 +1972,7 @@ describe('Integrational tests', () => {
                         const controllerData = await actingController.getControllerData();
                         if(controllerData.state == ControllerState.FUNDS_STAKEN) {
                             waitUnlock(hashUpd.transactions[1].now);
-                            console.log(`Recovering loan {$i}`);
+                            console.log(`Recovering loan ${i}`);
                             await elector.sendTickTock("tick");
                             await elector.sendTickTock("tick");
                             const res = await actingController.sendRecoverStake(vSender);
