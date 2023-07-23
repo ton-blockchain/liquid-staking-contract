@@ -361,7 +361,8 @@ describe('Integrational tests', () => {
           if(curTime < electBegin) {
               bc.now = electBegin;
           }
-          else if(curTime < prevElections - eConf.end_before) {
+          else if(prevElections != 0) {
+              // Either not closed yet because of time or lack of stake
               return prevElections;
           }
 
