@@ -1961,8 +1961,20 @@ describe('Integrational tests', () => {
                     }
                 }
             }
+            snapStates.set('long_initial', bc.snapshot());
         });
-        it('Pessimistic', async() => {
+        it('Validator having two controllers should be able to participate in rounds one by one', async() => {
+            await loadSnapshot('long_initial');
+            // Start with depo
+            await Promise.all(depositors.map(async x => await pool.sendDeposit(x.getSender(), toNano('100000'))));
+            for (let i = 0; i < 10; i++) {
+                await runVdAction(validators[0]);
+                await nextRound();
+                await pool.sendTouch(deployer.getSender());
+                roundId++;
+            }
+            roundId = 0;
+        })
             for(let i = 0; i < roundCount; i++) {
                 actors = {
                     nms: depositors[Symbol.iterator](),
