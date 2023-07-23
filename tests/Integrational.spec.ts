@@ -1682,6 +1682,46 @@ describe('Integrational tests', () => {
             expect((await pool.getFullData()).supply).toEqual(poolBefore.supply - 1n);
             await loadSnapshot('opt_depo');
         });
+        it('Should revert any update_round effects if withdraw fails as round closing message', async () => {
+            await loadSnapshot('pre_withdraw');
+            const cat     = await bc.treasury('FatCat');
+
+            const pton        = await getUserJetton(cat);
+            const ptonBalance = await pton.getJettonBalance();
+            const firstFrac   = ptonBalance / 2n;
+            // Withdraws some pessimisticly
+            const mintRes = await assertWithdraw(cat.getSender(), firstFrac, false, false, 0n, 0n, 0, true);
+            const stateBefore = await getContractData(pool.address);
+            const poolBefore  = await pool.getFullData();
+            const balanceBefore = await getContractBalance(pool.address);
+            expect(poolBefore.requestedForWithdrawal).toEqual(firstFrac);
+            // Next round happens
+            await nextRound();
+            const expBurn = ptonBalance - firstFrac;
+            // And then some more is requested with fill_or kill to guarantee cactch case
+            const res = await pton.sendBurnWithParams(cat.getSender(),
+                                                      toNano('1.05'),
+                                                      expBurn, cat.address,
+                                                      true, // waitRound -> pessimistic
+                                                      true); // fill_or_kill -> guarantee kill in pessimistic mod
+            // No withdrawal message emmited
+            expect(res.transactions).not.toHaveTransaction({
+                from: pool.address,
+                to: cat.address,
+                op: Op.pool.withdrawal
+            });
+            // No stats notification
+            expect(res.transactions).not.toHaveTransaction({
+                from: pool.address,
+                to: deployer.address,
+                op: Op.interestManager.stats
+            });
+            // Expect burned amount to mint back
+            await assertPoolJettonMint(res.transactions, expBurn, cat.address);
+            // All state rolled back due to catch
+            expect(await getContractData(pool.address)).toEqualCell(stateBefore);
+            expect(await getContractBalance(pool.address)).toEqual(balanceBefore);
+        })
         it('Profit should impact projected jetton rate', async() => {
             await loadSnapshot('opt_depo');
             const poolBefore = await pool.getFullData();
@@ -1975,6 +2015,10 @@ describe('Integrational tests', () => {
             }
             roundId = 0;
         })
+        /*WIP
+        it('Pessimistic', async() => {
+            await loadSnapshot('long_initial');
+            optimistic = false;
             for(let i = 0; i < roundCount; i++) {
                 actors = {
                     nms: depositors[Symbol.iterator](),
@@ -2030,6 +2074,7 @@ describe('Integrational tests', () => {
                 await pool.sendTouch(deployer.getSender());
             }
         })
+        */
     });
     describe.skip('Attacks', () => {
     it('Should not faiil on total balance = 0 and supply > 0', async() => {
