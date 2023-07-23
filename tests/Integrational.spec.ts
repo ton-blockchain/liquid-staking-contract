@@ -1923,16 +1923,16 @@ describe('Integrational tests', () => {
                 const myControllers = controllers.get(validator.wallet.address.toString())!;
                 const shouldAct = (roundId & 1);
                 const vSender   = validator.wallet.getSender();
-                const curElect  = await announceElections();
+                // Announcing elections
                 for(let i = 0; i < nmPerValidator; i++) {
                     let actingController = myControllers[i];
-                    await actingController.sendUpdateHash(vSender);
+                    const hashUpd = await actingController.sendUpdateHash(vSender);
                     if((i & 1) == shouldAct) {
                         console.log(`Acting on ${i}`);
                         const controllerData = await actingController.getControllerData();
                         if(controllerData.state == ControllerState.FUNDS_STAKEN) {
-                            waitUnlock(controllerData.validatorSetChangeTime);
-                            console.log("Recovering loan");
+                            waitUnlock(hashUpd.transactions[1].now);
+                            console.log(`Recovering loan {$i}`);
                             await elector.sendTickTock("tick");
                             await elector.sendTickTock("tick");
                             const res = await actingController.sendRecoverStake(vSender);
@@ -1943,9 +1943,7 @@ describe('Integrational tests', () => {
                                 value: (x) => x! >= sConf.min_stake
                             });
                         }
-                        else {
-                            console.log(`Controller state:${controllerData.state}`);
-                        }
+                        const curElect  = await announceElections();
                         console.log(`Requesting loan ${i}`);
                         await assertGetLoan(actingController, sConf.min_stake, true);
                         const res = await actingController.sendNewStake(vSender, sConf.min_stake + toNano('1'),
