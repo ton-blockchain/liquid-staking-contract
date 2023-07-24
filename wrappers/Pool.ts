@@ -105,7 +105,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeInt(0n, 1) // halted?
               .storeCoins(0) // total_balance
               .storeRef(mintersData)
-              .storeUint(100 * (2 ** 8), 24) // minimal interest_rate
+              .storeUint(Conf.testInterest, 24) // minimal interest_rate
               .storeInt(config.optimistic_deposit_withdrawals, 1) // optimistic_deposit_withdrawals
               .storeInt(-1n, 1) // deposits_open?
               .storeUint(0, 256) // saved_validator_set_hash

@@ -21,6 +21,7 @@ export abstract class Conf {
     static readonly burnRequestValue = toNano('0.01');
     static readonly disbalanceTolerance = 30;
     static readonly shareBase = BigInt(256*256*256); // divisor?
+    static readonly testInterest = 100 << 8;
 };
 
 export abstract class Op {
