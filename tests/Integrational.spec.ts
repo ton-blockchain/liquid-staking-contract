@@ -1710,6 +1710,11 @@ describe('Integrational tests', () => {
                 to: cat.address,
                 op: Op.pool.withdrawal
             });
+            // No payout distribution
+            expect(res.transactions).not.toHaveTransaction({
+                from: pool.address,
+                op: NFTOp.start_distribution
+            });
             // No stats notification
             expect(res.transactions).not.toHaveTransaction({
                 from: pool.address,
@@ -1720,7 +1725,13 @@ describe('Integrational tests', () => {
             await assertPoolJettonMint(res.transactions, expBurn, cat.address);
             // All state rolled back due to catch
             expect(await getContractData(pool.address)).toEqualCell(stateBefore);
-            expect(await getContractBalance(pool.address)).toEqual(balanceBefore);
+            const poolTx = findTransaction(res.transactions, {on: pool.address})!;
+            let storageFee = 0n;
+            if(poolTx.description.type !== "generic")
+                throw(Error("Generic expected"));
+            if(poolTx.description.storagePhase)
+                storageFee = poolTx.description.storagePhase.storageFeesCollected;
+            expect(await getContractBalance(pool.address)).toEqual(balanceBefore - storageFee);
         })
         it('Profit should impact projected jetton rate', async() => {
             await loadSnapshot('opt_depo');
