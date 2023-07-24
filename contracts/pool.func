@@ -574,7 +574,8 @@ int muldiv_extra(int a, int b, int c) inline {
     ifnot(requested_for_deposit) {
         return ();
     }
-    int jetton_mint = muldiv_extra(requested_for_deposit, supply, total_balance);
+    ;; if supply == 0 distribute via 1:1 ratio
+    int jetton_mint = supply ? muldiv_extra(requested_for_deposit, supply, total_balance) : requested_for_deposit;
     sent_during_rotation += TRANSFER_NOTIFICATION_AMOUNT + PAYOUT_DISTRIBUTION_AMOUNT;
     request_to_mint_pool_jettons(deposit_payout,
                                  jetton_mint,
