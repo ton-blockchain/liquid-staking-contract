@@ -1869,7 +1869,7 @@ describe('Cotroller mock', () => {
         const trans = res.transactions[1];
         expect(trans.outMessagesCount).toEqual(1);
         const retMsg = trans.outMessages.get(0)!;
-        const fwdFees = computeMessageForwardFees(msgConfMc, retMsg, true);
+        const fwdFees = computeMessageForwardFees(msgConfMc, retMsg);
         expect(res.transactions).toHaveTransaction({
           from: controller.address,
           to: validator.wallet.address,
