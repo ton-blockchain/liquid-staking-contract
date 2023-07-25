@@ -89,7 +89,7 @@ const int MINTER_DEPLOY_FEE = ONE_TON / 10;
 
 () log_loan (slice, int)  impure;
 () log_repayment (slice, int, int) impure;
-() log_round_completion (int, int, int, int) impure;
+() log_round_completion (int, int, int, int, int, int) impure;
 () log_round_rotation (int) impure;
 
 ([cell, int, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int, int] borrowers_data)  impure; ;; called from close_loan
@@ -497,7 +497,7 @@ int muldiv_extra(int a, int b, int c) inline {
                .store_signed_coins(profit)
                .store_coins(total_balance), ;; duplication at this point?
              msgflag::NON_BOUNCEABLE, sendmode::REGULAR);
-    log_round_completion(round_id, borrowed, returned, profit);
+    log_round_completion(round_id, borrowed, returned, profit, total_balance, supply);
 
     finalize_deposit_withdrawal_round(round_id);
 
@@ -516,11 +516,13 @@ int muldiv_extra(int a, int b, int c) inline {
                             .store_signed_coins(profit));
 }
 
-() log_round_completion (int round_id, int borrowed, int returned, int profit) impure {
+() log_round_completion (int round_id, int borrowed, int returned, int profit, int total_balance, int supply) impure {
     emit_log(3, begin_cell().store_uint(round_id, 32)
                             .store_coins(borrowed)
                             .store_coins(returned)
-                            .store_signed_coins(profit));
+                            .store_signed_coins(profit)
+                            .store_coins(total_balance)
+                            .store_coins(supply));
 }
 
 () log_round_rotation (int round_id) impure {
@@ -574,7 +576,8 @@ int muldiv_extra(int a, int b, int c) inline {
     ifnot(requested_for_deposit) {
         return ();
     }
-    int jetton_mint = muldiv_extra(requested_for_deposit, supply, total_balance);
+    ;; if supply == 0 distribute via 1:1 ratio
+    int jetton_mint = supply ? muldiv_extra(requested_for_deposit, supply, total_balance) : requested_for_deposit;
     sent_during_rotation += TRANSFER_NOTIFICATION_AMOUNT + PAYOUT_DISTRIBUTION_AMOUNT;
     request_to_mint_pool_jettons(deposit_payout,
                                  jetton_mint,

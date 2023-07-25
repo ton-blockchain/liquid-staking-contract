@@ -69,6 +69,10 @@ export const Errors = {
     wallet_balance_below_min: 81,
 }
 
+export const Conf = {
+    transfer_notification_amount: toNano('0.1')
+};
+
 
 export function payoutCollectionConfigToCell(config: PayoutCollectionConfig): Cell {
     return beginCell()

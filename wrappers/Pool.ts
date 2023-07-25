@@ -1,7 +1,6 @@
 import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano, TupleBuilder, Dictionary, DictionaryValue } from 'ton-core';
 
-import { JettonMinter as AwaitedJettonMinter} from '../contracts/awaited_minter/wrappers/JettonMinter';
-
+import { PayoutCollection } from "./PayoutNFTCollection";
 import { Conf, Op, PoolState } from "../PoolConstants";
 
 export type PoolConfig = {
@@ -106,7 +105,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeInt(0n, 1) // halted?
               .storeCoins(0) // total_balance
               .storeRef(mintersData)
-              .storeUint(100, 24) // minimal interest_rate
+              .storeUint(Conf.testInterest, 24) // minimal interest_rate
               .storeInt(config.optimistic_deposit_withdrawals, 1) // optimistic_deposit_withdrawals
               .storeInt(-1n, 1) // deposits_open?
               .storeUint(0, 256) // saved_validator_set_hash
@@ -118,7 +117,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               )
               .storeCoins(100 * 1000000000) // min_loan_per_validator
               .storeCoins(1000000 * 1000000000) // max_loan_per_validator
-              .storeUint(155, 24) // governance fee
+              .storeUint(155 * (2 ** 8), 24) // governance fee
               .storeRef(roles)
               .storeRef(codes)
            .endCell();
@@ -388,6 +387,20 @@ export class Pool implements Contract {
         });
     }
 
+    async sendDepositSettings(provider:ContractProvider, via:Sender, optimistic:boolean, open:boolean) {
+
+      await provider.internal(via, {
+        value: toNano('0.15'),
+        sendMode: SendMode.PAY_GAS_SEPARATELY,
+        body: beginCell()
+                .storeUint(Op.governor.set_deposit_settings, 32)
+                .storeUint(1, 64)
+                .storeBit(optimistic)
+                .storeBit(open)
+              .endCell(),
+      });
+    }
+
     // Get methods
     /*
     async getDepositPayout(provider: ContractProvider) {
@@ -403,12 +416,12 @@ export class Pool implements Contract {
     */
     async getDepositMinter(provider: ContractProvider) {
         let res = await this.getFullData(provider);
-        return AwaitedJettonMinter.createFromAddress(res.depositPayout!);
+        return PayoutCollection.createFromAddress(res.depositPayout!);
     }
 
     async getWithdrawalMinter(provider: ContractProvider) {
         let res = await this.getFullData(provider);
-        return AwaitedJettonMinter.createFromAddress(res.withdrawalPayout!);
+        return PayoutCollection.createFromAddress(res.withdrawalPayout!);
     }
     async getFinanceData(provider: ContractProvider) {
         return await this.getFullData(provider);
@@ -449,6 +462,14 @@ export class Pool implements Contract {
     }
 
 
+    async getControllerAddress(provider: ContractProvider, id:number, validator: Address) {
+      const {stack} = await provider.get('get_controller_address', [
+        {type: 'int', value: BigInt(id)},
+        {type: 'slice', cell: beginCell().storeAddress(validator).endCell()}
+      ]);
+
+      return stack.readAddress();
+    }
     async getFullData(provider: ContractProvider) {
         let { stack } = await provider.get('get_pool_full_data', []);
         let state = stack.readNumber() as State;

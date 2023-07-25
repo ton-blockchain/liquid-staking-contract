@@ -2,14 +2,26 @@ import {toNano} from "ton-core";
 
 export abstract class Conf {
     static readonly electorOpValue = toNano('1.03');
-    static readonly minStorage     = toNano('2');
+    static readonly minStorageController = toNano('2');
+    static readonly minStoragePool = toNano('10');
     static readonly depositFee     = toNano('0.25');
+    static readonly poolDepositFee = toNano('1');
     static readonly withdrawlFee   = toNano('0.25');
     static readonly minStake       = toNano('50000');
     static readonly hashUpdateFine = toNano('10');
     static readonly stakeRecoverFine = toNano('10');
     static readonly gracePeriod    = 600;
     static readonly sudoQuarantine = 86400;
+    static readonly serviceNotificationAmount = toNano('0.02');
+    static readonly governanceFee  = 155n * BigInt(2 ** 8);
+    static readonly finalizeRoundFee = toNano('1');
+    static readonly notificationAmount = toNano('0.1');
+    static readonly distributionAmount = toNano('0.2');
+    static readonly burnNotificationAmount = toNano('0.01');
+    static readonly burnRequestValue = toNano('0.01');
+    static readonly disbalanceTolerance = 30;
+    static readonly shareBase = BigInt(256*256*256); // divisor?
+    static readonly testInterest = 100 << 8;
 };
 
 export abstract class Op {
@@ -37,7 +49,7 @@ export abstract class Op {
         request_loan   : 0xe642c965,
         loan_repayment : 0xdfdca27b,
         deposit        : 0x47d54391,
-        withdraw       : 0xf34b091c,
+        withdraw       : 0x319B0CDC,
         withdrawal     : 0x0a77535c,
         deploy_controller : 0xb27edcad,
         touch: 0x4bc7c2df,
@@ -67,7 +79,16 @@ export abstract class Op {
     }
     static readonly jetton = {
         excesses: 0xd53276db,
-        transfer_notification: 0x7362d09c
+        internal_transfer: 0x178d4519,
+        transfer_notification: 0x7362d09c,
+        burn : 0x595f07bc,
+        burn_notification : 0x7bdd97de,
+        withdraw_tons : 0x6d8e5e3c,
+        withdraw_jettons : 0x768a50b2,
+
+        provide_wallet_address : 0x2c76b973,
+        take_wallet_address : 0xd1735400,
+        change_content : 0x5773d1f5,
     }
     static readonly payout = {
         init: 0xf5aa8943,

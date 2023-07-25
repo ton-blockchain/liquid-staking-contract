@@ -1030,7 +1030,7 @@ describe('Cotroller mock', () => {
       it('New stake too high', async () => {
         // tripple hash update cost
         const overDue   = (Conf.hashUpdateFine * 3n) + Conf.stakeRecoverFine;
-        const minAmount = Conf.minStorage + overDue;
+        const minAmount = Conf.minStorageController + overDue;
         const balance   = (await bc.getContract(controller.address)).balance;
         const msgVal    = toNano('10');
         const maxPossible = balance + msgVal - minAmount;
@@ -1070,7 +1070,7 @@ describe('Cotroller mock', () => {
         const deposit = toNano('100000');
         const validatorAmount = await controller.getValidatorAmount();
         const overDueFine   = Conf.hashUpdateFine * 3n + Conf.stakeRecoverFine;
-        const stakeBase     = deposit - Conf.electorOpValue + overDueFine + Conf.minStorage;
+        const stakeBase     = deposit - Conf.electorOpValue + overDueFine + Conf.minStorageController;
         let   maxPunishment = await controller.getMaxPunishment(stakeBase);
         if(maxPunishment <= validatorAmount) {
           const confDict = loadConfig(bc.config);
@@ -1386,7 +1386,7 @@ describe('Cotroller mock', () => {
        await bc.loadFrom(recoverReady);
        const stateBefore = await controller.getControllerData();
        bc.now = stateBefore.validatorSetChangeTime + eConf.stake_held_for + Conf.gracePeriod;
-       const minReq = Conf.stakeRecoverFine + Conf.minStorage;
+       const minReq = Conf.stakeRecoverFine + Conf.minStorageController;
        // Setting balance
        await bc.setShardAccount(controller.address, createShardAccount({
          address: controller.address,
@@ -1473,7 +1473,7 @@ describe('Cotroller mock', () => {
         const dataBefore = await controller.getControllerData();
         // We don't want to trigger loan repayment bounce, so have to use receiveMessage
         const controllerSmc = await bc.getContract(controller.address);
-        const minBalance    = Conf.minStorage + dataBefore.borrowedAmount;
+        const minBalance    = Conf.minStorageController + dataBefore.borrowedAmount;
         expect(controllerSmc.balance).toBeLessThan(minBalance);
         const offByOne = minBalance - controllerSmc.balance - 1n;
         const res = await controllerSmc.receiveMessage(internal({
@@ -1514,7 +1514,7 @@ describe('Cotroller mock', () => {
         await loadSnapshot('insolvent');
         let controllerSmc = await bc.getContract(controller.address);
         const dataBefore = await controller.getControllerData();
-        const reqBalance = Conf.minStorage + Conf.stakeRecoverFine + Conf.withdrawlFee + dataBefore.borrowedAmount + 1n;
+        const reqBalance = Conf.minStorageController + Conf.stakeRecoverFine + Conf.withdrawlFee + dataBefore.borrowedAmount + 1n;
         expect(controllerSmc.balance).toBeLessThan(reqBalance);
         const topUpAmount = reqBalance - controllerSmc.balance;
         const res = await controller.sendTopUp(deployer.getSender(), topUpAmount - 1n);
@@ -1582,7 +1582,7 @@ describe('Cotroller mock', () => {
         const dataBefore    = await controller.getControllerData();
         const controllerSmc = await bc.getContract(controller.address);
         const msgValue = toNano('0.2');
-        const availableFunds = controllerSmc.balance + msgValue - Conf.minStorage - Conf.withdrawlFee;
+        const availableFunds = controllerSmc.balance + msgValue - Conf.minStorageController - Conf.withdrawlFee;
         expect(availableFunds).toBeLessThan(dataBefore.borrowedAmount);
 
         const res = await controller.sendReturnAvailableFunds(deployer.getSender(), msgValue);
@@ -1605,7 +1605,7 @@ describe('Cotroller mock', () => {
         let   msgValue      = toNano('0.2');
         const dataBefore    = await controller.getControllerData();
         const controllerSmc = await bc.getContract(controller.address);
-        const availableFunds = controllerSmc.balance + msgValue  - Conf.minStorage - Conf.withdrawlFee;
+        const availableFunds = controllerSmc.balance + msgValue  - Conf.minStorageController - Conf.withdrawlFee;
         if(availableFunds < dataBefore.borrowedAmount) {
           // Send the reminder among with message
           msgValue += dataBefore.borrowedAmount - availableFunds;
@@ -1724,7 +1724,7 @@ describe('Cotroller mock', () => {
           });
         }
         // But only if there is > min storage + hash update fine on balance
-        const minReq = Conf.minStorage + Conf.hashUpdateFine;
+        const minReq = Conf.minStorageController + Conf.hashUpdateFine;
         const msgVal = toNano('1');
 
         // Setting balance
@@ -1779,7 +1779,7 @@ describe('Cotroller mock', () => {
           });
         }
         // But only if there is > min storage + hash update fine on balance
-        const minReq = Conf.minStorage + Conf.hashUpdateFine;
+        const minReq = Conf.minStorageController + Conf.hashUpdateFine;
         const msgVal = toNano('1');
 
         // Setting balance
@@ -1863,13 +1863,13 @@ describe('Cotroller mock', () => {
         await testValidatorWithdraw(Errors.incorrect_withdrawal_amount, validator.wallet.getSender(), 0n);
       });
       it('Validator should be able to withdraw from controller', async () => {
-        const availableFunds = (await controller.getValidatorAmount()) - Conf.minStorage;
+        const availableFunds = (await controller.getValidatorAmount()) - Conf.minStorageController;
 
         const res = await testValidatorWithdraw(Errors.success, validator.wallet.getSender(), availableFunds);
         const trans = res.transactions[1];
         expect(trans.outMessagesCount).toEqual(1);
         const retMsg = trans.outMessages.get(0)!;
-        const fwdFees = computeMessageForwardFees(msgConfMc, retMsg, true);
+        const fwdFees = computeMessageForwardFees(msgConfMc, retMsg);
         expect(res.transactions).toHaveTransaction({
           from: controller.address,
           to: validator.wallet.address,
