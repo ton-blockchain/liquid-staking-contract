@@ -29,6 +29,7 @@ export function controllerConfigToCell(config: ControllerConfig): Cell {
               .storeUint(0, 48)  // borrowing_time
               .storeUint(0, 2)   // sudoer addr_none
               .storeUint(0, 48)  // sudoer_set_at
+              .storeUint(0, 24)  // max_expected_interest
               .storeRef(
                   beginCell()
                   .storeUint(config.controllerId, 32)

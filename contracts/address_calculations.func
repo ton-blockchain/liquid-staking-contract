@@ -22,6 +22,7 @@ cell controller_init_data (cell static_data) {
             .store_timestamp(0) ;; borrowing_time
             .store_uint(0, 2) ;; sudoer addr_none
             .store_timestamp(0) ;; sudoer_set_at
+            .store_share(0)     ;; max_expected_interest
             .store_ref(static_data)
            .end_cell();
 }
