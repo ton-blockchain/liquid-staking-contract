@@ -491,15 +491,18 @@ export const filterTransaction = (txs: BlockchainTransaction[], match: FlatTrans
     return txs.filter(x => compareTransaction(flattenTransaction(x), match));
 }
 
+type MsgQueued = {
+    msg: Message,
+    parent?: BlockchainTransaction
+};
+
 export class Txiterator implements AsyncIterator<BlockchainTransaction>  {
-    private msqQueue: Message[];
+    private msqQueue: MsgQueued[];
     private blockchain: Blockchain;
-    private parentTx: BlockchainTransaction | undefined;
 
     constructor(bc:Blockchain, msg: Message) {
-        this.msqQueue = [msg];
+        this.msqQueue = [{msg}];
         this.blockchain = bc;
-        this.parentTx = undefined;
     }
 
     public async next(): Promise<IteratorResult<BlockchainTransaction>> {
@@ -507,23 +510,24 @@ export class Txiterator implements AsyncIterator<BlockchainTransaction>  {
             return {done: true, value: undefined};
         }
         const curMsg = this.msqQueue.shift()!;
-        if(curMsg.info.type !== "internal")
+        const inMsg  = curMsg.msg;
+        if(inMsg.info.type !== "internal")
             throw(Error("Internal only"));
-        const smc = await this.blockchain.getContract(curMsg.info.dest);
-        const res = smc.receiveMessage(curMsg, {now: this.blockchain.now});
+        const smc = await this.blockchain.getContract(inMsg.info.dest);
+        const res = smc.receiveMessage(inMsg, {now: this.blockchain.now});
+        const bcRes = {
+            ...res,
+            events: extractEvents(res),
+            parent: curMsg.parent,
+            children: [],
+            externals: []
+        }
         for(let i = 0; i < res.outMessagesCount; i++) {
             const outMsg = res.outMessages.get(i)!;
             // Only add internal for now
             if(outMsg.info.type === "internal") {
-                this.msqQueue.push(outMsg)
+                this.msqQueue.push({msg:outMsg, parent: bcRes})
             }
-        }
-        const bcRes = {
-            ...res,
-            events: extractEvents(res),
-            parent: this.parentTx,
-            children: [],
-            externals: []
         }
         return {done: false, value: bcRes};
     }
