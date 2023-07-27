@@ -731,10 +731,14 @@ describe('Cotroller mock', () => {
       it('Controller should have enough balance to apply for loan', async () => {
         await bc.loadFrom(reqReady);
 
-        const maxLoan = toNano('200000');
+        let   maxLoan = toNano('200000');
 
         const controllerSmc  = await bc.getContract(controller.address);
-        const balanceForLoan = await controller.getBalanceForLoan(maxLoan, interest);
+        let   balanceForLoan = await controller.getBalanceForLoan(maxLoan, interest);
+        while(controllerSmc.balance > balanceForLoan) {
+          maxLoan *= 2n;
+          balanceForLoan = await controller.getBalanceForLoan(maxLoan, interest);
+        }
         expect(controllerSmc.balance).toBeLessThan(balanceForLoan);
 
         await testRequestLoan(Errors.too_high_loan_request_amount,
