@@ -6,6 +6,7 @@ export const compile: CompilerConfig = {
     preCompileHook: async () => {
         await compileFunc('PayoutNFTItem');
     },
-    targets: [ 'contracts/auto/payout-nft-item-code.func',
+    targets: [ 'contracts/versioning.func',
+               'contracts/auto/payout-nft-item-code.func',
                'contracts/payout_nft/nft-collection.func'],
 };
