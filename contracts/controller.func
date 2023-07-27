@@ -141,6 +141,8 @@ int check_new_stake_msg(slice cs);
                            sendmode::PAY_FEES_SEPARETELY); ;; remaining inbound message amount, fee deducted from
                   borrowed_amount = 0;
                   borrowing_time = 0;
+                  stake_amount_sent = 0;
+                  stake_at = 0;
                 } else {
                   state = state::INSOLVENT;
                 }
@@ -182,9 +184,11 @@ int check_new_stake_msg(slice cs);
                 ifnot(borrowing_time) {
                   borrowing_time = now();
                 }
-                borrowed_amount += in_msg_body~load_coins();
+                int credit_amount = in_msg_body~load_coins();
+                borrowed_amount += credit_amount;
                 in_msg_body.end_parse();
-                throw_unless(error::credit_interest_too_high, borrowed_amount < muldiv(msg_value, max_expected_interest + SHARE_BASIS, SHARE_BASIS) + ONE_TON);
+                throw_unless(error::credit_interest_too_high, credit_amount < muldiv(msg_value, max_expected_interest + SHARE_BASIS, SHARE_BASIS) + ONE_TON);
+                max_expected_interest = 0;
                 if(state == state::SENT_BORROWING_REQUEST) {
                   state = state::REST;
                 }
