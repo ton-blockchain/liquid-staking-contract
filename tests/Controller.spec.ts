@@ -497,6 +497,24 @@ describe('Cotroller mock', () => {
         success: true
       });
     });
+    it('Approve should only be accepted from approver address', async () => {
+      const notApprover  = differentAddress(deployer.address);
+      await testApprove(Errors.wrong_sender, bc.sender(notApprover), true);
+    });
+
+    it('Approve from approver address should set approve flag', async () => {
+      await testApprove(0, deployer.getSender(), true);
+      snapStates.set('approved', bc.snapshot());
+    });
+    it('Disapprove should only be accepted from approver address', async () => {
+      await loadSnapshot('approved');
+      const notApprover  = differentAddress(deployer.address);
+      await testApprove(Errors.wrong_sender, bc.sender(notApprover), false);
+    });
+    it('Disapprove from approver address should unset approve flag', async () => {
+      await loadSnapshot('approved');
+      await testApprove(0, deployer.getSender(), false)
+    });
 
     it('Should account for controller credit', async () => {
       const borrowAmount = getRandomTon(100000, 200000);
@@ -528,25 +546,7 @@ describe('Cotroller mock', () => {
       expect(dataAfter.borrowingTime).toEqual(dataBefore.borrowingTime);
       expect(dataAfter.state).toEqual(ControllerState.REST);
     });
-    it('Approve should only be accepted from approver address', async () => {
-      const notApprover  = differentAddress(deployer.address);
-      await testApprove(Errors.wrong_sender, bc.sender(notApprover), true);
-    });
 
-    it('Approve from approver address should set approve flag', async () => {
-      await testApprove(0, deployer.getSender(), true);
-      snapStates.set('approved', bc.snapshot());
-    });
-    it('Disapprove should only be accepted from approver address', async () => {
-      await loadSnapshot('approved');
-      const notApprover  = differentAddress(deployer.address);
-      await testApprove(Errors.wrong_sender, bc.sender(notApprover), false);
-    });
-    it('Disapprove from approver address should unset approve flag', async () => {
-      await loadSnapshot('approved');
-      await testApprove(0, deployer.getSender(), false)
-    });
- 
     describe('Request loan', () => {
       const interest = Math.floor(0.05 * 256 * 256 * 256);
       let approved : BlockchainSnapshot;
