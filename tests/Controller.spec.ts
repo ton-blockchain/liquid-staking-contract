@@ -228,7 +228,7 @@ describe('Cotroller mock', () => {
         };
 
         // Deploying controller
-        await controller.sendDeploy(deployer.getSender());
+        await controller.sendDeploy(deployer.getSender(), toNano('20000'));
         // Set validator set to adequate time values
         randVset();
         InitialState = bc.snapshot();
