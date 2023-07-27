@@ -817,13 +817,15 @@ describe('Cotroller mock', () => {
           body: reqLoanMsg,
           value: toNano('1')
         }), {now: bc.now});
-        console.log(reqRes);
+        //console.log(reqRes);
         expect(computedGeneric(reqRes).success).toBe(true);
         // Now controller expects loan <= maxInterest
         const poolSender = bc.sender(poolAddress);
         // loanAmoun + max interest
         const maxExpValue = loanAmount + (loanAmount * BigInt(maxInterest) / Conf.shareBase);
-        let res = await controller.sendCredit(poolSender, maxExpValue + 1n, toNano('1'));
+        const delta = toNano('1');
+        snapStates.set('creditAwaited', bc.snapshot());
+        let res = await controller.sendCredit(poolSender, maxExpValue + delta + 1n, toNano('1'));
         expect(res.transactions).toHaveTransaction({
           on: controller.address,
           from: poolAddress,
@@ -844,7 +846,7 @@ describe('Cotroller mock', () => {
         expect(res.transactions).toHaveTransaction(bounceTx);
 
         // Checking exactly requested interest
-        res = await controller.sendCredit(poolSender, maxExpValue, toNano('1'));
+        res = await controller.sendCredit(poolSender, maxExpValue, loanAmount);
         expect(res.transactions).toHaveTransaction({
           on: controller.address,
           from: poolAddress,
@@ -853,7 +855,8 @@ describe('Cotroller mock', () => {
         });
         expect(res.transactions).not.toHaveTransaction(bounceTx);
         // Checking less that requested interest
-        res = await controller.sendCredit(poolSender, maxExpValue - BigInt(getRandomTon(1, 20)), toNano('1'))
+        await loadSnapshot('creditAwaited');
+        res = await controller.sendCredit(poolSender, maxExpValue - BigInt(getRandomTon(1, 20)), loanAmount);
         expect(res.transactions).toHaveTransaction({
           on: controller.address,
           from: poolAddress,
