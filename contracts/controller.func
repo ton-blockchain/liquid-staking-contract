@@ -24,10 +24,10 @@
 
 const int ONE_TON = 1000000000;
 const int ELECTOR_OPERATION_VALUE = 103 * ONE_TON / 100 ;
-const int MIN_TONS_FOR_STORAGE = 2 * ONE_TON; ;; 10 TON
+const int MIN_TONS_FOR_STORAGE = 2 * ONE_TON; ;; 2 TON
 const int DEPOSIT_FEE = ONE_TON / 4; ;; 0.25 TON
 const int WITHDRAWAL_FEE = ONE_TON / 4; ;; 0.25 TON
-const int MIN_STAKE_TO_SEND = 50000 * ONE_TON; ;; 300 000 TON
+const int MIN_STAKE_TO_SEND = 50000 * ONE_TON; ;; 50 000 TON
 
 ;; Time in seconds for validator to make mandatory actions, such as
 ;; recover stake or update hash
@@ -55,6 +55,8 @@ global int borrowing_time;
 
 global slice sudoer;
 global int sudoer_set_at;
+
+global int max_expected_interest;
 
 global slice static_data;
 global int controller_id;
@@ -139,6 +141,8 @@ int check_new_stake_msg(slice cs);
                            sendmode::PAY_FEES_SEPARETELY); ;; remaining inbound message amount, fee deducted from
                   borrowed_amount = 0;
                   borrowing_time = 0;
+                  stake_amount_sent = 0;
+                  stake_at = 0;
                 } else {
                   state = state::INSOLVENT;
                 }
@@ -180,8 +184,11 @@ int check_new_stake_msg(slice cs);
                 ifnot(borrowing_time) {
                   borrowing_time = now();
                 }
-                borrowed_amount += in_msg_body~load_coins();
+                int credit_amount = in_msg_body~load_coins();
+                borrowed_amount += credit_amount;
                 in_msg_body.end_parse();
+                throw_unless(error::credit_interest_too_high, credit_amount < muldiv(msg_value, max_expected_interest + SHARE_BASIS, SHARE_BASIS) + ONE_TON);
+                max_expected_interest = 0;
                 if(state == state::SENT_BORROWING_REQUEST) {
                   state = state::REST;
                 }
@@ -352,6 +359,7 @@ int check_new_stake_msg(slice cs);
                   int max_loan = in_msg_body~load_coins();
                   int max_interest = in_msg_body~load_share();
                   in_msg_body.end_parse();
+                  max_expected_interest = max_interest;
 
                   throw_unless(error::controller_not_approved, approved?);
 
@@ -434,6 +442,7 @@ int check_new_stake_msg(slice cs);
         .store_timestamp(borrowing_time)
         .store_slice(sudoer)
         .store_timestamp(sudoer_set_at)
+        .store_share(max_expected_interest)
         .store_slice(static_data)
         .end_cell());
 }
@@ -458,6 +467,8 @@ int check_new_stake_msg(slice cs);
 
     sudoer = ds~load_msg_addr();
     sudoer_set_at = ds~load_timestamp();
+
+    max_expected_interest = ds~load_share();
 
     static_data = ds;
 
