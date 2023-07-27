@@ -638,16 +638,25 @@ describe('Cotroller mock', () => {
         expect(await getControllerState()).toEqualCell(stateBefore);
       });
       it('Should not be able to request loan if previous loan is not returned yet', async () => {
-        await loadSnapshot('borrowed');
+        await loadSnapshot('approved');
 
-        const dataBefore  = await controller.getControllerData();
-        if(!dataBefore.approved)
-          await controller.sendApprove(deployer.getSender(), true);
+        const curVset      = getVset(bc.config, 34);
+        const electStarted = curVset.utime_unitl - eConf.begin_before + 1;
+        if(getCurTime() < electStarted)
+          bc.now = curVset.utime_unitl - eConf.begin_before + 1;
+        const loanAmount = toNano('20000');
+        const borrowAmount = loanAmount + (loanAmount * BigInt(interest) / Conf.shareBase);
 
+        await testRequestLoan(0,
+                              validator.wallet.getSender(),
+                              loanAmount,
+                              loanAmount,
+                              interest);
+        await controller.sendCredit(bc.sender(poolAddress), borrowAmount, borrowAmount);
         await testRequestLoan(Errors.multiple_loans_are_prohibited,
                               validator.wallet.getSender(),
-                              toNano('100000'),
-                              toNano('200000'),
+                              loanAmount,
+                              loanAmount,
                               interest);
       });
       it('Loan requirements should change accordingly to interest passed', async () => {
