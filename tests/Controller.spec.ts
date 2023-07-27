@@ -1170,8 +1170,8 @@ describe('Cotroller mock', () => {
                            deposit);
       });
       it('Validator stake should have enough to handle punishment from elector', async () => {
-        const deposit = toNano('100000');
         const validatorAmount = await controller.getValidatorAmount();
+        const deposit = validatorAmount + toNano('100000');
         const overDueFine   = Conf.hashUpdateFine * 3n + Conf.stakeRecoverFine;
         const stakeBase     = deposit - Conf.electorOpValue + overDueFine + Conf.minStorageController;
         let   maxPunishment = await controller.getMaxPunishment(stakeBase);
@@ -1182,10 +1182,10 @@ describe('Cotroller mock', () => {
                            .storeCoins(toNano('5000')) //Default flat fine
                            .storeUint((1 << 32) - 1, 32) // All of the stake
                            .storeUint(256, 16)
-                           .storeUint(256, 16)
+                           .storeUint((1 << 16) - 1, 16)
                            .storeUint(0, 16)
                            .storeUint(0, 16)
-                           .storeUint(256, 16)
+                           .storeUint((1 << 16) - 1, 16)
                            .storeUint(256, 16)
                           .endCell())
           bc.setConfig(beginCell().storeDictDirect(confDict).endCell());
