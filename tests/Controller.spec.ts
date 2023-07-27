@@ -4,7 +4,7 @@ import { Address, Sender, Cell, toNano, Dictionary, beginCell } from 'ton-core';
 import { keyPairFromSeed, getSecureRandomBytes, getSecureRandomWords, KeyPair } from 'ton-crypto';
 import '@ton-community/test-utils';
 import { compile } from '@ton-community/blueprint';
-import { randomAddress } from "@ton-community/test-utils";
+import { FlatTransactionComparable, randomAddress } from "@ton-community/test-utils";
 import { calcMaxPunishment, getElectionsConf, getValidatorsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
 import { buff2bigint, computedGeneric, differentAddress, getMsgExcess, getRandomInt, getRandomTon, sendBulkMessage } from "../utils";
 import { Conf, ControllerState, Errors, Op } from "../PoolConstants";
@@ -799,6 +799,71 @@ describe('Cotroller mock', () => {
         }));
         const dataAfter = await controller.getControllerData();
         expect(dataAfter.state).toEqual(ControllerState.REST);
+      });
+      it('Controller should check if lending interest complies with requested interest', async () =>{
+        await loadSnapshot('approved');
+        const curVset      = getVset(bc.config, 34);
+        const electStarted = curVset.utime_unitl - eConf.begin_before + 1;
+        if(getCurTime() < electStarted)
+          bc.now = curVset.utime_unitl - eConf.begin_before + 1;
+
+        const loanAmount  = getRandomTon(10000, 20000);
+        const maxInterest = getRandomInt(100, 300) << 8;
+        const reqLoanMsg  = Controller.requestLoanMessage(loanAmount, loanAmount, maxInterest);
+        const controllerSmc = await bc.getContract(controller.address);
+        const reqRes  =  controllerSmc.receiveMessage(internal({
+          from: validator.wallet.address,
+          to: controller.address,
+          body: reqLoanMsg,
+          value: toNano('1')
+        }), {now: bc.now});
+        //console.log(reqRes);
+        expect(computedGeneric(reqRes).success).toBe(true);
+        // Now controller expects loan <= maxInterest
+        const poolSender = bc.sender(poolAddress);
+        // loanAmoun + max interest
+        const maxExpValue = loanAmount + (loanAmount * BigInt(maxInterest) / Conf.shareBase);
+        const delta = toNano('1');
+        snapStates.set('creditAwaited', bc.snapshot());
+        let res = await controller.sendCredit(poolSender, maxExpValue + delta + 1n, toNano('1'));
+        expect(res.transactions).toHaveTransaction({
+          on: controller.address,
+          from: poolAddress,
+          op: Op.controller.credit,
+          aborted: true,
+          success: false,
+          // exit_code: could be here
+        });
+        const bounceTx: FlatTransactionComparable = {
+          on: poolAddress,
+          from: controller.address,
+          inMessageBounced: true,
+          body: (x) => {
+            const bs = x!.beginParse().skip(32);
+            return bs.loadUint(32) == Op.controller.credit
+          }
+        };
+        expect(res.transactions).toHaveTransaction(bounceTx);
+
+        // Checking exactly requested interest
+        res = await controller.sendCredit(poolSender, maxExpValue, loanAmount);
+        expect(res.transactions).toHaveTransaction({
+          on: controller.address,
+          from: poolAddress,
+          op: Op.controller.credit,
+          success: true
+        });
+        expect(res.transactions).not.toHaveTransaction(bounceTx);
+        // Checking less that requested interest
+        await loadSnapshot('creditAwaited');
+        res = await controller.sendCredit(poolSender, maxExpValue - BigInt(getRandomTon(1, 20)), loanAmount);
+        expect(res.transactions).toHaveTransaction({
+          on: controller.address,
+          from: poolAddress,
+          op: Op.controller.credit,
+          success: true
+        });
+        expect(res.transactions).not.toHaveTransaction(bounceTx);
       });
     });
     describe('Return unused loan', () => {

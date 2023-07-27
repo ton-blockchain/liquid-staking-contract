@@ -6,14 +6,14 @@ import { keyPairFromSeed, getSecureRandomBytes, getSecureRandomWords, KeyPair } 
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
 import { JettonWallet as DAOWallet } from '../wrappers/JettonWallet';
 import { Pool, PoolConfig } from '../wrappers/Pool';
-import { Controller } from '../wrappers/Controller';
+import { Controller, ControllerConfig, controllerConfigToCell } from '../wrappers/Controller';
 import { Elector } from "../wrappers/Elector";
 import { Config  } from "../wrappers/Config";
 import { setConsigliere } from "../wrappers/PayoutMinter.compile";
 import { Conf, ControllerState, Errors, Op } from "../PoolConstants";
 import { PayoutCollection, Conf as NFTConf, Op as NFTOp } from "../wrappers/PayoutNFTCollection";
 import { PayoutItem } from "../wrappers/PayoutNFTItem";
-import { testJettonTransfer, buff2bigint, computedGeneric, getRandomTon, testControllerMeta, getExternals, testLog, testLogRepayment, testMintMsg, assertLog, muldivExtra, testJettonNotification, filterTransaction, findTransaction, testJettonBurnNotification, approximatelyEqual } from "../utils";
+import { testJettonTransfer, buff2bigint, computedGeneric, getRandomTon, testControllerMeta, getExternals, testLog, testLogRepayment, testMintMsg, assertLog, muldivExtra, testJettonNotification, filterTransaction, findTransaction, testJettonBurnNotification, approximatelyEqual, Txiterator, executeTill, differentAddress, executeFrom } from "../utils";
 import { ElectorTest } from "../wrappers/ElectorTest";
 import { getElectionsConf, getStakeConf, getValidatorsConf, getVset, loadConfig, packStakeConf, packValidatorsConf } from "../wrappers/ValidatorUtils";
 import { ConfigTest } from "../wrappers/ConfigTest";
@@ -72,6 +72,7 @@ describe('Integrational tests', () => {
     let depositors: MintChunk[];
 
     let getContractData:(address: Address) => Promise<Cell>;
+    let setContractData:(address: Address, data: Cell) => Promise<void>;
     let getContractBalance:(address: Address) => Promise<bigint>;
     let getNewController:(txs: BlockchainTransaction[]) => SandboxContract<Controller>;
     let getUserJetton:(address: Address | SandboxContract<TreasuryContract>) => Promise<SandboxContract<DAOWallet>>;
@@ -270,6 +271,21 @@ describe('Integrational tests', () => {
           if(!smc.account.account.storage.state.state.data)
             throw("Data is not present");
           return smc.account.account.storage.state.state.data
+        }
+        setContractData = async (address, data) => {
+            const smc = await bc.getContract(address);
+            if(!smc.account.account)
+              throw("Account not found")
+            if(smc.account.account.storage.state.type != "active" )
+              throw("Atempting to get data on inactive account");
+
+            const newAccount = createShardAccount({
+                address,
+                code: smc.account.account.storage.state.state.code!,
+                data,
+                balance: smc.balance
+            });
+            await bc.setShardAccount(address, newAccount);
         }
         getContractBalance = async (address: Address) => {
             const smc = await bc.getContract(address);
@@ -2086,6 +2102,79 @@ describe('Integrational tests', () => {
             }
         })
         */
+    });
+    describe('Bounce', () => {
+        it('Should handle controller::credit bounce correctly', async() => {
+            await loadSnapshot('deposited');
+
+            // Increasing validator part just in case
+            await controller.sendTopUp(validator.wallet.getSender(), toNano('100000'));
+            const loanAmount = getRandomTon(10000, 20000);
+            const expInterest = loanAmount * BigInt(Conf.testInterest) / Conf.shareBase;
+            const reqMsg = internal({
+                from: validator.wallet.address,
+                to: controller.address,
+                body: Controller.requestLoanMessage(loanAmount, loanAmount, Conf.testInterest),
+                value: toNano('1')
+            });
+            const poolBefore = await pool.getFullData();
+            const curVset = getVset(bc.config, 34);
+            await controller.sendUpdateHash(deployer.getSender());
+            if(getCurTime() < curVset.utime_unitl - eConf.begin_before) {
+                bc.now = curVset.utime_unitl - eConf.begin_before + 1;
+            }
+            const txInterator = new Txiterator(bc, reqMsg);
+            // Execute until point where pool processed credit request
+            const creditTx = await executeTill(txInterator, {
+                from: controller.address,
+                to: pool.address,
+                op: Op.pool.request_loan,
+                success: true
+            });
+            // Make sure pool data changed accordingly
+            let poolAfter = await pool.getFullData();
+            expect(poolAfter.currentRound.activeBorrowers).toEqual(poolBefore.currentRound.activeBorrowers + 1n);
+            expect(poolAfter.currentRound.borrowed).toEqual(poolBefore.currentRound.borrowed + loanAmount);
+            expect(poolAfter.currentRound.expected).toEqual(poolBefore.currentRound.expected + loanAmount + expInterest);
+            /* Now in reality could trigger controller::credit bounce to pool?
+             * Not sure.
+             * Either pool address in controller data should change
+             * https://github.com/EmelyanenkoK/jetton_pool/blob/main/contracts/controller.func#L178
+             * I don't see how that is possible
+             * Or, perhaps controller was inactive for a very long time and can't pay for storage.
+             * Not likely either, because it won't be able to pass controller solvency checks.
+             * Is it ever possible?
+             **/
+             // Not safe update, but will do for the test
+             const newConfig: ControllerConfig = {
+                 controllerId: 0,
+                 validator: validator.wallet.address,
+                 pool: differentAddress(pool.address),
+                 governor: deployer.address,
+                 approver: deployer.address,
+                 halter: deployer.address
+             }
+             await setContractData(controller.address, controllerConfigToCell(newConfig));
+
+             const txsAfter = await executeFrom(txInterator);
+             expect(txsAfter).toHaveTransaction({
+                 on: controller.address,
+                 from: pool.address,
+                 exitCode: Errors.wrong_sender
+             });
+             expect(txsAfter).toHaveTransaction({
+                 on: pool.address,
+                 body: (x) => {
+                     const bs = x!.beginParse().skip(32);
+                     return bs.preloadUint(32) == Op.controller.credit;
+                 },
+                 inMessageBounced: true,
+                 success: true
+             });
+             poolAfter = await pool.getFullDataRaw();
+             expect(poolAfter.currentRound.activeBorrowers).toEqual(poolBefore.currentRound.activeBorrowers);
+             console.log(`Profit after:${poolAfter.currentRound.profit}`);
+        });
     });
     describe.skip('Attacks', () => {
     it('Should not faiil on total balance = 0 and supply > 0', async() => {
