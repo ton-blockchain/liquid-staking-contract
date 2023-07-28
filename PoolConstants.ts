@@ -10,6 +10,7 @@ export abstract class Conf {
     static readonly stakeRecoverFine = toNano('10');
     static readonly gracePeriod    = 600;
     static readonly sudoQuarantine = 86400;
+    static readonly governorQuarantine = 86400;
 };
 
 export abstract class Op {
@@ -127,6 +128,8 @@ export abstract class Errors {
  static readonly withdrawal_while_credited = 0xf800;
  static readonly incorrect_withdrawal_amount = 0xf801;
  static readonly halted = 0x9285;
+ static readonly governor_update_too_soon = 0xa001;
+ static readonly governor_update_not_matured = 0xa002;
 
 
  static readonly newStake = {
