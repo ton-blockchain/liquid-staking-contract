@@ -24,6 +24,7 @@
 
 const int ONE_TON = 1000000000;
 const int ELECTOR_OPERATION_VALUE = 103 * ONE_TON / 100 ;
+const int MIN_REQUEST_LOAN_VALUE = ONE_TON ; ;; should cover controller and pool gas
 const int MIN_TONS_FOR_STORAGE = 2 * ONE_TON; ;; 2 TON
 const int DEPOSIT_FEE = ONE_TON / 4; ;; 0.25 TON
 const int WITHDRAWAL_FEE = ONE_TON / 4; ;; 0.25 TON
@@ -362,6 +363,7 @@ int check_new_stake_msg(slice cs);
                 } elseif (op == controller::send_request_loan) {
                   assert_state!(state::REST);
                   assert_sender!(sender_address, validator);
+                  throw_unless(error::too_low_request_loan_value, msg_value > MIN_REQUEST_LOAN_VALUE);
                   slice request = in_msg_body;
                   int min_loan = in_msg_body~load_coins();
                   int max_loan = in_msg_body~load_coins();
