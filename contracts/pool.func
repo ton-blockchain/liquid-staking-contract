@@ -241,7 +241,7 @@ int muldiv_extra(int a, int b, int c) inline {
                 assert_sender!(sender_address, governor);
                 if(in_msg_body~load_bool()) {
                     governor = in_msg_body~load_msg_addr();
-                    throw_unless(error::governor_update_not_matured, governor_update_after > now());
+                    throw_unless(error::governor_update_not_matured, governor_update_after < now());
                     governor_update_after = 0xffffffffffff;
                 }
                 if(in_msg_body~load_bool()) {
