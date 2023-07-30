@@ -187,11 +187,11 @@ int muldiv_extra(int a, int b, int c) inline {
         slice response_address = in_msg_body~load_msg_addr();
         ;; after that point we should not revert because jettons should not be lost
         try {
+            throw_unless(error::not_enough_TON_to_process, msg_value > WITHDRAWAL_FEE);
             int request_immediate_withdrawal_if_possible = ~ in_msg_body~load_bool();
             int fill_or_kill = in_msg_body~load_bool();
             update_round();
             assert_not_halted!(); ;; otherwise mint back
-            throw_unless(error::not_enough_TON_to_process, msg_value > WITHDRAWAL_FEE);
             int approximate_amount = muldiv(jetton_amount, total_balance, supply);
             int available_funds = balance - msg_value - MIN_TONS_FOR_STORAGE - sent_during_rotation;
 
