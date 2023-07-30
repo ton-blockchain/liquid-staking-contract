@@ -107,6 +107,8 @@ int check_new_stake_msg(slice cs);
 
                 if (state == state::SENT_STAKE_REQUEST) {
                     state = state::REST;
+                } else {
+                    halted? = true;
                 }
             } elseif (equal_slice_bits(sender_address, pool)) {
               if(op == pool::loan_repayment) {
@@ -115,6 +117,8 @@ int check_new_stake_msg(slice cs);
               } elseif (op == pool::request_loan) {
                 if (state == state::SENT_BORROWING_REQUEST) {
                   state = state::REST;
+                } else {
+                  halted? = true;
                 }
               }
             }
@@ -153,16 +157,18 @@ int check_new_stake_msg(slice cs);
                     ;; further balance depletion due to repetitive STAKE_RECOVER_FINE
                     halted? = true;
                     state = state::INSOLVENT;
+                } else {
+                    halted? = true;
                 }
             }
 
             if (state == state::SENT_STAKE_REQUEST) {
                 if (op == elector::new_stake_error) { ;; error when new_stake; stake returned
                     state = state::REST;
-                }
-
-                if (op == elector::new_stake_ok) {
+                } elseif (op == elector::new_stake_ok) {
                     state = state::FUNDS_STAKEN;
+                } else {
+                    halted? = true;
                 }
             }
 
