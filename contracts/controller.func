@@ -137,18 +137,20 @@ int check_new_stake_msg(slice cs);
             if (op == elector::recover_stake_ok) {
                 ;; Note, this request will be processed even in halted state
                 state = state::REST;
-                if(balance >= MIN_TONS_FOR_STORAGE + borrowed_amount) {
-                  send_msg(pool,
-                           borrowed_amount, ;; TODO add fee???
-                           begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),
-                           msgflag::BOUNCEABLE,
-                           sendmode::PAY_FEES_SEPARETELY); ;; remaining inbound message amount, fee deducted from
-                  borrowed_amount = 0;
-                  borrowing_time = 0;
-                  stake_amount_sent = 0;
-                  stake_at = 0;
-                } else {
-                  state = state::INSOLVENT;
+                if( borrowed_amount ) {
+                  if(balance >= MIN_TONS_FOR_STORAGE + borrowed_amount) {
+                    send_msg(pool,
+                             borrowed_amount, ;; TODO add fee???
+                             begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),
+                             msgflag::BOUNCEABLE,
+                             sendmode::PAY_FEES_SEPARETELY); ;; remaining inbound message amount, fee deducted from
+                    borrowed_amount = 0;
+                    borrowing_time = 0;
+                    stake_amount_sent = 0;
+                    stake_at = 0;
+                  } else {
+                    state = state::INSOLVENT;
+                  }
                 }
             } elseif (op == elector::recover_stake_error) {
                 if(state == state::SENT_RECOVER_REQUEST) {
