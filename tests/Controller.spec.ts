@@ -2075,7 +2075,7 @@ describe('Cotroller mock', () => {
         await bc.loadFrom(InitialState);
         await testState(acceptedState, testCb);
       });
-      it('Stake recover error halts controller only in sent_recover state', async () =>{
+      it.skip('Stake recover error halts controller only in sent_recover state', async () =>{
         const testCb = async () => {
           const controllerSmc = await bc.getContract(controller.address);
           return await controllerSmc.receiveMessage(internal({

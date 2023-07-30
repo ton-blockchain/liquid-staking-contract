@@ -371,7 +371,7 @@ int check_new_stake_msg(slice cs);
                 } elseif (op == controller::send_request_loan) {
                   assert_state!(state::REST);
                   assert_sender!(sender_address, validator);
-                  throw_unless(error::too_low_request_loan_value, msg_value > MIN_REQUEST_LOAN_VALUE);
+                  throw_unless(error::too_low_request_loan_value, msg_value >= MIN_REQUEST_LOAN_VALUE);
                   slice request = in_msg_body;
                   int min_loan = in_msg_body~load_coins();
                   int max_loan = in_msg_body~load_coins();
