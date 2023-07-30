@@ -338,9 +338,9 @@ int check_new_stake_msg(slice cs);
 
                     throw_unless(error::incorrect_new_stake::value_lt_minimum, value >= MIN_STAKE_TO_SEND);
 
-                    int overdue_fine = (HASH_UPDATE_FINE * 3) + STAKE_RECOVER_FINE;
+                    int overdue_fine_and_storage = (HASH_UPDATE_FINE * 3) + STAKE_RECOVER_FINE + MIN_TONS_FOR_STORAGE;
 
-                    throw_unless(error::incorrect_new_stake::value_too_high, balance - value >=  MIN_TONS_FOR_STORAGE + overdue_fine);
+                    throw_unless(error::incorrect_new_stake::value_too_high, balance - value >=  overdue_fine_and_storage);
                     (_, stake_held_for, int elections_end_before) = get_validator_config();
                     (int utime_since, int utime_until, cell vset) = get_current_validator_set();
                     if (borrowed_amount) {
@@ -349,10 +349,10 @@ int check_new_stake_msg(slice cs);
                                   (borrowing_time > utime_since) & (now() < utime_until - elections_end_before));
                     }
 
-                    int validator_own_funds = balance - borrowed_amount;
+                    int validator_own_funds = balance - borrowed_amount - overdue_fine_and_storage;
 
                     throw_unless(error::incorrect_new_stake::solvency_not_guaranteed,
-                                 validator_own_funds >= max_recommended_punishment_for_validator_misbehaviour(stake_amount_sent) + (overdue_fine + MIN_TONS_FOR_STORAGE));
+                                 validator_own_funds >= max_recommended_punishment_for_validator_misbehaviour(stake_amount_sent) + overdue_fine_and_storage);
 
                     state = state::SENT_STAKE_REQUEST;
 
