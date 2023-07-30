@@ -285,6 +285,14 @@ int check_new_stake_msg(slice cs);
                     validator_set_changes_count += 1;
                     validator_set_change_time = now();
 
+                    ;; elector set 'stake_held_for' during election conduction
+                    ;; we save it when sending stake and after first round change and chose max
+                    ;; it's ok unless 'stake_held_for' will change twice: first one after sending stake
+                    ;; but before election conduction and second one after election but prior update_hash
+                    (_, int current_stake_held_for, _) = get_validator_config();
+                    stake_held_for = max(stake_held_for, current_stake_held_for);
+
+
                     int overdue = now() - utime_since;
                     if( (overdue < GRACE_PERIOD) | (borrowed_amount == 0) ) {
                       assert_sender!(sender_address, validator);
