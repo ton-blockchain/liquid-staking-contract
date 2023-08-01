@@ -129,7 +129,7 @@ export abstract class Errors {
  static readonly incorrect_withdrawal_amount = 0xf801;
  static readonly halted = 0x9285;
  static readonly governor_update_too_soon = 0xa001;
- static readonly governor_update_not_matured = 0xa002;
+ static readonly governor_update_not_matured = 0xa003;
 
 
  static readonly newStake = {
