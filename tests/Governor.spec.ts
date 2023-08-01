@@ -303,6 +303,201 @@ describe('Governor actions tests', () => {
                 expect(poolAfter.approver).toEqualAddress(newApprover);
             });
         });
+        describe('Deposit settings', () => {
+            it('Only governor should be able to set deposit settings', async () => {
+                const rollBack = bc.snapshot();
+                const notGovernor    = differentAddress(newGovernor);
+                const msgVal = toNano('1');
+                let res = await pool.sendSetDepositSettings(bc.sender(notGovernor), msgVal, true, true);
+                assertExitCode(res.transactions, Errors.wrong_sender);
+                res = await pool.sendSetDepositSettings(bc.sender(newGovernor), msgVal, true, true);
+                assertExitCode(res.transactions, 0);
+                await bc.loadFrom(rollBack);
+            });
+            it('Governor should be able to set deposit settings', async() => {
+                const poolBefore = await pool.getFullData();
+                const optimistic = !poolBefore.optimisticDepositWithdrawals;
+                const depoOpened = !poolBefore.depositsOpen;
+                const res = await pool.sendSetDepositSettings(bc.sender(newGovernor), toNano('1'), optimistic, depoOpened);
+                assertExitCode(res.transactions, 0);
+
+                const poolAfter = await pool.getFullData();
+                expect(poolAfter.optimisticDepositWithdrawals).toEqual(optimistic);
+                expect(poolAfter.depositsOpen).toEqual(depoOpened);
+            });
+            it('Closing deposit should prevent anyone from furhter deposits', async() => {
+                const poolBefore = await pool.getFullData();
+                const governor   = bc.sender(newGovernor);
+                const depoAmount = getRandomTon(100000, 200000);
+                if(poolBefore.depositsOpen) {
+                    await pool.sendSetDepositSettings(governor, toNano('1'), poolBefore.optimisticDepositWithdrawals, false);
+                }
+
+                // Not even governor
+                let res = await pool.sendDeposit(governor, depoAmount);
+                assertExitCode(res.transactions, Errors.depossits_are_closed);
+                // Let's test random address too just in case
+                res = await pool.sendDeposit(bc.sender(randomAddress()), depoAmount);
+                assertExitCode(res.transactions, Errors.depossits_are_closed);
+            });
+        });
+        describe('Governance fee setting', () => {
+            it('Not governor should not be able to set governance fee', async () => {
+                const poolBefore  = await pool.getFullData();
+                const maxFee      = (1 << 24) - 1;
+                const newFee      = (poolBefore.governanceFee + getRandomInt(100, 200)) % maxFee;
+                const notGovernor = differentAddress(newGovernor);
+                const res = await pool.sendSetGovernanceFee(bc.sender(notGovernor), newFee);
+                assertExitCode(res.transactions, Errors.wrong_sender);
+            });
+            it('Governor should be able to set governance fee', async() => {
+                const poolBefore = await pool.getFullData();
+                const maxFee      = (1 << 24) - 1;
+                const newFee      = (poolBefore.governanceFee + getRandomInt(100, 200)) % maxFee;
+                const res = await pool.sendSetGovernanceFee(bc.sender(newGovernor), newFee);
+                assertExitCode(res.transactions, 0);
+
+                const poolAfter = await pool.getFullData();
+                expect(poolAfter.governanceFee).toEqual(newFee);
+            });
+        });
+        describe('Interest setting', () => {
+            it('Only interest manager should be able to set interest', async () => {
+                const poolBefore  = await pool.getFullData();
+                const maxInterest = (1 << 24) - 1;
+                const newInterest = (poolBefore.interestRate + getRandomInt(100, 200)) % maxInterest;
+                const randomUser  = bc.sender(differentAddress(newInterestManager));
+                const governor    = bc.sender(newGovernor);
+
+                let res = await pool.sendSetInterest(randomUser, newInterest);
+
+                assertExitCode(res.transactions, Errors.wrong_sender);
+                // Makre sure those are separate roles
+                res = await pool.sendSetInterest(governor, newInterest);
+                assertExitCode(res.transactions, Errors.wrong_sender);
+            });
+            it('Interest manager should be able to set interest', async() => {
+                const poolBefore  = await pool.getFullData();
+                const maxInterest = (1 << 24) - 1;
+                const newInterest    = (poolBefore.interestRate + getRandomInt(100, 200)) % maxInterest;
+
+                const res = await pool.sendSetInterest(bc.sender(newInterestManager), newInterest);
+                assertExitCode(res.transactions, 0);
+
+                const poolAfter = await pool.getFullData();
+                expect(poolAfter.interestRate).toEqual(newInterest);
+            });
+        });
+        describe('Halting', () => {
+            it('Only halter should be able to halt pool', async() => {
+                const notHalter = differentAddress(newHalter);
+
+                let res = await pool.sendHaltMessage(bc.sender(notHalter));
+                assertExitCode(res.transactions, Errors.wrong_sender);
+                // Makre sure it's separate role
+                res = await pool.sendHaltMessage(bc.sender(newGovernor));
+                assertExitCode(res.transactions, Errors.wrong_sender);
+            });
+            it('Halter should be able to halt pool', async () => {
+                const poolBefore = await pool.getFullData();
+                expect(poolBefore.halted).toBe(false);
+
+                const res = await pool.sendHaltMessage(bc.sender(newHalter));
+                assertExitCode(res.transactions, 0);
+
+                const poolAfter = await pool.getFullData();
+                expect(poolAfter.halted).toBe(true);
+            });
+            it('Pool in halted state should prevent haltable ops', async () => {
+                const haltedOps = [
+                    // Withdraw
+                    async () => bc.sendMessage(internal({
+                        from: poolJetton.address,
+                        to: pool.address,
+                        value: toNano('1'),
+                        body: beginCell().storeUint(Op.pool.withdraw, 32).storeUint(0, 64).endCell()
+                    })),
+                    async () => pool.sendDeposit(bc.sender(randomAddress()), getRandomTon(100000, 200000)),
+                    // Loan request
+                    async () => bc.sendMessage(internal({
+                        from: controller.address,
+                        to: pool.address,
+                        value: toNano('1'),
+                        body: beginCell()
+                                .storeUint(Op.pool.request_loan, 32)
+                                .storeUint(1, 64)
+                                .storeCoins(toNano('100000'))
+                                .storeCoins(toNano('100000'))
+                                .storeUint(100, 24)
+                              .endCell()
+                    })),
+
+                    async () => bc.sendMessage(internal({
+                        from: controller.address,
+                        to: pool.address,
+                        value: toNano('100000'),
+                        body: beginCell()
+                                .storeUint(Op.pool.loan_repayment, 32)
+                                .storeUint(1, 64)
+                              .endCell()
+                    })),
+                    async () => pool.sendTouch(deployer.getSender()),
+                    async () => pool.sendRequestControllerDeploy(bc.sender(newGovernor), toNano('1000'), 1),
+                    async () => pool.sendDonate(bc.sender(newGovernor), toNano('1'))
+                ];
+
+                for (let cb of haltedOps) {
+                    const res = await cb();
+                    expect(res.transactions).toHaveTransaction({
+                        success: false,
+                        aborted: true,
+                        exitCode: Errors.halted
+                    });
+                }
+            });
+            it('Governance ops should be possibl when halted', async() => {
+                const rollBack = bc.snapshot();
+                const governor    = bc.sender(newGovernor);
+                const notHaltable = [
+                    async () => pool.sendSudoMsg(bc.sender(newGovernor), 0, internal({
+                        from: pool.address,
+                        to: deployer.address,
+                        value: toNano('1'),
+                        body: beginCell().endCell()
+                    })),
+                    async () => pool.sendUpgrade(governor, null, null, null),
+                    async () => pool.sendSetSudoer(governor, randomAddress()),
+                    // We don't want halt state to change here
+                    async () => pool.sendUnhalt(bc.sender(randomAddress())),
+                    async () => pool.sendPrepareGovernanceMigration(governor, Math.floor(Date.now() / 1000)),
+                    async () => pool.sendSetRoles(governor, null, null, null, null),
+                    async () => pool.sendSetDepositSettings(governor, toNano('1'), true, true),
+                    async () => pool.sendSetGovernanceFee(governor, 0),
+                    async () => pool.sendSetInterest(bc.sender(newInterestManager), 0)
+                ];
+
+                for (let cb of notHaltable) {
+                    const res = await cb();
+                    expect(res.transactions).not.toHaveTransaction({
+                        on: pool.address,
+                        exitCode: Errors.halted
+                    });
+                }
+
+                await bc.loadFrom(rollBack);
+            });
+            it('Only governor should be able to unhalt', async () => {
+                const poolBefore = await pool.getFullData();
+                expect(poolBefore.halted).toBe(true);
+                let res = await pool.sendUnhalt(bc.sender(newHalter));
+                assertExitCode(res.transactions, Errors.wrong_sender);
+                res = await pool.sendUnhalt(bc.sender(newGovernor));
+                assertExitCode(res.transactions, 0);
+
+                const poolAfter = await pool.getFullData();
+                expect(poolAfter.halted).toBe(false);
+            });
+        });
     });
     describe('Sudoer', () => {
     it('Not sudoer should not be able to use sudoer request', async() => {
