@@ -343,7 +343,7 @@ export class Pool implements Contract {
             body: beginCell()
                      .storeUint(Op.interestManager.set_interest, 32) // op = touch
                      .storeUint(1, 64) // query id
-                     .storeUint(Math.floor(interest * (2**24)), 24)
+                     .storeUint(interest, 24)
                   .endCell(),
         });
     }
