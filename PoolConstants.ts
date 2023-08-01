@@ -109,6 +109,7 @@ export abstract class Errors {
  static readonly total_credit_too_high = 0xf103;
 
  static readonly deposit_amount_too_low = 0xf200;
+ static readonly depossits_are_closed   = 0xf201;
 
  static readonly not_enough_TON_to_process = 0xf300;
 
