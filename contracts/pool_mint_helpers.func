@@ -4,7 +4,7 @@
             .store_slice(destination)
             .store_coins(amount) ;; max 124 bit
             .store_coins(notification_ton)
-            .store_coins(forward_ton); ;; TRANSFER_NOTIFICATION_AMOUNT + JETTON_WALLET_FEE
+            .store_coins(forward_ton);
     var msg = begin_cell()
             .store_msg_flags(msgflag::BOUNCEABLE)
             .store_slice(minter)

@@ -38,7 +38,7 @@ const int SHARE_BASIS = 256 * 256 * 256; ;; 24 bit
 
 
 (slice, (int)) ~load_controller_id(slice s) inline { return s.load_uint(32); }
-builder store_controller_id(builder b, int op) inline { return b.store_uint(op, 32); }
+builder store_controller_id(builder b, int id) inline { return b.store_uint(id, 32); }
 
 
 (slice, (int)) ~load_signed_coins(slice s) inline {

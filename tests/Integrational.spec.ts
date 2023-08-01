@@ -1113,7 +1113,9 @@ describe('Integrational tests', () => {
         */
     });
     it('Deploy controller', async () => {
-        const res = await pool.sendRequestControllerDeploy(validator.wallet.getSender(), Conf.minStoragePool + toNano('1'), 0);
+        const res = await pool.sendRequestControllerDeploy(validator.wallet.getSender(),
+                          Conf.minStoragePool + Conf.hashUpdateFine + 3n * Conf.stakeRecoverFine + toNano('1'),
+                          0);
         expect(res.transactions).toHaveTransaction({
             from: validator.wallet.address,
             to: pool.address,

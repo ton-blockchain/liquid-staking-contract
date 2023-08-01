@@ -24,6 +24,7 @@
 
 const int ONE_TON = 1000000000;
 const int ELECTOR_OPERATION_VALUE = 103 * ONE_TON / 100 ;
+const int MIN_REQUEST_LOAN_VALUE = ONE_TON ; ;; should cover controller and pool gas
 const int MIN_TONS_FOR_STORAGE = 2 * ONE_TON; ;; 2 TON
 const int DEPOSIT_FEE = ONE_TON / 4; ;; 0.25 TON
 const int WITHDRAWAL_FEE = ONE_TON / 4; ;; 0.25 TON
@@ -107,6 +108,8 @@ int check_new_stake_msg(slice cs);
 
                 if (state == state::SENT_STAKE_REQUEST) {
                     state = state::REST;
+                } else {
+                    halted? = true;
                 }
             } elseif (equal_slice_bits(sender_address, pool)) {
               if(op == pool::loan_repayment) {
@@ -115,6 +118,8 @@ int check_new_stake_msg(slice cs);
               } elseif (op == pool::request_loan) {
                 if (state == state::SENT_BORROWING_REQUEST) {
                   state = state::REST;
+                } else {
+                  halted? = true;
                 }
               }
             }
@@ -133,18 +138,20 @@ int check_new_stake_msg(slice cs);
             if (op == elector::recover_stake_ok) {
                 ;; Note, this request will be processed even in halted state
                 state = state::REST;
-                if(balance >= MIN_TONS_FOR_STORAGE + borrowed_amount) {
-                  send_msg(pool,
-                           borrowed_amount, ;; TODO add fee???
-                           begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),
-                           msgflag::BOUNCEABLE,
-                           sendmode::PAY_FEES_SEPARETELY); ;; remaining inbound message amount, fee deducted from
-                  borrowed_amount = 0;
-                  borrowing_time = 0;
-                  stake_amount_sent = 0;
-                  stake_at = 0;
-                } else {
-                  state = state::INSOLVENT;
+                if( borrowed_amount ) {
+                  if(balance >= MIN_TONS_FOR_STORAGE + borrowed_amount) {
+                    send_msg(pool,
+                             borrowed_amount, ;; TODO add fee???
+                             begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),
+                             msgflag::BOUNCEABLE,
+                             sendmode::PAY_FEES_SEPARETELY); ;; remaining inbound message amount, fee deducted from
+                    borrowed_amount = 0;
+                    borrowing_time = 0;
+                    stake_amount_sent = 0;
+                    stake_at = 0;
+                  } else {
+                    state = state::INSOLVENT;
+                  }
                 }
             } elseif (op == elector::recover_stake_error) {
                 if(state == state::SENT_RECOVER_REQUEST) {
@@ -153,16 +160,18 @@ int check_new_stake_msg(slice cs);
                     ;; further balance depletion due to repetitive STAKE_RECOVER_FINE
                     halted? = true;
                     state = state::INSOLVENT;
+                } else {
+                    halted? = true;
                 }
             }
 
             if (state == state::SENT_STAKE_REQUEST) {
                 if (op == elector::new_stake_error) { ;; error when new_stake; stake returned
                     state = state::REST;
-                }
-
-                if (op == elector::new_stake_ok) {
+                } elseif (op == elector::new_stake_ok) {
                     state = state::FUNDS_STAKEN;
+                } else {
+                    halted? = true;
                 }
             }
 
@@ -276,6 +285,14 @@ int check_new_stake_msg(slice cs);
                     validator_set_changes_count += 1;
                     validator_set_change_time = now();
 
+                    ;; elector set 'stake_held_for' during election conduction
+                    ;; we save it when sending stake and after first round change and chose max
+                    ;; it's ok unless 'stake_held_for' will change twice: first one after sending stake
+                    ;; but before election conduction and second one after election but prior update_hash
+                    (_, int current_stake_held_for, _) = get_validator_config();
+                    stake_held_for = max(stake_held_for, current_stake_held_for);
+
+
                     int overdue = now() - utime_since;
                     if( (overdue < GRACE_PERIOD) | (borrowed_amount == 0) ) {
                       assert_sender!(sender_address, validator);
@@ -321,9 +338,9 @@ int check_new_stake_msg(slice cs);
 
                     throw_unless(error::incorrect_new_stake::value_lt_minimum, value >= MIN_STAKE_TO_SEND);
 
-                    int overdue_fine = (HASH_UPDATE_FINE * 3) + STAKE_RECOVER_FINE;
+                    int overdue_fine_and_storage = (HASH_UPDATE_FINE * 3) + STAKE_RECOVER_FINE + MIN_TONS_FOR_STORAGE;
 
-                    throw_unless(error::incorrect_new_stake::value_too_high, balance - value >=  MIN_TONS_FOR_STORAGE + overdue_fine);
+                    throw_unless(error::incorrect_new_stake::value_too_high, balance - value >=  overdue_fine_and_storage);
                     (_, stake_held_for, int elections_end_before) = get_validator_config();
                     (int utime_since, int utime_until, cell vset) = get_current_validator_set();
                     if (borrowed_amount) {
@@ -332,10 +349,10 @@ int check_new_stake_msg(slice cs);
                                   (borrowing_time > utime_since) & (now() < utime_until - elections_end_before));
                     }
 
-                    int validator_own_funds = balance - borrowed_amount;
+                    int validator_own_funds = balance - borrowed_amount - overdue_fine_and_storage;
 
                     throw_unless(error::incorrect_new_stake::solvency_not_guaranteed,
-                                 validator_own_funds >= max_recommended_punishment_for_validator_misbehaviour(stake_amount_sent) + (overdue_fine + MIN_TONS_FOR_STORAGE));
+                                 validator_own_funds >= max_recommended_punishment_for_validator_misbehaviour(stake_amount_sent));
 
                     state = state::SENT_STAKE_REQUEST;
 
@@ -354,6 +371,7 @@ int check_new_stake_msg(slice cs);
                 } elseif (op == controller::send_request_loan) {
                   assert_state!(state::REST);
                   assert_sender!(sender_address, validator);
+                  throw_unless(error::too_low_request_loan_value, msg_value >= MIN_REQUEST_LOAN_VALUE);
                   slice request = in_msg_body;
                   int min_loan = in_msg_body~load_coins();
                   int max_loan = in_msg_body~load_coins();
