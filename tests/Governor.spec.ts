@@ -239,16 +239,16 @@ describe('Governor actions tests', () => {
             });
         });
         describe('Roles update', () => {
-            it('Till governor quarantine expires no one should be able to trigger roles change', async () => {
+            it('Till governor quarantine expires no one should be able to trigger governor role', async () => {
                 const poolBefore = await pool.getFullData();
                 expect(poolBefore.governorUpdateAfter).toEqual(updateTime);
                 expect(bc.now).toBeLessThan(updateTime);
 
                 let res = await pool.sendSetRoles(deployer.getSender(),
                                                   newGovernor,
-                                                  newInterestManager,
-                                                  newHalter,
-                                                  newApprover);
+                                                  null,
+                                                  null,
+                                                  null);
 
                 expect(res.transactions).toHaveTransaction({
                     on: pool.address,
@@ -258,15 +258,36 @@ describe('Governor actions tests', () => {
                     aborted: true,
                     exitCode: Errors.governor_update_not_matured
                 });
+
+                res = await pool.sendSetRoles(deployer.getSender(),
+                                              null,
+                                              newInterestManager,
+                                              newHalter,
+                                              newApprover);
+                // Other roles update is not limited
+
+                expect(res.transactions).toHaveTransaction({
+                    on: pool.address,
+                    from: deployer.address,
+                    success: true
+                });
+
+                const dataAfter = await pool.getFullData();
+                // Should not change
+                expect(dataAfter.governor).toEqualAddress(deployer.address);
+                // Other roles should
+                expect(dataAfter.interestManager).toEqualAddress(newInterestManager);
+                expect(dataAfter.halter).toEqualAddress(newHalter);
+                expect(dataAfter.approver).toEqualAddress(newApprover);
             });
             it('After governance update quarantine expired, governor should be able to update roles', async() => {
                 bc.now = updateTime + 1;
                 const poolBefore = await pool.getFullData();
                 const res = await pool.sendSetRoles(deployer.getSender(),
                                                     newGovernor,
-                                                    newInterestManager,
-                                                    newHalter,
-                                                    newApprover);
+                                                    null,
+                                                    null,
+                                                    null);
 
                 expect(res.transactions).toHaveTransaction({
                     from: deployer.address,
