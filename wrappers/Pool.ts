@@ -347,6 +347,17 @@ export class Pool implements Contract {
                   .endCell(),
         });
     }
+    async sendSetGovernanceFee(provider: ContractProvider, via: Sender, fee: number | bigint, query_id: number | bigint = 1) {
+      await provider.internal(via, {
+        value: toNano('0.3'),
+        sendMode: SendMode.PAY_GAS_SEPARATELY,
+        body: beginCell()
+                   .storeUint(Op.governor.set_governance_fee, 32)
+                   .storeUint(query_id, 64)
+                   .storeUint(fee, 24)
+              .endCell()
+      });
+    }
 
     async sendSetRoles(provider: ContractProvider, via: Sender,
                        governor: Address | null,
