@@ -352,7 +352,7 @@ int check_new_stake_msg(slice cs);
                     int validator_own_funds = balance - borrowed_amount - overdue_fine_and_storage;
 
                     throw_unless(error::incorrect_new_stake::solvency_not_guaranteed,
-                                 validator_own_funds >= max_recommended_punishment_for_validator_misbehaviour(stake_amount_sent) + overdue_fine_and_storage);
+                                 validator_own_funds >= max_recommended_punishment_for_validator_misbehaviour(stake_amount_sent));
 
                     state = state::SENT_STAKE_REQUEST;
 
