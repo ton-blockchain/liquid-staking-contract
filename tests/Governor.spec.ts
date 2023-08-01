@@ -25,7 +25,7 @@ describe('Governor actions tests', () => {
 
     let bc: Blockchain;
     let pool: SandboxContract<Pool>;
-    let controller: SandboxContract<Controller>;
+    let controller: SandboxContract<TreasuryContract>;
     let poolJetton: SandboxContract<DAOJettonMinter>;
     let deployer: SandboxContract<TreasuryContract>;
 
@@ -45,6 +45,8 @@ describe('Governor actions tests', () => {
 
         pool_code = await compile('Pool');
         controller_code = await compile('Controller');
+        // Mock
+        controller = await bc.treasury('Controller');
 
         dao_minter_code = await compile('DAOJettonMinter');
         let dao_wallet_code_raw = await compile('DAOJettonWallet');
@@ -172,12 +174,17 @@ describe('Governor actions tests', () => {
         let newInterestManager: Address;
         let newHalter: Address;
         let newApprover: Address;
+        let prevState: BlockchainSnapshot;
         beforeAll(() => {
             bc.now = Math.floor(Date.now() / 1000);
             newGovernor        = randomAddress();
             newInterestManager = randomAddress();
             newHalter          = randomAddress();
             newApprover        = randomAddress();
+            prevState          = bc.snapshot();
+        });
+        afterAll(async () => {
+            await bc.loadFrom(prevState);
         });
         describe('Prepare migration', () => {
             it('Not governor should not be able to trigger migration prep', async() => {
