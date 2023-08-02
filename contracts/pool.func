@@ -215,6 +215,12 @@ int muldiv_extra(int a, int b, int c) inline {
                 raw_reserve(balance - msg_value - sent_during_rotation, 0);
                 request_to_mint_withdrawal(from_address, jetton_amount, query_id);
             }
+            ;;  conservatively use `borrowed` instead of `expected` as amount that will be returned
+            var [_, _, _, borrowed, _, _, _] = prev_round_borrowers;
+            int funds_at_round_end = available_funds + borrowed - FINALIZE_ROUND_FEE;
+            (int projected_balance, int projected_supply) = _get_projected_conversion_ratio ();
+            throw_unless( 100,
+                         funds_at_round_end > muldiv_extra(requested_for_withdrawal, projected_balance, projected_supply));
         } catch (exc_arg, exc_num) {
             ;; note that sent_during_rotation is null because
             ;; effect of update_round is reverted in catch
