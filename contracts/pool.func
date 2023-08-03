@@ -61,7 +61,7 @@ global int current_round_closed?; ;; hash of validator set changed since round s
 const int state::NORMAL = 0;
 
 
-const int disbalance_tolerance = 30; ;; x/256
+const int DISBALANCE_TOLERANCE = 30; ;; x/256
 const int JETTONS_WORKCHAIN = 0;
 const int MAX_LOAN_DICT_DEPTH = 12;
 
@@ -312,7 +312,8 @@ int muldiv_extra(int a, int b, int c) inline {
               int creditable_funds = balance
                                      - muldiv_extra(requested_for_withdrawal, total_balance, supply)
                                      - MIN_TONS_FOR_STORAGE;
-              int available_funds = min( creditable_funds, muldiv(256 + disbalance_tolerance, total_balance, 512) );
+              var [_, _, _, borrowed, _, _, _] = current_round_borrowers;
+              int available_funds = min( creditable_funds, muldiv(256 + DISBALANCE_TOLERANCE, total_balance, 512) - borrowed );
 
               [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
               min_loan = max(min_loan, min_loan_per_validator);
@@ -726,7 +727,8 @@ int calculate_loan_amount(int min_loan, int max_loan, int max_interest) method_i
     int creditable_funds = pair_first(get_balance())
             - muldiv_extra(requested_for_withdrawal, total_balance, supply)
             - MIN_TONS_FOR_STORAGE;
-    int available_funds = min( creditable_funds, muldiv(256 + disbalance_tolerance, total_balance, 512) );
+    var [_, _, _, borrowed, _, _, _] = current_round_borrowers;
+    int available_funds = min( creditable_funds, muldiv(256 + DISBALANCE_TOLERANCE, total_balance, 512) - borrowed );
 
     [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
     min_loan = max(min_loan, min_loan_per_validator);

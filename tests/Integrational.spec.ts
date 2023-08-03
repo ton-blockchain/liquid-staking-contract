@@ -2179,7 +2179,7 @@ describe('Integrational tests', () => {
         });
     });
     describe.skip('Attacks', () => {
-    it('Should not faiil on total balance = 0 and supply > 0', async() => {
+    it('Should not fail on total balance = 0 and supply > 0', async() => {
         await loadSnapshot('initial');
         const depositor = await bc.treasury('Depo');
         await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
@@ -2189,7 +2189,7 @@ describe('Integrational tests', () => {
         expect(poolData.requestedForDeposit).toEqual(1n);
         await nextRound();
         await pool.sendTouch(deployer.getSender());
-        // Now creditated
+        // Now credited
         poolData = await pool.getFullData();
         expect(poolData.totalBalance).toEqual(1n);
         expect(poolData.supply).toEqual(1n);
