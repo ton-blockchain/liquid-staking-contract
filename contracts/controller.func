@@ -170,6 +170,10 @@ int check_new_stake_msg(slice cs);
                     state = state::REST;
                 } elseif (op == elector::new_stake_ok) {
                     state = state::FUNDS_STAKEN;
+                    ;; update saved_validator_set_hash in case it have changed
+                    ;; while new_stake message reached the elector
+                    (int utime_since, int utime_until, cell vset) = get_current_validator_set();
+                    saved_validator_set_hash = cell_hash(vset);
                 } else {
                     halted? = true;
                 }
