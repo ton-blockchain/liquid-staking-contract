@@ -331,7 +331,7 @@ int muldiv_extra(int a, int b, int c) inline {
 
               log_loan(sender_address, actual_loan);
               int total_loan = current_round_borrowers~add_loan(sender_address, actual_loan, interest);
-              throw_unless(error::total_credit_too_high, total_loan <= max_loan + interest);
+              throw_unless(error::total_credit_too_high, total_loan <= max_loan_per_validator + interest);
               send_msg_builder(interest_manager, SERVICE_NOTIFICATION_AMOUNT,
                         begin_cell()
                                 .store_body_header(interest_manager::request_notification, cur_lt())
