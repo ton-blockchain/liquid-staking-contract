@@ -14,7 +14,7 @@
 
 ;; Whole storage is put to global variables
 
-global int state;
+global int state; ;; Currently pool can only be in NORMAL state. This variable remains for future updates
 global int halted?;
 global int total_balance;
 global int interest_rate; ;; times 2**16
@@ -59,7 +59,6 @@ global int sent_during_rotation;
 global int current_round_closed?; ;; hash of validator set changed since round start
 
 const int state::NORMAL = 0;
-const int state::REPAYMENT_ONLY = 1;
 
 
 const int disbalance_tolerance = 30; ;; x/256
@@ -551,7 +550,6 @@ int muldiv_extra(int a, int b, int c) inline {
       ;; and also it will be shown in get methods since there is update_round()
       ;; call inside get_pool_full_data
       halted? = true;
-      state = state::REPAYMENT_ONLY;
       return ();
     } else {
         supply -= requested_for_withdrawal;
