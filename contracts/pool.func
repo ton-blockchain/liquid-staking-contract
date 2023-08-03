@@ -543,9 +543,10 @@ int muldiv_extra(int a, int b, int c) inline {
     slice prev_withdrawal_payout = withdrawal_payout;
     if(available_balance < ton_withdrawal + MIN_TONS_FOR_STORAGE) {
       ;; not enough money to withdraw
-      ;; Note that this halt will not be saved to the storage:
+      ;; Note that this halt may not be saved to the storage
+      ;; if update_round not called from loan_repayment->last_one->update_round:
       ;; transaction which will cause halt inside update_round
-      ;; will revert on assert_not_halted!(); However, this halt
+      ;; will revert on assert_not_halted!() later. However, this halt
       ;; still has sense: it will affect any operation after assert_not_halted!()
       ;; and also it will be shown in get methods since there is update_round()
       ;; call inside get_pool_full_data
