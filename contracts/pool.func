@@ -202,6 +202,7 @@ int muldiv_extra(int a, int b, int c) inline {
                 total_balance -= approximate_amount;
                 supply -= jetton_amount;
                 raw_reserve(balance - msg_value - approximate_amount - sent_during_rotation, 0);
+                available_funds -= approximate_amount;
                 var msg = begin_cell()
                         .store_msg_flags(msgflag::NON_BOUNCEABLE)
                         .store_slice(from_address)
@@ -217,10 +218,17 @@ int muldiv_extra(int a, int b, int c) inline {
             }
             ;;  conservatively use `borrowed` instead of `expected` as amount that will be returned
             var [_, _, _, borrowed, _, _, _] = prev_round_borrowers;
-            int funds_at_round_end = available_funds + borrowed - FINALIZE_ROUND_FEE;
+
+            ;; max(*, 0) is needed because optimistic withdrawals do not participate in sharing -FINALIZE_ROUND_FEE
+            ;; When we have both optimistic and pessimistic withdrawals it is ok: pessimists will get both
+            ;; FINALIZE_ROUND_FEE loss and pool round profit. The only problem is when optimists withdraw 100% value
+            ;; and there is no profit to cover FINALIZE_ROUND_FEE. In this case available_funds may become negative
+            ;; and max(*,0) helps with that
+
+            int funds_at_round_end = max(available_funds + borrowed - FINALIZE_ROUND_FEE, 0);
             (int projected_balance, int projected_supply) = _get_projected_conversion_ratio ();
-            throw_unless( 100,
-                         funds_at_round_end > muldiv_extra(requested_for_withdrawal, projected_balance, projected_supply));
+            throw_unless( 100, ;; error_code doesn't matter it will be catched
+                         funds_at_round_end >= muldiv_extra(requested_for_withdrawal, projected_balance, projected_supply));
         } catch (exc_arg, exc_num) {
             ;; note that sent_during_rotation is null because
             ;; effect of update_round is reverted in catch
