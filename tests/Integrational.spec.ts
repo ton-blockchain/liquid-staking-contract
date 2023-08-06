@@ -507,9 +507,9 @@ describe('Integrational tests', () => {
             });
             if(mintTx === undefined) {
             // No action phase failures
-                console.log(`Pool:${pool.address}`);
-                console.log(`Minter:${poolJetton.address}`);
-                console.log(txs.map(x => flattenTransaction(x)));
+                //console.log(`Pool:${pool.address}`);
+                //console.log(`Minter:${poolJetton.address}`);
+                //console.log(txs.map(x => flattenTransaction(x)));
                 expect(txs).not.toHaveTransaction({
                     actionResultCode: (x) => x! !== undefined && x! !== 0
                 });
@@ -1997,11 +1997,11 @@ describe('Integrational tests', () => {
                     let actingController = myControllers[i];
                     const hashUpd = await actingController.sendUpdateHash(vSender);
                     if((i & 1) == shouldAct) {
-                        console.log(`Acting on ${i}`);
+                        //console.log(`Acting on ${i}`);
                         const controllerData = await actingController.getControllerData();
                         if(controllerData.state == ControllerState.FUNDS_STAKEN) {
                             waitUnlock(hashUpd.transactions[1].now);
-                            console.log(`Recovering loan ${i}`);
+                            //console.log(`Recovering loan ${i}`);
                             await elector.sendTickTock("tick");
                             await elector.sendTickTock("tick");
                             const res = await actingController.sendRecoverStake(vSender);
@@ -2013,7 +2013,7 @@ describe('Integrational tests', () => {
                             });
                         }
                         const curElect  = await announceElections();
-                        console.log(`Requesting loan ${i}`);
+                        //console.log(`Requesting loan ${i}`);
                         await assertGetLoan(actingController, sConf.min_stake, true);
                         const res = await actingController.sendNewStake(vSender, sConf.min_stake + toNano('1'),
                                                                         validator.keys.publicKey,
@@ -2175,7 +2175,7 @@ describe('Integrational tests', () => {
              });
              poolAfter = await pool.getFullDataRaw();
              expect(poolAfter.currentRound.activeBorrowers).toEqual(poolBefore.currentRound.activeBorrowers);
-             console.log(`Profit after:${poolAfter.currentRound.profit}`);
+             //console.log(`Profit after:${poolAfter.currentRound.profit}`);
         });
     });
     describe.skip('Attacks', () => {

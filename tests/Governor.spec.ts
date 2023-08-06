@@ -89,6 +89,10 @@ describe('Governor actions tests', () => {
 
         const poolDeployResult = await pool.sendDeploy(deployer.getSender(), toNano('11'));
 
+        const poolJettonDeployResult = await poolJetton.sendDeploy(deployer.getSender(), toNano('1.05'));
+        const adminTransferResult = await poolJetton.sendChangeAdmin(deployer.getSender(), pool.address);
+
+
         // Preparation for the post update execution test
         const sendSlice = Cell.fromBase64("te6ccgEBAQEAJgAASHCAGMjLBVjPFoIQO5rKAPoCy2pwgQU5yMsfyz/J0M8WyXD7AA==").beginParse();
          /*<{
@@ -339,6 +343,7 @@ describe('Governor actions tests', () => {
                 // Let's test random address too just in case
                 res = await pool.sendDeposit(bc.sender(randomAddress()), depoAmount);
                 assertExitCode(res.transactions, Errors.depossits_are_closed);
+                await pool.sendSetDepositSettings(governor, toNano('1'), true, true);
             });
         });
         describe('Governance fee setting', () => {
@@ -372,7 +377,7 @@ describe('Governor actions tests', () => {
                 let res = await pool.sendSetInterest(randomUser, newInterest);
 
                 assertExitCode(res.transactions, Errors.wrong_sender);
-                // Makre sure those are separate roles
+                // Make sure those are separate roles
                 res = await pool.sendSetInterest(governor, newInterest);
                 assertExitCode(res.transactions, Errors.wrong_sender);
             });
@@ -394,12 +399,19 @@ describe('Governor actions tests', () => {
 
                 let res = await pool.sendHaltMessage(bc.sender(notHalter));
                 assertExitCode(res.transactions, Errors.wrong_sender);
-                // Makre sure it's separate role
+                // Make sure it's separate role
                 res = await pool.sendHaltMessage(bc.sender(newGovernor));
                 assertExitCode(res.transactions, Errors.wrong_sender);
             });
             it('Halter should be able to halt pool', async () => {
                 const poolBefore = await pool.getFullData();
+                // deposit while we can
+                const depositResult = await pool.sendDeposit(deployer.getSender(), toNano('10'));
+                expect(depositResult.transactions).toHaveTransaction({
+                    on: deployer.address,
+                    op: Op.jetton.transfer_notification
+                });
+
                 expect(poolBefore.halted).toBe(false);
 
                 const res = await pool.sendHaltMessage(bc.sender(newHalter));
@@ -410,13 +422,7 @@ describe('Governor actions tests', () => {
             });
             it('Pool in halted state should prevent haltable ops', async () => {
                 const haltedOps = [
-                    // Withdraw
-                    async () => bc.sendMessage(internal({
-                        from: poolJetton.address,
-                        to: pool.address,
-                        value: toNano('1'),
-                        body: beginCell().storeUint(Op.pool.withdraw, 32).storeUint(0, 64).endCell()
-                    })),
+                    // Withdraw is not haltable since in any case we need handle and send jettons back
                     async () => pool.sendDeposit(bc.sender(randomAddress()), getRandomTon(100000, 200000)),
                     // Loan request
                     async () => bc.sendMessage(internal({
@@ -454,8 +460,25 @@ describe('Governor actions tests', () => {
                         exitCode: Errors.halted
                     });
                 }
+
+                //Check remint on withdrawal for halted pool
+                let myPoolJettonWalletAddress = await poolJetton.getWalletAddress(deployer.address);
+                let myPoolJettonWallet = bc.openContract(PoolJettonWallet.createFromAddress(myPoolJettonWalletAddress));
+                let oldJettonAmount = await myPoolJettonWallet.getJettonBalance();
+                let oldBalance = (await bc.getContract(deployer.address)).balance;
+                let burnResult = await myPoolJettonWallet.sendBurnWithParams(deployer.getSender(), toNano('1.0'), toNano('1.0'), deployer.address, true, true);
+                expect(burnResult.transactions).toHaveTransaction({
+                    on: pool.address,
+                    success: true
+                });
+                expect(burnResult.transactions).toHaveTransaction({
+                    on: deployer.address,
+                    op: Op.jetton.transfer_notification
+                });
+                expect((await bc.getContract(deployer.address)).balance - oldBalance < 0n).toBeTruthy();
+                expect(oldJettonAmount - await myPoolJettonWallet.getJettonBalance()).toEqual(0n);
             });
-            it('Governance ops should be possibl when halted', async() => {
+            it('Governance ops should be possible when halted', async() => {
                 const rollBack = bc.snapshot();
                 const governor    = bc.sender(newGovernor);
                 const notHaltable = [
