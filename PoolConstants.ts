@@ -11,6 +11,7 @@ export abstract class Conf {
     static readonly hashUpdateFine = toNano('10');
     static readonly stakeRecoverFine = toNano('10');
     static readonly gracePeriod    = 600;
+    static readonly governorQuarantine = 86400;
     static readonly sudoQuarantine = 86400;
     static readonly serviceNotificationAmount = toNano('0.02');
     static readonly governanceFee  = 155n * BigInt(2 ** 8);
@@ -129,6 +130,7 @@ export abstract class Errors {
  static readonly total_credit_too_high = 0xf103;
 
  static readonly deposit_amount_too_low = 0xf200;
+ static readonly depossits_are_closed   = 0xf201;
 
  static readonly not_enough_TON_to_process = 0xf300;
 
@@ -148,6 +150,8 @@ export abstract class Errors {
  static readonly withdrawal_while_credited = 0xf800;
  static readonly incorrect_withdrawal_amount = 0xf801;
  static readonly halted = 0x9285;
+ static readonly governor_update_too_soon = 0xa001;
+ static readonly governor_update_not_matured = 0xa003;
 
 
  static readonly newStake = {

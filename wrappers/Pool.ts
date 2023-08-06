@@ -1,4 +1,4 @@
-import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano, TupleBuilder, Dictionary, DictionaryValue } from 'ton-core';
+import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano, TupleBuilder, Dictionary, DictionaryValue, Message, storeMessage } from 'ton-core';
 
 import { PayoutCollection } from "./PayoutNFTCollection";
 import { Conf, Op, PoolState } from "../PoolConstants";
@@ -342,9 +342,20 @@ export class Pool implements Contract {
             body: beginCell()
                      .storeUint(Op.interestManager.set_interest, 32) // op = touch
                      .storeUint(1, 64) // query id
-                     .storeUint(Math.floor(interest * (2**24)), 24)
+                     .storeUint(interest, 24)
                   .endCell(),
         });
+    }
+    async sendSetGovernanceFee(provider: ContractProvider, via: Sender, fee: number | bigint, query_id: number | bigint = 1) {
+      await provider.internal(via, {
+        value: toNano('0.3'),
+        sendMode: SendMode.PAY_GAS_SEPARATELY,
+        body: beginCell()
+                   .storeUint(Op.governor.set_governance_fee, 32)
+                   .storeUint(query_id, 64)
+                   .storeUint(fee, 24)
+              .endCell()
+      });
     }
 
     async sendSetRoles(provider: ContractProvider, via: Sender,
@@ -366,6 +377,60 @@ export class Pool implements Contract {
             value: toNano('1'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: body.endCell()
+        });
+    }
+
+    async sendSetSudoer(provider: ContractProvider, via: Sender, sudoer: Address, value: bigint = toNano('1')) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            value,
+            body: beginCell().storeUint(Op.governor.set_sudoer, 32)
+                             .storeUint(1, 64)
+                             .storeAddress(sudoer)
+                  .endCell()
+        });
+    }
+
+    async sendSudoMsg(provider: ContractProvider, via: Sender, mode:number, msg: Message, query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            value : toNano('1'),
+            body: beginCell().storeUint(Op.sudo.send_message, 32)
+                             .storeUint(query_id, 64)
+                             .storeUint(mode, 8)
+                             .storeRef(beginCell().store(storeMessage(msg)).endCell())
+                  .endCell()
+        });
+    }
+
+    async sendHaltMessage(provider: ContractProvider, via: Sender, query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            value: toNano('1'),
+            body: beginCell().storeUint(Op.halter.halt, 32)
+                             .storeUint(query_id, 64)
+                  .endCell()
+        });
+    }
+
+    async sendUnhalt(provider: ContractProvider, via: Sender, query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            value: toNano('1'),
+            body: beginCell().storeUint(Op.governor.unhalt, 32)
+                             .storeUint(query_id, 64)
+                  .endCell()
+        });
+    }
+
+    async sendPrepareGovernanceMigration(provider: ContractProvider, via: Sender, time: number | bigint, query_id: bigint | number = 0) {
+        await provider.internal(via, {
+          sendMode: SendMode.PAY_GAS_SEPARATELY,
+          value: toNano('1'),
+          body: beginCell().storeUint(Op.governor.prepare_governance_migration, 32)
+                           .storeUint(query_id, 64)
+                           .storeUint(time, 48)
+                .endCell()
         });
     }
 
