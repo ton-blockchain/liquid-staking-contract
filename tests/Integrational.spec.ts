@@ -2179,7 +2179,7 @@ describe('Integrational tests', () => {
         });
     });
     describe.skip('Attacks', () => {
-    it('Should not faiil on total balance = 0 and supply > 0', async() => {
+    it('Should not fail on total balance = 0 and supply > 0', async() => {
         await loadSnapshot('initial');
         const depositor = await bc.treasury('Depo');
         await pool.sendDonate(deployer.getSender(), Conf.finalizeRoundFee);
@@ -2189,7 +2189,7 @@ describe('Integrational tests', () => {
         expect(poolData.requestedForDeposit).toEqual(1n);
         await nextRound();
         await pool.sendTouch(deployer.getSender());
-        // Now creditated
+        // Now credited
         poolData = await pool.getFullData();
         expect(poolData.totalBalance).toEqual(1n);
         expect(poolData.supply).toEqual(1n);
@@ -2231,6 +2231,42 @@ describe('Integrational tests', () => {
         });
         // User should get his pTONs
         expect(ptonBalance).toBeGreaterThan(0n);
+    });
+    });
+
+    describe('Question', () => {
+    it('Akifoq 31', async () => {
+        await loadSnapshot('deposited');
+        let   totalCredit = 0n;
+        let   controllerIdx = 1;
+        let   roundControllers: SandboxContract<Controller>[] = [];
+        const poolBefore = await pool.getFullData();
+        const balanceBefore = poolBefore.totalBalance;
+        const vSender = validator.wallet.getSender();
+        // In current settings will be executed only once, but it may change
+        while(totalCredit * 2n < balanceBefore) {
+            let res = await pool.sendRequestControllerDeploy(vSender, toNano('50000'), controllerIdx++);
+            let newController = getNewController(res.transactions);
+            await newController.sendApprove(deployer.getSender());
+            let creditable = await getCreditable();
+            await assertGetLoan(newController, creditable, true);
+            totalCredit += creditable;
+        }
+
+        let totalWithdrawn = 0n;
+        for (let chunk of depositors) {
+            const owner = bc.sender(chunk.address);
+            const ownerPton = await getUserJetton(chunk.address);
+            await ownerPton.sendBurnWithParams(owner, toNano('1.05'), chunk.amount, chunk.address, false, false);
+            totalWithdrawn += chunk.amount;
+            if(totalWithdrawn + totalCredit > balanceBefore) {
+                break;
+            }
+        }
+
+        await nextRound();
+        const poolAfter = await pool.getFullData();
+        expect(poolAfter.halted).toBe(false);
     });
     });
 });

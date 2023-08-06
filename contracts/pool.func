@@ -14,7 +14,7 @@
 
 ;; Whole storage is put to global variables
 
-global int state;
+global int state; ;; Currently pool can only be in NORMAL state. This variable remains for future updates
 global int halted?;
 global int total_balance;
 global int interest_rate; ;; times 2**16
@@ -59,10 +59,9 @@ global int sent_during_rotation;
 global int current_round_closed?; ;; hash of validator set changed since round start
 
 const int state::NORMAL = 0;
-const int state::REPAYMENT_ONLY = 1;
 
 
-const int disbalance_tolerance = 30; ;; x/256
+const int DISBALANCE_TOLERANCE = 30; ;; x/256
 const int JETTONS_WORKCHAIN = 0;
 const int MAX_LOAN_DICT_DEPTH = 12;
 
@@ -92,8 +91,8 @@ const int MINTER_DEPLOY_FEE = ONE_TON / 10;
 () log_round_completion (int, int, int, int, int, int) impure;
 () log_round_rotation (int) impure;
 
-([cell, int, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int, int] borrowers_data)  impure; ;; called from close_loan
-() finalize_deposit_withdrawal_round (int round_id)  impure; ;; called from finalize_lending_round
+([cell, int, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int, int] borrowers_data, int available_balance)  impure; ;; called from close_loan
+() finalize_deposit_withdrawal_round (int available_balance, int round_id)  impure; ;; called from finalize_lending_round
 
 
 ([cell, int, int, int, int, int, int], (int)) ~add_loan([cell, int, int, int, int, int, int] borrowers_data, slice borrower, int loan_body, int interest);
@@ -115,7 +114,7 @@ int current_round_index() inline {
 -}
 #include "pool_mint_helpers.func";
 
-() initiate_distribution_of_tons (int round_id) impure;
+() initiate_distribution_of_tons (int available_balance, int round_id) impure;
 () initiate_distribution_of_pool_jettons (int round_id) impure;
 
 (int, int) _get_projected_conversion_ratio () inline;
@@ -128,7 +127,7 @@ int muldiv_extra(int a, int b, int c) inline {
     return muldiv(a, b, c);
 }
 
-() update_round() impure inline_ref {
+() update_round(int available_balance) impure inline_ref {
     sent_during_rotation = 0;
     if(halted?) {
         return ();
@@ -144,7 +143,7 @@ int muldiv_extra(int a, int b, int c) inline {
             return ();
         }
         untouched_data = null();
-        prev_round_borrowers~finalize_lending_round();
+        prev_round_borrowers~finalize_lending_round(available_balance);
 
         saved_validator_set_hash = current_hash;
         int round_index = current_round_index() + 1;
@@ -190,7 +189,7 @@ int muldiv_extra(int a, int b, int c) inline {
             throw_unless(error::not_enough_TON_to_process, msg_value > WITHDRAWAL_FEE);
             int request_immediate_withdrawal_if_possible = ~ in_msg_body~load_bool();
             int fill_or_kill = in_msg_body~load_bool();
-            update_round();
+            update_round(pair_first(get_balance()) - msg_value);
             assert_not_halted!(); ;; otherwise mint back
             int approximate_amount = muldiv(jetton_amount, total_balance, supply);
             int available_funds = balance - msg_value - MIN_TONS_FOR_STORAGE - sent_during_rotation;
@@ -203,6 +202,7 @@ int muldiv_extra(int a, int b, int c) inline {
                 total_balance -= approximate_amount;
                 supply -= jetton_amount;
                 raw_reserve(balance - msg_value - approximate_amount - sent_during_rotation, 0);
+                available_funds -= approximate_amount;
                 var msg = begin_cell()
                         .store_msg_flags(msgflag::NON_BOUNCEABLE)
                         .store_slice(from_address)
@@ -216,6 +216,19 @@ int muldiv_extra(int a, int b, int c) inline {
                 raw_reserve(balance - msg_value - sent_during_rotation, 0);
                 request_to_mint_withdrawal(from_address, jetton_amount, query_id);
             }
+            ;;  conservatively use `borrowed` instead of `expected` as amount that will be returned
+            var [_, _, _, borrowed, _, _, _] = prev_round_borrowers;
+
+            ;; max(*, 0) is needed because optimistic withdrawals do not participate in sharing -FINALIZE_ROUND_FEE
+            ;; When we have both optimistic and pessimistic withdrawals it is ok: pessimists will get both
+            ;; FINALIZE_ROUND_FEE loss and pool round profit. The only problem is when optimists withdraw 100% value
+            ;; and there is no profit to cover FINALIZE_ROUND_FEE. In this case available_funds may become negative
+            ;; and max(*,0) helps with that
+
+            int funds_at_round_end = max(available_funds + borrowed - FINALIZE_ROUND_FEE, 0);
+            (int projected_balance, int projected_supply) = _get_projected_conversion_ratio ();
+            throw_unless( 100, ;; error_code doesn't matter it will be catched
+                         funds_at_round_end >= muldiv_extra(requested_for_withdrawal, projected_balance, projected_supply));
         } catch (exc_arg, exc_num) {
             ;; note that sent_during_rotation is null because
             ;; effect of update_round is reverted in catch
@@ -265,7 +278,7 @@ int muldiv_extra(int a, int b, int c) inline {
                 assert_sender!(sender_address, interest_manager);
                 interest_rate = in_msg_body~load_share();
     } else {
-        update_round();
+        update_round(pair_first(get_balance()) - msg_value);
         assert_not_halted!();
         ;; it is ok, controller know how to process loan_repayment/request_loan bounces
         {- ========== Pool operations ========== -}
@@ -307,7 +320,8 @@ int muldiv_extra(int a, int b, int c) inline {
               int creditable_funds = balance
                                      - muldiv_extra(requested_for_withdrawal, total_balance, supply)
                                      - MIN_TONS_FOR_STORAGE;
-              int available_funds = min( creditable_funds, muldiv(256 + disbalance_tolerance, total_balance, 512) );
+              var [_, _, _, borrowed, _, _, _] = current_round_borrowers;
+              int available_funds = min( creditable_funds, muldiv(256 + DISBALANCE_TOLERANCE, total_balance, 512) - borrowed );
 
               [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
               min_loan = max(min_loan, min_loan_per_validator);
@@ -331,7 +345,7 @@ int muldiv_extra(int a, int b, int c) inline {
 
               log_loan(sender_address, actual_loan);
               int total_loan = current_round_borrowers~add_loan(sender_address, actual_loan, interest);
-              throw_unless(error::total_credit_too_high, total_loan <= max_loan + interest);
+              throw_unless(error::total_credit_too_high, total_loan <= max_loan_per_validator + interest);
               send_msg_builder(interest_manager, SERVICE_NOTIFICATION_AMOUNT,
                         begin_cell()
                                 .store_body_header(interest_manager::request_notification, cur_lt())
@@ -353,7 +367,7 @@ int muldiv_extra(int a, int b, int c) inline {
               }
             }
             if(last_one) {
-                update_round();
+                update_round(pair_first(get_balance()));
             }
         } elseif (op == pool::touch) {
             ;; return save_data
@@ -373,7 +387,7 @@ int muldiv_extra(int a, int b, int c) inline {
             int donate_value = msg_value - DEPOSIT_FEE;
             throw_unless(error::deposit_amount_too_low, donate_value > 0);
             total_balance += donate_value;
-            raw_reserve(balance - msg_value + donate_value, 0);
+            raw_reserve(balance - msg_value + donate_value - sent_during_rotation, 0);
             builder msg = begin_cell()
                     .store_msg_flags(msgflag::NON_BOUNCEABLE)
                     .store_slice(sender_address)
@@ -461,7 +475,7 @@ int muldiv_extra(int a, int b, int c) inline {
     return (borrowers_data, (true, last_one));
 }
 
-([cell, int, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int, int] borrowers_data) impure {
+([cell, int, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int, int] borrowers_data, int available_balance) impure {
     ;; Does all the necessary value checks, sends logs
     ;; and governor fees, nulifies variables.
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = borrowers_data;
@@ -499,7 +513,7 @@ int muldiv_extra(int a, int b, int c) inline {
              msgflag::NON_BOUNCEABLE, sendmode::REGULAR);
     log_round_completion(round_id, borrowed, returned, profit, total_balance, supply);
 
-    finalize_deposit_withdrawal_round(round_id);
+    finalize_deposit_withdrawal_round(available_balance, round_id);
 
     ;; do we need to nulify data here ???
     return ([null(), round_id, 0, 0, 0, 0, 0], ());
@@ -529,12 +543,12 @@ int muldiv_extra(int a, int b, int c) inline {
     emit_log(4, begin_cell().store_uint(round_id, 32));
 }
 
-() finalize_deposit_withdrawal_round (int round_id) {
-    initiate_distribution_of_tons(round_id);
+() finalize_deposit_withdrawal_round (int available_balance, int round_id) {
+    initiate_distribution_of_tons(available_balance, round_id);
     initiate_distribution_of_pool_jettons(round_id);
 }
 
-() initiate_distribution_of_tons(round_id) impure {
+() initiate_distribution_of_tons(available_balance, round_id) impure {
     ;; Sends tons for distribution, in proportion to
     ;; the number requested before the start of the round.
     ifnot(requested_for_withdrawal) {
@@ -542,16 +556,16 @@ int muldiv_extra(int a, int b, int c) inline {
     }
     int ton_withdrawal = muldiv(requested_for_withdrawal, total_balance, supply);
     slice prev_withdrawal_payout = withdrawal_payout;
-    if(pair_first(get_balance()) < ton_withdrawal + MIN_TONS_FOR_STORAGE) {
+    if(available_balance < ton_withdrawal + MIN_TONS_FOR_STORAGE) {
       ;; not enough money to withdraw
-      ;; Note that this halt will not be saved to the storage:
+      ;; Note that this halt may not be saved to the storage
+      ;; if update_round not called from loan_repayment->last_one->update_round:
       ;; transaction which will cause halt inside update_round
-      ;; will revert on assert_not_halted!(); However, this halt
+      ;; will revert on assert_not_halted!() later. However, this halt
       ;; still has sense: it will affect any operation after assert_not_halted!()
       ;; and also it will be shown in get methods since there is update_round()
       ;; call inside get_pool_full_data
       halted? = true;
-      state = state::REPAYMENT_ONLY;
       return ();
     } else {
         supply -= requested_for_withdrawal;
@@ -621,7 +635,7 @@ int muldiv_extra(int a, int b, int c) inline {
 (int, int) get_loan(int controller_id, slice validator_address, int prev?, int update?) method_id {
     load_data();
     if (update?) {
-        update_round();
+        update_round(pair_first(get_balance()));
     }
     var round_borrowers = prev? ? prev_round_borrowers
                             : current_round_borrowers;
@@ -639,7 +653,7 @@ int muldiv_extra(int a, int b, int c) inline {
 var compose_pool_full_data_internal( int update?) inline_ref {
     load_data();
     if (update?) {
-        update_round();
+        update_round(pair_first(get_balance()));
     }
     return (state, halted?,
             total_balance,
@@ -684,7 +698,7 @@ var get_pool_full_data_raw() method_id {
 ;; voted in the same proportion
 (int, int) get_controller_loan_position(int controller_addr_hash, int prev?) method_id {
     load_data();
-    update_round();
+    update_round(pair_first(get_balance()));
     var target = prev? ? prev_round_borrowers : current_round_borrowers;
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = target;
     int found? = true;
@@ -710,7 +724,7 @@ var get_pool_full_data_raw() method_id {
 
 int calculate_loan_amount(int min_loan, int max_loan, int max_interest) method_id {
     load_data();
-    update_round();
+    update_round(pair_first(get_balance()));
     if(current_round_closed?) {
         return -1;
     }
@@ -721,7 +735,8 @@ int calculate_loan_amount(int min_loan, int max_loan, int max_interest) method_i
     int creditable_funds = pair_first(get_balance())
             - muldiv_extra(requested_for_withdrawal, total_balance, supply)
             - MIN_TONS_FOR_STORAGE;
-    int available_funds = min( creditable_funds, muldiv(256 + disbalance_tolerance, total_balance, 512) );
+    var [_, _, _, borrowed, _, _, _] = current_round_borrowers;
+    int available_funds = min( creditable_funds, muldiv(256 + DISBALANCE_TOLERANCE, total_balance, 512) - borrowed );
 
     [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
     min_loan = max(min_loan, min_loan_per_validator);
