@@ -24,7 +24,7 @@ const int start_distribution_gas_usage = ONE_COIN / 100;
 ;; storage scheme
 ;; storage#_ issued_bills:Coins
 ;;           admin:MsgAddress
-;;           distribution:^Cell
+;;           distribution:Maybe ^Cell
 ;;           collection_content:^Cell
 ;;           ^[
 ;;                next_item_index:uint64
@@ -163,7 +163,7 @@ slice calculate_nft_item_address(cell state_init) {
         throw_if(error::distribution_already_started, distribution_started);
         int jettons? = distr~load_bool();
         throw_unless(error::cannot_distribute_jettons, jettons?);
-        distr~skip_bits(4); ;; volume, store_coins(0) takes 4 bits
+        distr~load_coins(); ;; volume
         slice my_jetton_wallet = distr~load_msg_addr();
         throw_unless(error::unknown_jetton_wallet, equal_slice_bits(sender, my_jetton_wallet));
         
@@ -174,7 +174,6 @@ slice calculate_nft_item_address(cell state_init) {
                      |
                      ;; null address when was minted directly to the wallet
                      (from_address.preload_uint(2) == 0)));
-        throw_unless(8765, current.slice_bits() > 4);
         distribution = begin_cell()
                         .store_bool(true) ;; started
                         .store_bool(true) ;; jettons

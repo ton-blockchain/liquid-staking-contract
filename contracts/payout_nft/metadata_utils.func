@@ -22,7 +22,7 @@ builder store_coins_string(builder msg, int amount) {
     msg = msg.store_uint(46, 8); ;; "."
     (int rl, int rv) =  encode_number_to_text(res);
     repeat( 9 - rl ) {
-        msg = msg.store_uint(48, 8); ;; " "
+        msg = msg.store_uint(48, 8); ;; "0"
     }
     return msg.store_uint(rv, rl * 8);
 }

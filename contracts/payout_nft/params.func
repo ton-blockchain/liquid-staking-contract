@@ -1,7 +1,6 @@
 #include "errors.func";
-const int workchain = 0;
 
 () force_chain(slice addr) impure {
   (int wc, _) = parse_std_addr(addr);
-  throw_unless(error::wrong_chain, wc == workchain);
+  throw_unless(error::wrong_chain, wc == BASECHAIN);
 }
