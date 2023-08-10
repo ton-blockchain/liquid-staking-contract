@@ -12,7 +12,6 @@ export type PoolConfig = {
   governor: Address;
   interest_manager: Address;
   halter: Address;
-  consigliere: Address;
   approver: Address;
   
   controller_code: Cell;
@@ -263,6 +262,11 @@ export class Pool implements Contract {
 
     static createFromConfig(config: PoolConfig, code: Cell, workchain = 0) {
         const data = poolConfigToCell(config);
+        const init = { code, data };
+        return new Pool(contractAddress(workchain, init), init);
+    }
+    static createFromFullConfig(config: PoolFullConfig, code: Cell, workchain = 0) {
+        const data = poolFullConfigToCell(config);
         const init = { code, data };
         return new Pool(contractAddress(workchain, init), init);
     }

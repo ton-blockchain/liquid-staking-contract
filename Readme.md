@@ -1,10 +1,22 @@
-This documentation is organised as follows:
-- short description
-- list of all components (each component is isolated in separate contract)
-- list of all component-to-component interfaces
-- list of all multicomponent execution paths
+# Liquid staking pool
+Liquid Staking (LSt) is a protocol that connects TON holders of all caliber 
+with hardware node operators to participate in TON Blockchain validation through assets pooling.
 
-## Description
+TON holders aka *Nominators* put funds to the pool and get Pool Jettons which can be used in any DeFi protocol.
+Those Jettons represent share of the pool and increase in TON value by accruing validation rewards.
+
+Node operators can work for pool by using it's funds as validation stake and share validation reward.
+
+**More info in [documentation](https://ton-ls-protocol.gitbook.io/ton-liquid-staking-protocol/).**
+
+## Work with code
+- Clone repo with all submodules: `git clone --recurse-submodules <git-url>`
+- Install dependencies (you need Node v18+): `npm install`
+- Build all contracts: `npx blueprint build --all`
+- Run tests: `npm test -- tests/*.ts` (standard `npx blueprint test` won't work correctly due to tests in submodules. To run those change dir to submodule and run tests from there)
+- Run deploy script (carefully read it and check that it does what you want): `npx blueprint run`
+
+## Technical description
 ### Terms
 - elector: smart-contract which accepts stakes, conduct election, decides next active validator keys and distribute reward for validation
 - Сontroller: smart-contract which manage funds for stake 
@@ -168,10 +180,3 @@ In this scheme Payout is NFT collection and "conversion obligation" is an NFT. E
 When you deposit TON to pool you immediately get Deposit Bill. Later after current validation round ends and funds are released from Elector, correct poolJetton/TON ratio is discovered, amount of pool jetton corresponded to total deposits value is calculated and sent to Deposit Collection. After that Deposit Collection send *burn request* to the last minted NFT which trigger the conversion of that NFT and simulatneously sending *burn request* ton the NFT before that. Here the idea that NFTs are linked list is used to iterate through whole collection.
 
 This implementation allows processed deposits/withdrawals to be sent to other users as a whole and allows autoconversion to assets when ready. **In current implementation it is the main used mechanism**
-
-### Payout jettons
-In this scheme Payout is jetton minter and "conversion obligation" is jettons. Each round a new payouts for deposit and withdrawal are created.
-
-When you deposit TON to pool you immediately get Deposit jettons. Later after current validation round ends and funds are released from Elector, correct poolJetton/TON ratio is discovered, amount of pool jetton corresponded to total deposits value is calculated and sent to Deposit minter. After that Deposit jettons can be burned to retrieve pool jettons from minter. User may burn it herself, however, for convenience special *consigliere* role is introduced which have permissions to call burn from any payout jetton wallet. If successfull (that means if distribution is already started), user gets her pool jettons and *consigliere* reimbursement for fees. That way from user perspective, in a few hours after deposit she automatically gets pool jetton.
-
-This implementation allows processed deposits/withdrawals to be split and sent to other users by parts, however it requires eithere centralised *consigliere* or action from user to convert payout to actual asset when ready.  **This payout scheme is implemented in contract/awaited_minter/ , however it is not currently used and requires additional tests before using**
