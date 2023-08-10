@@ -79,7 +79,6 @@ describe('Pool', () => {
               governor : deployer.address,
               interest_manager : deployer.address,
               halter : deployer.address,
-              consigliere : deployer.address,
               approver : deployer.address,
 
               controller_code : controller_code,
