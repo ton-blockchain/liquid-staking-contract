@@ -1,0 +1,124 @@
+;; Simple library keeper
+
+#include "stdlib.func";
+
+const int DEFAULT_DURATION = 3600 * 24 * 365 * 10;
+const int ONE_TON = 1000000000;
+
+const int op::register_library = 0x7f567a32;
+const int op::upgrade_code = 0x3a6a2217;
+const int op::excesses = 0xd53276db;
+
+() set_lib_code(cell code, int mode) impure asm "SETLIBCODE";
+
+(int, int) get_current_masterchain_storage_prices() method_id {
+    (_, slice latest_prices, _) = config_param(18).udict_get_max?(32);
+    throw_unless(101, latest_prices~load_uint(8) == 0xcc);
+    latest_prices~skip_bits(32 + 64 + 64); ;; tag, base_bits, base_cells
+    return (latest_prices~load_uint(64),latest_prices~load_uint(64));
+}
+
+int get_library_payment_period() method_id {
+    var pp_cell = config_param(75);
+    if(pp_cell.cell_null?()) {
+        pp_cell = config_param(-75);
+    }
+    if(pp_cell.cell_null?()) {
+        return DEFAULT_DURATION;
+    }
+    var pp = pp_cell.begin_parse();
+    return pp~load_uint(64);
+}
+
+() send_message_back(addr, ans_tag, query_id, amount, mode) impure inline_ref {
+    ;; int_msg_info$0 ihr_disabled:Bool bounce:Bool bounced:Bool src:MsgAddress -> 011000
+    var msg = begin_cell()
+            .store_uint(0x18, 6)
+            .store_slice(addr)
+            .store_grams(amount)
+            .store_uint(0, 1 + 4 + 4 + 64 + 32 + 1 + 1)
+            .store_uint(ans_tag, 32)
+            .store_uint(query_id, 64);
+    send_raw_message(msg.end_cell(), mode);
+}
+
+slice get_sender(cell in_msg_full) inline_ref {
+    slice cs = in_msg_full.begin_parse();
+    cs~skip_bits(4);
+    return cs~load_msg_addr();
+}
+
+
+slice make_address(int wc, int addr) inline {
+    return begin_cell()
+            .store_uint(4, 3).store_int(wc, 8).store_uint(addr, 256).end_cell().begin_parse();
+}
+
+slice config_address() inline {
+    int config = config_param(0).begin_parse().preload_uint(256);
+    return make_address(-1, config);
+}
+
+cell get_fundamental_addresses() inline {
+    slice cs = config_param(31).begin_parse();
+    return cs~load_dict();
+}
+
+(int, slice) get_blackhole_address() inline {
+    cell burning_config = config_param(5);
+    if(burning_config.cell_null?()) {
+        return (false, null());
+    }
+    slice cs = burning_config.begin_parse();
+    ifnot(cs~load_int(1)) {
+        return (false, null());
+    }
+    return (true, make_address(-1, cs~load_uint(256)));
+}
+
+() recv_internal(int msg_value, cell in_msg_full, slice in_msg_body) impure {
+    if (in_msg_body.slice_empty?()) { ;; ignore empty messages
+        return ();
+    }
+    slice cs = in_msg_full.begin_parse();
+    int flags = cs~load_uint(4);
+
+    if (flags & 1) { ;; ignore all bounced messages
+        return ();
+    }
+    slice sender = cs~load_msg_addr();
+
+    int op = in_msg_body~load_uint(32);
+    int query_id = in_msg_body~load_uint(64);
+    if(op == op::register_library) {
+        int max_cells = in_msg_body~load_uint(32);
+        cell code = in_msg_body~load_ref();
+        var (cells, bits, _) = compute_data_size(code, max_cells);
+        var (bit_price, cell_price) = get_current_masterchain_storage_prices();
+        int payment_period = get_library_payment_period();
+        int payment = (bit_price * bits + cell_price * cells) * payment_period >> 16;
+        msg_value -= payment;
+        throw_unless(102, msg_value >= 0);
+        set_lib_code(code, 2);
+        send_message_back(sender, op::excesses, query_id, msg_value, 0);
+    } elseif(op == op::upgrade_code) {
+        throw_unless(103, equal_slice_bits(sender, config_address()));
+        cell code = in_msg_body~load_ref();
+        set_code(code);
+    } else {
+        throw(0xffff);
+    }
+    cell fundamental = get_fundamental_addresses();
+    (int my_wc, int my_addr_hash) = parse_std_addr(my_address());
+    if(my_wc == -1) {
+        (int blackhole_active, slice blackhole) = get_blackhole_address();
+        if(blackhole_active) {
+            (_, int found?) = fundamental.udict_get?(256, my_addr_hash);
+            if(found?) {
+                ;; send everything except one ton, ignore errors
+                raw_reserve(ONE_TON, 2);
+                send_message_back(blackhole, op::excesses, query_id, 0, 2 | 128);
+            }
+        }
+    }
+}
