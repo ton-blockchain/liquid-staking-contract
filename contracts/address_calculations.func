@@ -62,6 +62,10 @@ cell calculate_payout_state_init(slice pool_address, int round_id, int distribut
   content_dict~udict_set_ref(256, "uri"H, pack_metadata_value("my-custom-stake-address.ton"));
   content_dict~udict_set_ref(256, "image"H, pack_metadata_value("my-custom-stake-address.ton/icon.img"));
   content_dict~udict_set_ref(256, "render_type"H, pack_metadata_value("hidden"));
+  ;; To make payout address unpredictable we use two sources of difficult to know in advance data:
+  ;; Hash of contract storage and block random seed
+  randomize_lt();
+  content_dict~udict_set_ref(256, "random_seed"H, begin_cell().store_uint(random() >> 8, 256).store_uint(get_data().cell_hash(), 256).end_cell());
   cell onchain_content = begin_cell().store_uint(0, 8).store_dict(content_dict).end_cell();
   
   
