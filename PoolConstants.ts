@@ -1,5 +1,10 @@
 import {toNano} from "ton-core";
 
+export abstract class Metadata {
+    static readonly NFT_URI = "my-custom-stake-address.ton";
+    static readonly NFT_IMAGE_URI = "my-custom-stake-address.ton/icon.img";
+}
+
 export abstract class Conf {
     static readonly electorOpValue = toNano('1.03');
     static readonly minStorageController = toNano('2');

@@ -1,4 +1,5 @@
 #include "metadata_utils.func";
+#include "auto/metadata.func";
 
 global cell controller_code;
 global cell payout_minter_code;
@@ -59,8 +60,8 @@ cell calculate_payout_state_init(slice pool_address, int round_id, int distribut
     content_dict~udict_set_ref(256, "description"H, pack_metadata_value("Converts burned Pool Jettons to TON"));
   }
   content_dict~udict_set_ref(256, "symbol"H, pack_metadata_value("⏲️"));
-  content_dict~udict_set_ref(256, "uri"H, pack_metadata_value("my-custom-stake-address.ton"));
-  content_dict~udict_set_ref(256, "image"H, pack_metadata_value("my-custom-stake-address.ton/icon.img"));
+  content_dict~udict_set_ref(256, "uri"H, pack_metadata_value(NFT_URI));
+  content_dict~udict_set_ref(256, "image"H, pack_metadata_value(NFT_IMAGE_URI));
   content_dict~udict_set_ref(256, "render_type"H, pack_metadata_value("hidden"));
   ;; To make payout address unpredictable we use two sources of difficult to know in advance data:
   ;; Hash of contract storage and block random seed
