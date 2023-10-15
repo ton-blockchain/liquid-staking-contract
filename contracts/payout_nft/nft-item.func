@@ -189,7 +189,7 @@ global slice collection;
       slice next = in_msg_body~load_msg_addr();
       store_data_full(owner, amount, prev, next);
 
-      raw_reserve(min_tons_for_storage, 2);
+      raw_reserve(min_tons_for_storage, reservemode::AT_MOST);
       send_msg(owner, 0, op::ownership_assigned, query_id,
                  begin_cell()
                    .store_uint(0, 2) ;; prev_owner:MsgAddress - addr_none

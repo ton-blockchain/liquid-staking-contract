@@ -17,7 +17,7 @@
 global int state; ;; Currently pool can only be in NORMAL state. This variable remains for future updates
 global int halted?;
 global int total_balance;
-global int interest_rate; ;; times 2**16
+global int interest_rate; ;; times SHARE_BASIS == 2**24
 global int optimistic_deposit_withdrawals;
 global int deposits_open?;
 global int saved_validator_set_hash;
@@ -28,7 +28,7 @@ global [cell, int, int, int, int, int, int] prev_round_borrowers;
 
 ;;[min, max]
 global [int, int] loan_params_per_validator;
-global int governance_fee; ;; times 2**16
+global int governance_fee; ;; times SHARE_BASIS == 2**24
 
 ;; Basic jetton that represents share of the pool
 global slice jetton_minter;
@@ -40,11 +40,11 @@ global slice withdrawal_payout;
 global int requested_for_withdrawal; ;; in jettons
 
 ;; ROLES
-global slice sudoer;            ;; hav right to send any message on behalf of any contract
+global slice sudoer;            ;; has right to send any message on behalf of any contract
 global int sudoer_set_at;
-global slice governor;          ;; set roles, unhalt and get reward
+global slice governor;          ;; sets roles, unhalt and get reward
 global int governor_update_after;
-global slice interest_manager;  ;; get round stats and update interest
+global slice interest_manager;  ;; gets round stats and update interest
 global slice halter;            ;; halts operation
 global slice approver;          ;; approves controllers to ask for credit
 
@@ -62,6 +62,7 @@ const int state::NORMAL = 0;
 
 
 const int DISBALANCE_TOLERANCE = 30; ;; x/256
+const int DISBALANCE_TOLERANCE_BASIS = 512;
 const int JETTONS_WORKCHAIN = 0;
 const int MAX_LOAN_DICT_DEPTH = 12;
 
@@ -204,7 +205,7 @@ int muldiv_extra(int a, int b, int c) inline {
                 throw_unless(error::output_amount_is_zero, approximate_amount > 0);
                 total_balance -= approximate_amount;
                 supply -= jetton_amount;
-                raw_reserve(balance - msg_value - approximate_amount - sent_during_rotation, 0);
+                raw_reserve(balance - msg_value - approximate_amount - sent_during_rotation, reservemode::STRICT);
                 available_funds -= approximate_amount;
                 var msg = begin_cell()
                         .store_msg_flags(msgflag::NON_BOUNCEABLE)
@@ -216,7 +217,7 @@ int muldiv_extra(int a, int b, int c) inline {
             } else {
                 throw_if(105, fill_or_kill);
                 throw_unless(error::output_amount_is_zero, jetton_amount);
-                raw_reserve(balance - msg_value - sent_during_rotation, 0);
+                raw_reserve(balance - msg_value - sent_during_rotation, reservemode::STRICT);
                 request_to_mint_withdrawal(from_address, jetton_amount, query_id);
             }
             ;;  conservatively use `borrowed` instead of `expected` as amount that will be returned
@@ -235,7 +236,7 @@ int muldiv_extra(int a, int b, int c) inline {
         } catch (exc_arg, exc_num) {
             ;; note that sent_during_rotation is null because
             ;; effect of update_round is reverted in catch
-            raw_reserve(balance - msg_value, 0);
+            raw_reserve(balance - msg_value, reservemode::STRICT);
             ;; request_to_mint automatically increase supply by minted amount
             ;; however there is no extra tokens in this case
             supply -= jetton_amount;
@@ -295,7 +296,7 @@ int muldiv_extra(int a, int b, int c) inline {
                 ;; unprocessed data in depositd message for offchain analytics
                 assert_state!(state::NORMAL);
                 throw_unless(error::deposits_are_closed, deposits_open?);
-                raw_reserve(balance - DEPOSIT_FEE - sent_during_rotation, 0);
+                raw_reserve(balance - DEPOSIT_FEE - sent_during_rotation, reservemode::STRICT);
                 int deposit_amount = msg_value - DEPOSIT_FEE;
                 throw_unless(error::deposit_amount_too_low, deposit_amount > 0);
                 if(optimistic_deposit_withdrawals) {
@@ -332,7 +333,9 @@ int muldiv_extra(int a, int b, int c) inline {
                                      - muldiv_extra(requested_for_withdrawal, total_balance, supply)
                                      - MIN_TONS_FOR_STORAGE;
               var [_, _, _, borrowed, _, _, _] = current_round_borrowers;
-              int available_funds = min( creditable_funds, muldiv(256 + DISBALANCE_TOLERANCE, total_balance, 512) - borrowed );
+              int available_funds = min( creditable_funds,
+                                         muldiv( (DISBALANCE_TOLERANCE_BASIS / 2) + DISBALANCE_TOLERANCE, total_balance, DISBALANCE_TOLERANCE_BASIS)
+                                         - borrowed );
 
               [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
               min_loan = max(min_loan, min_loan_per_validator);
@@ -402,7 +405,7 @@ int muldiv_extra(int a, int b, int c) inline {
             int donate_value = msg_value - DEPOSIT_FEE;
             throw_unless(error::deposit_amount_too_low, donate_value > 0);
             total_balance += donate_value;
-            raw_reserve(balance - msg_value + donate_value - sent_during_rotation, 0);
+            raw_reserve(balance - msg_value + donate_value - sent_during_rotation, reservemode::STRICT);
             builder msg = begin_cell()
                     .store_msg_flags(msgflag::NON_BOUNCEABLE)
                     .store_slice(sender_address)
@@ -492,22 +495,20 @@ int muldiv_extra(int a, int b, int c) inline {
 
 ([cell, int, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int, int] borrowers_data, int available_balance) impure {
     ;; Does all the necessary value checks, sends logs
-    ;; and governor fees, nulifies variables.
+    ;; and governor fees, nullifies variables.
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = borrowers_data;
     throw_unless(error::finalizing_active_credit_round, borrowers_dict.null?());
     throw_unless(error::finalizing_active_credit_round, active_borrowers == 0);
 
     profit -= FINALIZE_ROUND_FEE;
 
-    ;; governance_fee / 65536 < 1 ratio, share to send to governance
+    ;; governance_fee / SHARE_BASIS < 1, share to send to governance
     int fee = max(muldiv(governance_fee, profit, SHARE_BASIS), 0);
     profit -= fee;
 
     ;; if there is negative profit (loss), then it can take maximum all the balance
     profit = max(profit, - total_balance);
     total_balance += profit;
-
-    ;;int effective_supply = supply + requested_for_withdrawal;
 
     if (fee > SERVICE_NOTIFICATION_AMOUNT) { ;; otherwise it is less than msg cost
       sent_during_rotation += fee;
@@ -751,7 +752,7 @@ int calculate_loan_amount(int min_loan, int max_loan, int max_interest) method_i
             - muldiv_extra(requested_for_withdrawal, total_balance, supply)
             - MIN_TONS_FOR_STORAGE;
     var [_, _, _, borrowed, _, _, _] = current_round_borrowers;
-    int available_funds = min( creditable_funds, muldiv(256 + DISBALANCE_TOLERANCE, total_balance, 512) - borrowed );
+    int available_funds = min( creditable_funds, muldiv((DISBALANCE_TOLERANCE_BASIS / 2) + DISBALANCE_TOLERANCE, total_balance, DISBALANCE_TOLERANCE_BASIS) - borrowed );
 
     [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
     min_loan = max(min_loan, min_loan_per_validator);

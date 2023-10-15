@@ -8,6 +8,7 @@ const int sendmode::IGNORE_ERRORS = 2;
 const int sendmode::DESTROY = 32;
 const int sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE = 64;
 const int sendmode::CARRY_ALL_BALANCE = 128;
+const int reservemode::AT_MOST = 2;
 
 builder store_msg_flags(builder b, int msg_flag) inline { return b.store_uint(msg_flag, 6); }
 

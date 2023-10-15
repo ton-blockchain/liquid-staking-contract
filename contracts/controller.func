@@ -153,7 +153,7 @@ int check_new_stake_msg(slice cs);
                              borrowed_amount, ;; TODO add fee???
                              begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),
                              msgflag::BOUNCEABLE,
-                             sendmode::PAY_FEES_SEPARETELY); ;; remaining inbound message amount, fee deducted from
+                             sendmode::PAY_FEES_SEPARATELY); ;; remaining inbound message amount, fee deducted from
                     borrowed_amount = 0;
                     borrowing_time = 0;
                     stake_amount_sent = 0;
@@ -242,7 +242,7 @@ int check_new_stake_msg(slice cs);
                         available_funds,
                         begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),
                         msgflag::BOUNCEABLE,
-                        sendmode::PAY_FEES_SEPARETELY); ;; remaining inbound message amount, fee deducted from
+                        sendmode::PAY_FEES_SEPARATELY); ;; remaining inbound message amount, fee deducted from
                 borrowed_amount -= available_funds;
                 if(borrowed_amount == 0) {
                     borrowing_time = 0;
@@ -334,7 +334,7 @@ int check_new_stake_msg(slice cs);
                     in_msg_body.end_parse();
                     throw_unless(error::incorrect_withdrawal_amount, request_amount > 0);
 
-                    raw_reserve(MIN_TONS_FOR_STORAGE, 2);
+                    raw_reserve(MIN_TONS_FOR_STORAGE, reservemode::AT_MOST);
                     send_msg(validator,
                              request_amount,
                              begin_cell().store_body_header(controller::validator_withdrawal, query_id).end_cell(),
@@ -388,7 +388,7 @@ int check_new_stake_msg(slice cs);
                              value,
                              begin_cell().store_body_header(elector::new_stake, query_id).store_slice(msg).end_cell(),
                              msgflag::BOUNCEABLE,
-                             sendmode::PAY_FEES_SEPARETELY); ;; pay fee separately, revert on errors
+                             sendmode::PAY_FEES_SEPARATELY); ;; pay fee separately, revert on errors
 
                 } elseif (op == controller::send_request_loan) {
                   assert_state!(state::REST);
@@ -435,14 +435,14 @@ int check_new_stake_msg(slice cs);
                     in_msg_body.end_parse();
                     throw_unless(error::no_credit, borrowed_amount);
                     (int utime_since, int utime_until, cell vset) = get_current_validator_set();
-                    throw_unless(error::too_early_loan_return, utime_since > borrowing_time); ;; load was requested in previous round
+                    throw_unless(error::too_early_loan_return, utime_since > borrowing_time); ;; loan was requested in previous round
                     int overdue = now() - utime_since;
                     if(balance >= MIN_TONS_FOR_STORAGE + borrowed_amount) {
                       send_msg(pool,
                                borrowed_amount, ;; TODO add fee???
                                begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),
                                msgflag::BOUNCEABLE,
-                               sendmode::PAY_FEES_SEPARETELY); ;; remaining inbound message amount, fee deducted from
+                               sendmode::PAY_FEES_SEPARATELY); ;; remaining inbound message amount, fee deducted from
                       if(overdue < GRACE_PERIOD) {
                         assert_sender!(sender_address, validator);
                         send_excesses(sender_address);
