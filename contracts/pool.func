@@ -435,7 +435,7 @@ int muldiv_extra(int a, int b, int c) inline {
                           )
                         .end_cell();
     cell init_state = controller_init_state(static_data);
-    slice controller_address = calc_address(CONTROLLER_WORKCHAIN, controller_init_state(static_data));
+    slice controller_address = calc_address(CONTROLLER_WORKCHAIN, init_state);
     return (controller_address, init_state);
 }
 
