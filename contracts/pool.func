@@ -535,8 +535,8 @@ int muldiv_extra(int a, int b, int c) inline {
     return ([null(), round_id, 0, 0, 0, 0, 0], ());
 }
 
-() log_loan(slice lender, int amount) impure {
-    emit_log(1, begin_cell().store_slice(lender)
+() log_loan(slice borrower, int amount) impure {
+    emit_log(1, begin_cell().store_slice(borrower)
                             .store_coins(amount));
 }
 
