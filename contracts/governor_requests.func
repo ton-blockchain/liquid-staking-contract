@@ -12,11 +12,13 @@ const int GOVERNOR_QUARANTINE = 86400;
     assert_sender!(sender, governor);
     sudoer_set_at = now();
     sudoer = in_msg~load_msg_addr();
+    in_msg.end_parse();
 }
 
 () process_prepare_governance_migration(slice sender, slice in_msg) impure inline_ref {
     assert_sender!(sender, governor);
     governor_update_after = in_msg~load_timestamp();
+    in_msg.end_parse();
     throw_unless(error::governor_update_too_soon, governor_update_after - now() > GOVERNOR_QUARANTINE );
 }
 

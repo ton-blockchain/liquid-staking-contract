@@ -193,6 +193,7 @@ int check_new_stake_msg(slice cs);
     } else {
 
             if (op == controller::top_up) {
+                in_msg_body.end_parse();
                 if(state == state::INSOLVENT) {
                     ;; we add WITHDRAWAL_FEE below to ensure there is enough money to process
                     ;; and send bounty in return_unused_loan
@@ -216,19 +217,25 @@ int check_new_stake_msg(slice cs);
                 }
             } elseif (op == controller::approve) {
                 assert_sender!(sender_address, approver);
+                ;; we do not end_parse here, because unprocessed data
+                ;; in message maybe used for reason in offchain analytics
                 approved? = true;
             }  elseif (op == controller::disapprove) {
                 assert_sender!(sender_address, approver);
+                ;; we do not end_parse here, because unprocessed data
+                ;; in message maybe used for reason in offchain analytics
                 approved? = false;
             } elseif (op == sudo::send_message) {
                 process_sudo_request(sender_address, in_msg_body);
             } elseif (op == governor::set_sudoer) {
                 process_set_sudo_request(sender_address, in_msg_body);
             }  elseif (op == governor::unhalt) {
+                in_msg_body.end_parse();
                 process_unhalt_request(sender_address);
             }  elseif (op == governor::return_available_funds) {
                 assert_state!(state::INSOLVENT);
                 assert_sender!(sender_address, governor);
+                in_msg_body.end_parse();
                 int available_funds = balance - MIN_TONS_FOR_STORAGE - WITHDRAWAL_FEE;
                 available_funds = min( available_funds, borrowed_amount);
                 send_msg(pool,
@@ -242,6 +249,8 @@ int check_new_stake_msg(slice cs);
                     state = state::REST;
                 }
             }  elseif (op == halter::halt) {
+                ;; we do not end_parse here, because unprocessed data
+                ;; in message maybe used for reason in offchain analytics
                 process_halt_request(sender_address);
             }  else {
                 ;; actions above considered safe or critical enough to be processed in halted regime
@@ -423,6 +432,7 @@ int check_new_stake_msg(slice cs);
                   state = state::SENT_BORROWING_REQUEST;
                 } elseif (op == controller::return_unused_loan) {
                     assert_state!(state::REST);
+                    in_msg_body.end_parse();
                     throw_unless(error::no_credit, borrowed_amount);
                     (int utime_since, int utime_until, cell vset) = get_current_validator_set();
                     throw_unless(error::too_early_loan_return, utime_since > borrowing_time); ;; load was requested in previous round

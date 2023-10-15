@@ -177,6 +177,8 @@ int muldiv_extra(int a, int b, int c) inline {
     }
 
     if (op == halter::halt) {
+        ;; we do not end_parse here, because unprocessed data
+        ;; in message maybe used for reason in offchain analytics
         process_halt_request(sender_address);
     } elseif (op == pool::withdraw) {
         assert_sender!(sender_address, jetton_minter);
@@ -189,6 +191,7 @@ int muldiv_extra(int a, int b, int c) inline {
             throw_unless(error::not_enough_TON_to_process, msg_value > WITHDRAWAL_FEE);
             int request_immediate_withdrawal_if_possible = ~ in_msg_body~load_bool();
             int fill_or_kill = in_msg_body~load_bool();
+            in_msg_body.end_parse();
             update_round(pair_first(get_balance()) - msg_value);
             assert_not_halted!(); ;; otherwise mint back
             int approximate_amount = muldiv(jetton_amount, total_balance, supply);
@@ -248,6 +251,7 @@ int muldiv_extra(int a, int b, int c) inline {
                 process_set_sudo_request(sender_address, in_msg_body);
     } elseif (op == governor::unhalt) {
         process_unhalt_request(sender_address);
+        in_msg_body.end_parse();
     } elseif (op == governor::prepare_governance_migration) {
         process_prepare_governance_migration(sender_address, in_msg_body);
     } elseif (op == governor::set_roles) {
@@ -266,23 +270,29 @@ int muldiv_extra(int a, int b, int c) inline {
                 if(in_msg_body~load_bool()) {
                     approver = in_msg_body~load_msg_addr();
                 }
+                in_msg_body.end_parse();
     } elseif(op == governor::set_deposit_settings) {
                 assert_sender!(sender_address, governor);
                 optimistic_deposit_withdrawals = in_msg_body~load_bool();
                 deposits_open?  = in_msg_body~load_bool();
+                in_msg_body.end_parse();
     } elseif(op == governor::set_governance_fee) {
                 assert_sender!(sender_address, governor);
                 governance_fee = in_msg_body~load_share();
+                in_msg_body.end_parse();
     } elseif (op == interest_manager::set_interest) {
                 assert_state!(state::NORMAL);
                 assert_sender!(sender_address, interest_manager);
                 interest_rate = in_msg_body~load_share();
+                in_msg_body.end_parse();
     } else {
         update_round(pair_first(get_balance()) - msg_value);
         assert_not_halted!();
         ;; it is ok, controller know how to process loan_repayment/request_loan bounces
         {- ========== Pool operations ========== -}
         if (op == pool::deposit) {
+                ;; we do not end_parse here, because apps may use
+                ;; unprocessed data in depositd message for offchain analytics
                 assert_state!(state::NORMAL);
                 throw_unless(error::deposits_are_closed, deposits_open?);
                 raw_reserve(balance - DEPOSIT_FEE - sent_during_rotation, 0);
@@ -312,6 +322,7 @@ int muldiv_extra(int a, int b, int c) inline {
               in_msg_body = in_msg_body.preload_ref().begin_parse();
               int controller_id = in_msg_body~load_controller_id();
               slice validator = in_msg_body~load_msg_addr();
+              ;; the rest of in_msg_body is currently unused static data
 
               assert_sender!(sender_address, _get_controller_address(controller_id, validator));
               throw_unless(error::interest_too_low, max_interest >= interest_rate);
@@ -374,6 +385,8 @@ int muldiv_extra(int a, int b, int c) inline {
         } elseif (op == pool::deploy_controller) {
             assert_state!(state::NORMAL);
             int controller_id = in_msg_body~load_controller_id();
+            ;; we do not end_parse here, because apps may use
+            ;; unprocessed data in message for offchain analytics
             (slice controller_address, cell init_state ) = build_controller_address(controller_id, sender_address);
             builder msg = begin_cell()
                           .store_msg_flags(msgflag::BOUNCEABLE)
@@ -383,6 +396,8 @@ int muldiv_extra(int a, int b, int c) inline {
                           .store_body_header(controller::top_up, cur_lt());
             send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);
         } elseif (op == pool::donate) {
+            ;; we do not end_parse here, because apps may use
+            ;; unprocessed data in message for offchain analytics
             assert_state!(state::NORMAL);
             int donate_value = msg_value - DEPOSIT_FEE;
             throw_unless(error::deposit_amount_too_low, donate_value > 0);
