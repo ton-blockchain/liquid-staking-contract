@@ -543,7 +543,7 @@ int muldiv_extra(int a, int b, int c) inline {
     emit_log(4, begin_cell().store_uint(round_id, 32));
 }
 
-() finalize_deposit_withdrawal_round (int available_balance, int round_id) {
+() finalize_deposit_withdrawal_round (int available_balance, int round_id) impure {
     initiate_distribution_of_tons(available_balance, round_id);
     initiate_distribution_of_pool_jettons(round_id);
 }
