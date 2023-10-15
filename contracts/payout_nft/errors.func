@@ -22,3 +22,5 @@ const int error::unauthorized_change_distibutor_request = 78;
 const int error::unauthorized_transfer_source = 79;
 const int error::unauthorized_start_request = 80;
 const int error::wallet_balance_below_min = 81;
+const int error::wrong_initial_distribution_info = 86;
+const int error::can_not_reinit_started_distribution = 87;
