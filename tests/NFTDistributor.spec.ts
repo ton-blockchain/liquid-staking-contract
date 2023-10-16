@@ -1,11 +1,11 @@
-import { Blockchain, SandboxContract, TreasuryContract, BlockchainSnapshot, internal, SmartContractTransaction } from '@ton-community/sandbox';
-import { Address, Cell, toNano, beginCell, Message, Dictionary } from 'ton-core';
+import { Blockchain, SandboxContract, TreasuryContract, BlockchainSnapshot, internal, SmartContractTransaction } from '@ton/sandbox';
+import { Address, Cell, toNano, beginCell, Message, Dictionary } from '@ton/core';
 import { PayoutCollection, Errors, Op, Distribution } from '../wrappers/PayoutNFTCollection';
 import { PayoutItem } from '../wrappers/PayoutNFTItem';
 import { JettonMinter as DAOJettonMinter } from '../contracts/jetton_dao/wrappers/JettonMinter';
-import '@ton-community/test-utils';
-import { compile } from '@ton-community/blueprint';
-import { randomAddress } from '@ton-community/test-utils';
+import '@ton/test-utils';
+import { compile } from '@ton/blueprint';
+import { randomAddress } from '@ton/test-utils';
 import { getRandomInt, getRandomTon, computedGeneric } from '../utils'
 
 

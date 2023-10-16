@@ -1,17 +1,17 @@
-import { Blockchain, BlockchainSnapshot, BlockchainTransaction, internal, SandboxContract, TreasuryContract } from '@ton-community/sandbox';
-import { Address, Cell, toNano, Dictionary, beginCell, Sender, SendMode, Slice } from 'ton-core';
+import { Blockchain, BlockchainSnapshot, BlockchainTransaction, internal, SandboxContract, TreasuryContract } from '@ton/sandbox';
+import { Address, Cell, toNano, Dictionary, beginCell, Sender, SendMode, Slice } from '@ton/core';
 import { Pool } from '../wrappers/Pool';
 import { Controller } from '../wrappers/Controller';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
 import { JettonWallet as PoolJettonWallet } from '../wrappers/JettonWallet';
-import '@ton-community/test-utils';
-import { compile } from '@ton-community/blueprint';
+import '@ton/test-utils';
+import { compile } from '@ton/blueprint';
 import { Conf, Op } from "../PoolConstants";
 import { randomAddress } from '../contracts/jetton_dao/tests/utils';
 import { Errors } from '../PoolConstants';
 import { differentAddress, getRandomInt, getRandomTon } from '../utils';
 import { getMsgPrices } from '../fees';
-import { flattenTransaction } from '@ton-community/test-utils';
+import { flattenTransaction } from '@ton/test-utils';
 
 describe('Governor actions tests', () => {
     let pool_code: Cell;

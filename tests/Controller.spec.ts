@@ -1,10 +1,10 @@
-import { Blockchain,BlockchainSnapshot, createShardAccount,internal,SandboxContract,SendMessageResult,SmartContractTransaction,TreasuryContract } from "@ton-community/sandbox";
+import { Blockchain,BlockchainSnapshot, createShardAccount,internal,SandboxContract,SendMessageResult,SmartContractTransaction,TreasuryContract } from "@ton/sandbox";
 import { Controller, controllerConfigToCell } from '../wrappers/Controller';
-import { Address, Sender, Cell, toNano, Dictionary, beginCell } from 'ton-core';
+import { Address, Sender, Cell, toNano, Dictionary, beginCell } from '@ton/core';
 import { keyPairFromSeed, getSecureRandomBytes, getSecureRandomWords, KeyPair } from 'ton-crypto';
-import '@ton-community/test-utils';
-import { compile } from '@ton-community/blueprint';
-import { FlatTransactionComparable, randomAddress } from "@ton-community/test-utils";
+import '@ton/test-utils';
+import { compile } from '@ton/blueprint';
+import { FlatTransactionComparable, randomAddress } from "@ton/test-utils";
 import { calcMaxPunishment, getElectionsConf, getValidatorsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
 import { buff2bigint, computedGeneric, differentAddress, getMsgExcess, getRandomInt, getRandomTon, sendBulkMessage } from "../utils";
 import { Conf, ControllerState, Errors, Op } from "../PoolConstants";

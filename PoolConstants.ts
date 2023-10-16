@@ -1,4 +1,4 @@
-import {toNano} from "ton-core";
+import {toNano} from "@ton/core";
 
 export abstract class Metadata {
     static readonly NFT_URI = "my-custom-stake-address.ton";

@@ -1,4 +1,4 @@
-import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, toNano, Sender, SendMode, Tuple, TupleReader } from "ton-core";
+import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, toNano, Sender, SendMode, Tuple, TupleReader } from "@ton/core";
 import { Op } from "../PoolConstants";
 import { LispList, bigint2buff, buff2bigint } from "../utils";
 import { signData, loadConfig } from "./ValidatorUtils";

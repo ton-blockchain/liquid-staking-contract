@@ -1,7 +1,7 @@
-import { SandboxContractProvider, TickOrTock } from "@ton-community/sandbox";
+import { SandboxContractProvider, TickOrTock } from "@ton/sandbox";
 import { buff2bigint } from "../utils";
 import { Config } from "./Config";
-import { Address, Cell, ContractProvider, beginCell } from "ton-core";
+import { Address, Cell, ContractProvider, beginCell } from "@ton/core";
 export class ConfigTest extends Config {
   constructor(readonly address: Address, readonly init?: { code: Cell; data: Cell, special:{tick:boolean, tock:boolean} }) {
     super(address, init);
