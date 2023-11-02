@@ -540,8 +540,8 @@ int muldiv_extra(int a, int b, int c) inline {
                             .store_coins(amount));
 }
 
-() log_repayment(slice lender, int amount, int profit) impure {
-    emit_log(2, begin_cell().store_slice(lender)
+() log_repayment(slice borrower, int amount, int profit) impure {
+    emit_log(2, begin_cell().store_slice(borrower)
                             .store_coins(amount)
                             .store_signed_coins(profit));
 }
