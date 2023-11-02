@@ -83,7 +83,7 @@ describe('Deposit Fees Printer', () => {
         payout_collection = await compile('PayoutNFTCollection');
 
         pool_code = await compile('Pool');
-        controller_code = readCompiled('Controller');
+        controller_code = await compile('Controller');
 
         let dao_wallet_code_raw = await compile('DAOJettonWallet');
         dao_minter_code = await compile('DAOJettonMinter');

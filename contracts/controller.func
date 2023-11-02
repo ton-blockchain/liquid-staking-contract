@@ -42,7 +42,7 @@ const int MAX_OVERDUE_FINE = (HASH_UPDATE_FINE * 3) + STAKE_RECOVER_FINE;
 ;; it includes
 ;;   - TON for pool storage
 ;;   - TON for possible fines which are paid to watchdogs during staking
-;; we also add ELECTOR_OPERATION_VALUE to ensure room for comutation fees
+;; we also add ELECTOR_OPERATION_VALUE to ensure room for computation fees
 ;; and storage fees on other contract we interact with
 const int ENSURABLE_BALANCE_FOR_STAKING = MIN_TONS_FOR_STORAGE + MAX_OVERDUE_FINE + ELECTOR_OPERATION_VALUE;
 
