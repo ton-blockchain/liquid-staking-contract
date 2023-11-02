@@ -168,6 +168,7 @@ global slice untouched_data;
     governance_fee = ds~load_share();
     ds~load_roles();
     ds~load_codes();
+    ds.end_parse();
 }
 
 () save_data() impure inline_ref {
