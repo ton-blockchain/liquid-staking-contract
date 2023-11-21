@@ -325,6 +325,11 @@ int muldiv_extra(int a, int b, int c) inline {
 
               assert_state!(state::NORMAL);
               throw_if(error::borrowing_request_in_closed_round, current_round_closed?);
+              if(credit_start_prior_elections_end) { ;; zero means do not check time
+                  (_, _, int elections_end_before) = get_validator_config();
+                  (_, int utime_until, _) = get_current_validator_set();
+                  throw_unless(error::too_early_borrowing_request, now() > utime_until - elections_end_before - credit_start_prior_elections_end);
+              }
 
               int min_loan = in_msg_body~load_coins();
               int max_loan = in_msg_body~load_coins();

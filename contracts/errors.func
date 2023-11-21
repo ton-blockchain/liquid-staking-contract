@@ -13,6 +13,7 @@ const int error::contradicting_borrowing_params = 0xf101;
 const int error::not_enough_funds_for_loan = 0xf102;
 const int error::total_credit_too_high = 0xf103;
 const int error::borrowing_request_in_closed_round = 0xf104;
+const int error::too_early_borrowing_request = 0xf105;
 
 const int error::deposit_amount_too_low = 0xf200;
 const int error::deposits_are_closed = 0xf201;
