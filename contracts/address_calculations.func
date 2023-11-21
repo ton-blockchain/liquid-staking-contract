@@ -1,8 +1,8 @@
 #include "metadata_utils.func";
 #include "auto/metadata.func";
 
-global cell controller_code;
-global cell payout_minter_code;
+;; [controller_code, pool_jetton_wallet_code, payout_minter_code]
+global [cell, cell, cell] child_contract_codes;
 
 slice addr_none() asm "b{00} PUSHSLICE";
 builder store_zeros(builder b, int n) asm "STZEROES";
@@ -31,7 +31,7 @@ cell controller_init_data (cell static_data) {
 cell controller_init_state (cell static_data) {
     return begin_cell()
             .store_uint(0, 1 + 1) ;; split_depth (Maybe = 0) and special (Maybe = 0)
-            .store_maybe_ref(controller_code)
+            .store_maybe_ref(child_contract_codes.triple_first())
             .store_maybe_ref(controller_init_data(static_data))
             .store_uint(0,1) ;; libraries - empty cell
             .end_cell();
@@ -78,7 +78,7 @@ cell calculate_payout_state_init(slice pool_address, int round_id, int distribut
            .end_cell();
   return begin_cell()
             .store_uint(0, 1 + 1) ;; split_depth (Maybe = 0) and special (Maybe = 0)
-            .store_maybe_ref(payout_minter_code)
+            .store_maybe_ref(child_contract_codes.triple_third())
             .store_maybe_ref(data)
             .store_uint(0,1) ;; libraries - empty cell
             .end_cell();

@@ -128,13 +128,16 @@ builder save_roles(builder pb) inline {
 
 (slice, ()) ~load_codes(slice s) impure inline {
     slice ds = s~load_ref().begin_parse();
-    controller_code = ds~load_ref();
-    pool_jetton_wallet_code = ds~load_ref();
-    payout_minter_code = ds~load_ref();
+    cell controller_code = ds~load_ref();
+    cell pool_jetton_wallet_code = ds~load_ref();
+    cell payout_minter_code = ds~load_ref();
+    child_contract_codes = [controller_code, pool_jetton_wallet_code, payout_minter_code];
     return (s, ());
 }
 
 builder save_codes(builder pb) inline {
+    (cell controller_code, cell pool_jetton_wallet_code, cell payout_minter_code)
+    = child_contract_codes.untriple();
     cell codes = begin_cell()
                  .store_ref(controller_code)
                  .store_ref(pool_jetton_wallet_code)

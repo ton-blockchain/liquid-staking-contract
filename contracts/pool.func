@@ -49,9 +49,8 @@ global slice halter;            ;; halts operation
 global slice approver;          ;; approves controllers to ask for credit
 
 ;; CHILD CONTRACT CODES
-global cell controller_code;
-global cell pool_jetton_wallet_code;
-global cell payout_minter_code;
+;; [controller_code, pool_jetton_wallet_code, payout_minter_code]
+global [cell, cell, cell] child_contract_codes;
 
 
 ;; temporal variables (not saved to storage)
@@ -693,9 +692,7 @@ var compose_pool_full_data_internal( int update?) inline_ref {
             halter,
             approver,
 
-            controller_code,
-            pool_jetton_wallet_code,
-            payout_minter_code,
+            untriple(child_contract_codes),
 
             (_get_projected_conversion_ratio())
     );
