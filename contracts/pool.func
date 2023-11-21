@@ -283,10 +283,19 @@ int muldiv_extra(int a, int b, int c) inline {
                 governance_fee = in_msg_body~load_share();
                 in_msg_body.end_parse();
     } elseif (op == interest_manager::set_interest) {
-                assert_state!(state::NORMAL);
-                assert_sender!(sender_address, interest_manager);
-                interest_rate = in_msg_body~load_share();
-                in_msg_body.end_parse();
+        assert_state!(state::NORMAL);
+        assert_sender!(sender_address, interest_manager);
+        interest_rate = in_msg_body~load_share();
+        in_msg_body.end_parse();
+    } elseif (op == interest_manager::set_operational_params) {
+        assert_state!(state::NORMAL);
+        assert_sender!(sender_address, interest_manager);
+        int min_loan_per_validator = in_msg_body~load_coins();
+        int max_loan_per_validator = in_msg_body~load_coins();
+        loan_params_per_validator = [min_loan_per_validator, max_loan_per_validator];
+        disbalance_tolerance = in_msg_body~load_uint(DISBALANCE_BIT_SIZE);
+        credit_start_prior_elections_end = in_msg_body~load_timestamp();
+        in_msg_body.end_parse();
     } else {
         update_round(pair_first(get_balance()) - msg_value);
         assert_not_halted!();
