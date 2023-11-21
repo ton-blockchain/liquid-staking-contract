@@ -169,6 +169,8 @@ global slice untouched_data;
         prev_round_borrowers = round_data~load_round_data();
     loan_params_per_validator = [ds~load_coins(), ds~load_coins()];
     governance_fee = ds~load_share();
+    disbalance_tolerance = ds~load_uint(DISBALANCE_BIT_SIZE);
+    credit_start_prior_elections_end = ds~load_timestamp();
     ds~load_roles();
     ds~load_codes();
     ds.end_parse();
@@ -194,6 +196,8 @@ global slice untouched_data;
         .store_coins(min_loan_per_validator)
         .store_coins(max_loan_per_validator)
         .store_share(governance_fee)
+        .store_uint(disbalance_tolerance, DISBALANCE_BIT_SIZE)
+        .store_timestamp(credit_start_prior_elections_end)
         .save_roles()
         .save_codes()
         .end_cell()

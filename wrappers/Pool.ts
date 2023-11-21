@@ -48,6 +48,9 @@ export type PoolFullConfig = {
 
   governanceFee: number;
 
+  disbalanceTolerance: number;
+  creditStartPriorElectionsEnd: number;
+
   sudoer: Address;
   sudoerSetAt: number;
   governor: Address;
@@ -117,6 +120,8 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeCoins(100 * 1000000000) // min_loan_per_validator
               .storeCoins(1000000 * 1000000000) // max_loan_per_validator
               .storeUint(155 * (2 ** 8), 24) // governance fee
+              .storeUint(30, 8) // disbalance tolerance
+              .storeUint(0, 48) //creditStartPriorElectionsEnd
               .storeRef(roles)
               .storeRef(codes)
            .endCell();
@@ -148,6 +153,8 @@ export function dataToFullConfig(data: PoolData) : PoolFullConfig {
     minLoanPerValidator: data.minLoan,
     maxLoanPerValidator: data.maxLoan,
     governanceFee: data.governanceFee,
+    disbalanceTolerance: data.disbalanceTolerance,
+    creditStartPriorElectionsEnd: data.creditStartPriorElectionsEnd,
     sudoer: data.sudoer,
     sudoerSetAt: data.sudoerSetAt,
     governor: data.governor,
@@ -230,6 +237,8 @@ export function poolFullConfigToCell(config: PoolFullConfig): Cell {
               .storeCoins(config.minLoanPerValidator) // min_loan_per_validator
               .storeCoins(config.maxLoanPerValidator) // max_loan_per_validator
               .storeUint(config.governanceFee, 24) // governance fee
+              .storeUint(config.disbalanceTolerance, 8)
+              .storeUint(config.creditStartPriorElectionsEnd, 48)
               .storeRef(roles)
               .storeRef(codes)
            .endCell();
@@ -541,6 +550,7 @@ export class Pool implements Contract {
     }
     async getFullData(provider: ContractProvider) {
         let { stack } = await provider.get('get_pool_full_data', []);
+        let new_contract_version = stack.remaining == 32;
         let state = stack.readNumber() as State;
         let halted = stack.readBoolean();
         let totalBalance = stack.readBigNumber();
@@ -589,6 +599,13 @@ export class Pool implements Contract {
         let maxLoan = stack.readBigNumber();
         let governanceFee = stack.readNumber();
 
+        let disbalanceTolerance = 30;
+        let creditStartPriorElectionsEnd = 0;
+        if(new_contract_version) {
+            let disbalanceTolerance = stack.readNumber();
+            let creditStartPriorElectionsEnd = stack.readNumber();
+        }
+
 
         let poolJettonMinter = stack.readAddress();
         let poolJettonSupply = stack.readBigNumber();
@@ -625,6 +642,7 @@ export class Pool implements Contract {
 
             minLoan, maxLoan,
             governanceFee,
+            disbalanceTolerance, creditStartPriorElectionsEnd,
 
             poolJettonMinter, poolJettonSupply, supply:poolJettonSupply,
             depositPayout, requestedForDeposit,
@@ -646,6 +664,7 @@ export class Pool implements Contract {
 
     async getFullDataRaw(provider: ContractProvider) {
         let { stack } = await provider.get('get_pool_full_data_raw', []);
+        let new_contract_version = stack.remaining == 32;
         let state = stack.readNumber() as State;
         let halted = stack.readBoolean();
         let totalBalance = stack.readBigNumber();
@@ -694,6 +713,13 @@ export class Pool implements Contract {
         let maxLoan = stack.readBigNumber();
         let governanceFee = stack.readNumber();
 
+        let disbalanceTolerance = 30;
+        let creditStartPriorElectionsEnd = 0;
+        if(new_contract_version) {
+            let disbalanceTolerance = stack.readNumber();
+            let creditStartPriorElectionsEnd = stack.readNumber();
+        }
+
 
         let poolJettonMinter = stack.readAddress();
         let poolJettonSupply = stack.readBigNumber();
@@ -730,6 +756,7 @@ export class Pool implements Contract {
 
             minLoan, maxLoan,
             governanceFee,
+            disbalanceTolerance, creditStartPriorElectionsEnd,
 
             poolJettonMinter, poolJettonSupply, supply:poolJettonSupply,
             depositPayout, requestedForDeposit,

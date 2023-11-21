@@ -29,6 +29,8 @@ global [cell, int, int, int, int, int, int] prev_round_borrowers;
 ;;[min, max]
 global [int, int] loan_params_per_validator;
 global int governance_fee; ;; times SHARE_BASIS == 2**24
+global int disbalance_tolerance;
+global int credit_start_prior_elections_end;
 
 ;; Basic jetton that represents share of the pool
 global slice jetton_minter;
@@ -60,8 +62,8 @@ global int current_round_closed?; ;; hash of validator set changed since round s
 const int state::NORMAL = 0;
 
 
-const int DISBALANCE_TOLERANCE = 30; ;; x/256
-const int DISBALANCE_TOLERANCE_BASIS = 512;
+const int DISBALANCE_BIT_SIZE = 8;
+const int DISBALANCE_TOLERANCE_BASIS = 2 << DISBALANCE_BIT_SIZE; ;; 2 and not 1 is intentional
 const int JETTONS_WORKCHAIN = 0;
 const int MAX_LOAN_DICT_DEPTH = 12;
 
@@ -333,7 +335,7 @@ int muldiv_extra(int a, int b, int c) inline {
                                      - MIN_TONS_FOR_STORAGE;
               var [_, _, _, borrowed, _, _, _] = current_round_borrowers;
               int available_funds = min( creditable_funds,
-                                         muldiv( (DISBALANCE_TOLERANCE_BASIS / 2) + DISBALANCE_TOLERANCE, total_balance, DISBALANCE_TOLERANCE_BASIS)
+                                         muldiv( (DISBALANCE_TOLERANCE_BASIS / 2) + disbalance_tolerance, total_balance, DISBALANCE_TOLERANCE_BASIS)
                                          - borrowed );
 
               [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
@@ -680,6 +682,9 @@ var compose_pool_full_data_internal( int update?) inline_ref {
             unpair(loan_params_per_validator),
             ;;min_loan_per_validator, max_loan_per_validator,
             governance_fee,
+            disbalance_tolerance,
+            credit_start_prior_elections_end,
+
 
             jetton_minter, supply,
 
@@ -749,7 +754,7 @@ int calculate_loan_amount(int min_loan, int max_loan, int max_interest) method_i
             - muldiv_extra(requested_for_withdrawal, total_balance, supply)
             - MIN_TONS_FOR_STORAGE;
     var [_, _, _, borrowed, _, _, _] = current_round_borrowers;
-    int available_funds = min( creditable_funds, muldiv((DISBALANCE_TOLERANCE_BASIS / 2) + DISBALANCE_TOLERANCE, total_balance, DISBALANCE_TOLERANCE_BASIS) - borrowed );
+    int available_funds = min( creditable_funds, muldiv((DISBALANCE_TOLERANCE_BASIS / 2) + disbalance_tolerance, total_balance, DISBALANCE_TOLERANCE_BASIS) - borrowed );
 
     [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
     min_loan = max(min_loan, min_loan_per_validator);
