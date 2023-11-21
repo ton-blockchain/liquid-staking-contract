@@ -4,7 +4,7 @@
 global slice sudoer;
 global int sudoer_set_at;
 
-const int SUDOER_QUARANTINE = 86400;
+const int SUDOER_QUARANTINE = 2 * 24 * 3600 ;
 
 () process_sudo_request(slice sender, slice in_msg) impure inline_ref {
     assert_sender!(sender, sudoer);
