@@ -81,6 +81,7 @@ export abstract class Op {
         set_interest : 0xc9f04485,
         operation_fee : 0x54d37487,
         request_notification : 0xb1ebae06,
+        set_operational_params: 0x4485c9f0,
         stats : 0xc1344900,
     }
     static readonly jetton = {

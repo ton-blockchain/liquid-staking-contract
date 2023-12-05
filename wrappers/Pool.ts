@@ -359,6 +359,23 @@ export class Pool implements Contract {
                   .endCell(),
         });
     }
+    async sendSetOperationalParameters(provider: ContractProvider, via: Sender,
+                                       min_validator_loan: bigint, max_validator_loan: bigint,
+                                       disbalance_tolerance: number | bigint, credit_start_before: number, query_id: number | bigint = 0) {
+        await provider.internal(via, {
+            value: toNano('0.1'),
+            sendMode: SendMode.PAY_GAS_SEPARATELY,
+            body: beginCell()
+                    .storeUint(Op.interestManager.set_operational_params, 32)
+                    .storeUint(query_id, 64)
+                    .storeCoins(min_validator_loan)
+                    .storeCoins(max_validator_loan)
+                    .storeUint(disbalance_tolerance, 8)
+                    .storeUint(credit_start_before, 48)
+                .endCell()
+        });
+    }
+
     async sendSetGovernanceFee(provider: ContractProvider, via: Sender, fee: number | bigint, query_id: number | bigint = 1) {
       await provider.internal(via, {
         value: toNano('0.3'),
