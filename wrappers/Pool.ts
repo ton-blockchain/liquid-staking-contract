@@ -619,8 +619,8 @@ export class Pool implements Contract {
         let disbalanceTolerance = 30;
         let creditStartPriorElectionsEnd = 0;
         if(new_contract_version) {
-            let disbalanceTolerance = stack.readNumber();
-            let creditStartPriorElectionsEnd = stack.readNumber();
+            disbalanceTolerance = stack.readNumber();
+            creditStartPriorElectionsEnd = stack.readNumber();
         }
 
 
@@ -733,8 +733,8 @@ export class Pool implements Contract {
         let disbalanceTolerance = 30;
         let creditStartPriorElectionsEnd = 0;
         if(new_contract_version) {
-            let disbalanceTolerance = stack.readNumber();
-            let creditStartPriorElectionsEnd = stack.readNumber();
+            disbalanceTolerance = stack.readNumber();
+            creditStartPriorElectionsEnd = stack.readNumber();
         }
 
 
