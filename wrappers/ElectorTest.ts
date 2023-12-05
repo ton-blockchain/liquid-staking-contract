@@ -1,7 +1,7 @@
 import { Elector } from './Elector';
-import { Address, Cell, beginCell, Dictionary } from 'ton-core';
+import { Address, Cell, beginCell, Dictionary } from '@ton/core';
 import { loadConfig, getStakeConf, packElect, getElectionsConf } from './ValidatorUtils';
-import { Blockchain, BlockchainContractProvider, SandboxContractProvider, TickOrTock } from '@ton-community/sandbox';
+import { Blockchain, BlockchainContractProvider, SandboxContractProvider, TickOrTock } from '@ton/sandbox';
 
 export class ElectorTest extends Elector {
   constructor(readonly address: Address, readonly init?: { code: Cell; data: Cell, special:{tick:boolean, tock:boolean} }) {

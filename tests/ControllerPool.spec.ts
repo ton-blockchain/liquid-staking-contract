@@ -1,13 +1,13 @@
-import { Blockchain, SandboxContract, internal, TreasuryContract, BlockchainSnapshot } from '@ton-community/sandbox';
-import { Cell, toNano, beginCell, Address, Dictionary } from 'ton-core';
+import { Blockchain, SandboxContract, internal, TreasuryContract, BlockchainSnapshot } from '@ton/sandbox';
+import { Cell, toNano, beginCell, Address, Dictionary } from '@ton/core';
 import { Pool, PoolConfig } from '../wrappers/Pool';
 import { Controller, ControllerConfig } from '../wrappers/Controller';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
 import { setConsigliere } from '../wrappers/PayoutMinter.compile';
 import { getElectionsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
-import '@ton-community/test-utils';
-import { randomAddress } from "@ton-community/test-utils";
-import { compile } from '@ton-community/blueprint';
+import '@ton/test-utils';
+import { randomAddress } from "@ton/test-utils";
+import { compile } from '@ton/blueprint';
 import { Conf, Op } from "../PoolConstants";
 import { findCommon, computedGeneric } from '../utils';
 

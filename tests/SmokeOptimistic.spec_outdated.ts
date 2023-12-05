@@ -1,5 +1,5 @@
-import { Blockchain, SandboxContract, TreasuryContract } from '@ton-community/sandbox';
-import { Cell, toNano, Dictionary, beginCell } from 'ton-core';
+import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
+import { Cell, toNano, Dictionary, beginCell } from '@ton/core';
 import { Pool } from '../wrappers/Pool';
 import { Controller } from '../wrappers/Controller';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
@@ -7,8 +7,8 @@ import { JettonWallet as PoolJettonWallet } from '../contracts/jetton_dao/wrappe
 import { JettonWallet as DepositWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
 import { JettonWallet as WithdrawalWallet} from '../contracts/awaited_minter/wrappers/JettonWallet';
 import { setConsigliere } from '../wrappers/PayoutMinter.compile';
-import '@ton-community/test-utils';
-import { compile } from '@ton-community/blueprint';
+import '@ton/test-utils';
+import { compile } from '@ton/blueprint';
 import { Conf, Op } from "../PoolConstants";
 
 const loadConfig = (config:Cell) => {

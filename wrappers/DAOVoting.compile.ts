@@ -1,4 +1,4 @@
-import { CompilerConfig, compile as compileFunc } from '@ton-community/blueprint';
+import { CompilerConfig, compile as compileFunc } from '@ton/blueprint';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 
