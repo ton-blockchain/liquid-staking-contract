@@ -133,6 +133,7 @@ export abstract class Errors {
  static readonly interest_too_low = 0xf100;
  static readonly contradicting_borrowing_params = 0xf101;
  static readonly not_enough_funds_for_loan = 0xf102;
+ static readonly too_early_borrowing_request = 0xf105;
  static readonly total_credit_too_high = 0xf103;
 
  static readonly deposit_amount_too_low = 0xf200;
