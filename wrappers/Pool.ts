@@ -376,6 +376,24 @@ export class Pool implements Contract {
         });
     }
 
+    async sendSetMinLoan(provider: ContractProvider, via: Sender, min_loan: bigint, query_id: number | bigint = 0) {
+        const oldData = await this.getFullData(provider);
+        await this.sendSetOperationalParameters(provider, via, min_loan, oldData.maxLoan, oldData.disbalanceTolerance, oldData.creditStartPriorElectionsEnd,query_id);
+    }
+
+    async sendSetMaxLoan(provider: ContractProvider, via: Sender, max_loan: bigint, query_id: number | bigint = 0) {
+        const oldData = await this.getFullDataRaw(provider);
+        await this.sendSetOperationalParameters(provider, via, oldData.minLoan, max_loan, oldData.disbalanceTolerance, oldData.creditStartPriorElectionsEnd,query_id);
+    }
+    async sendSetDisbalanceTolerance(provider: ContractProvider, via: Sender, disbalance_tolerance: bigint, query_id: number | bigint = 0) {
+        const oldData = await this.getFullDataRaw(provider);
+        await this.sendSetOperationalParameters(provider, via, oldData.minLoan, oldData.maxLoan, disbalance_tolerance, oldData.creditStartPriorElectionsEnd,query_id);
+    }
+    async sendSetCreditStartPriorElectionsEnd(provider: ContractProvider, via: Sender, start_prior: number, query_id: number | bigint = 0) {
+        const oldData = await this.getFullDataRaw(provider);
+        await this.sendSetOperationalParameters(provider, via, oldData.minLoan, oldData.maxLoan, oldData.disbalanceTolerance, start_prior, query_id);
+    }
+
     async sendSetGovernanceFee(provider: ContractProvider, via: Sender, fee: number | bigint, query_id: number | bigint = 1) {
       await provider.internal(via, {
         value: toNano('0.3'),
