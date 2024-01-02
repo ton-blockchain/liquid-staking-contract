@@ -148,11 +148,7 @@ builder save_codes(builder pb) inline {
 
 global slice untouched_data;
 
-() load_data() impure inline_ref {
-
-    ;; this check should be removed in production
-    ;; it ensures that load_data is not loaded twice
-    ;;throw_unless(2222, state.null?());
+() load_data_new() impure inline_ref {
 
     slice ds = get_data().begin_parse();
     state = ds~load_uint(8);
@@ -165,8 +161,8 @@ global slice untouched_data;
     deposits_open? = ds~load_bool();
     saved_validator_set_hash = ds~load_uint(256);
     slice round_data = ds~load_ref().begin_parse();
-        current_round_borrowers = round_data~load_round_data();
-        prev_round_borrowers = round_data~load_round_data();
+    current_round_borrowers = round_data~load_round_data();
+    prev_round_borrowers = round_data~load_round_data();
     loan_params_per_validator = [ds~load_coins(), ds~load_coins()];
     governance_fee = ds~load_share();
     disbalance_tolerance = ds~load_uint(DISBALANCE_BIT_SIZE);
@@ -174,6 +170,44 @@ global slice untouched_data;
     ds~load_roles();
     ds~load_codes();
     ds.end_parse();
+}
+
+() load_data_old() impure inline_ref {
+
+    slice ds = get_data().begin_parse();
+    state = ds~load_uint(8);
+    halted? = ds~load_bool();
+    total_balance = ds~load_coins();
+    ds~load_minters_data();
+    untouched_data = ds;
+    interest_rate = ds~load_share();
+    optimistic_deposit_withdrawals = ds~load_bool();
+    deposits_open? = ds~load_bool();
+    saved_validator_set_hash = ds~load_uint(256);
+    slice round_data = ds~load_ref().begin_parse();
+    current_round_borrowers = round_data~load_round_data();
+    prev_round_borrowers = round_data~load_round_data();
+    loan_params_per_validator = [ds~load_coins(), ds~load_coins()];
+    governance_fee = ds~load_share();
+    ds~load_roles();
+    ds~load_codes();
+    ds.end_parse();
+}
+
+() load_data() impure inline_ref {
+    ;; this check should be removed in production
+    ;; it ensures that load_data is not loaded twice
+    ;;throw_unless(2222, state.null?());
+
+    ;; if storage doesn't fit updated layout, parse it as old and fill new fields by default values
+    try {
+        load_data_new();
+    } catch (_, _) {
+        load_data_old();
+        disbalance_tolerance = 30;
+        ;; zero means do not check time
+        credit_start_prior_elections_end = 0;
+    }
 }
 
 () save_data() impure inline_ref {
