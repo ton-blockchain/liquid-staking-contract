@@ -765,6 +765,13 @@ int calculate_loan_amount(int min_loan, int max_loan, int max_interest) method_i
     if(max_interest < interest_rate) {
         return -1;
     }
+    if(credit_start_prior_elections_end) { ;; zero means do not check time
+        (_, _, int elections_end_before) = get_validator_config();
+        (_, int utime_until, _) = get_current_validator_set();
+        if(now() > utime_until - elections_end_before - credit_start_prior_elections_end) {
+            return -1;
+        }
+    }
 
     int creditable_funds = pair_first(get_balance())
             - muldiv_extra(requested_for_withdrawal, total_balance, supply)
