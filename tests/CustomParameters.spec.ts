@@ -282,7 +282,8 @@ describe('New operational parameters tests', () => {
             from: interest_manager.address,
             on: pool.address,
             op: Op.interestManager.set_operational_params,
-            // aborted: true such tx can be aborted or accepted, depending on the chosen logic
+            aborted: true,
+            exitCode: Errors.contradicting_operational_params
         });
 
         const dataAfter = await pool.getFullData();

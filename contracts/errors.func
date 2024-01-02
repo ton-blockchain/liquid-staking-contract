@@ -57,3 +57,5 @@ const int error::credit_interest_too_high = 0xfa05;
 
 const int error::no_credit = 0xfb00;
 const int error::too_early_loan_return = 0xfb01;
+
+const int error::contradicting_operational_params = 0xfc00;

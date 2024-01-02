@@ -292,6 +292,8 @@ int muldiv_extra(int a, int b, int c) inline {
         assert_sender!(sender_address, interest_manager);
         int min_loan_per_validator = in_msg_body~load_coins();
         int max_loan_per_validator = in_msg_body~load_coins();
+        throw_unless( error::contradicting_operational_params,
+                      max_loan_per_validator >= min_loan_per_validator);
         loan_params_per_validator = [min_loan_per_validator, max_loan_per_validator];
         disbalance_tolerance = in_msg_body~load_uint(DISBALANCE_BIT_SIZE);
         credit_start_prior_elections_end = in_msg_body~load_timestamp();

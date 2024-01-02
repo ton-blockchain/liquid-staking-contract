@@ -179,4 +179,6 @@ export abstract class Errors {
 
  static readonly no_credit = 0xfb00;
  static readonly too_early_loan_return = 0xfb01;
+
+ static readonly contradicting_operational_params = 0xfc00;
 }
