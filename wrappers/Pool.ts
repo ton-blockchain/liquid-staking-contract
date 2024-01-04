@@ -394,9 +394,9 @@ export class Pool implements Contract {
         await this.sendSetOperationalParameters(provider, via, oldData.minLoan, oldData.maxLoan, oldData.disbalanceTolerance, start_prior, query_id);
     }
 
-    async sendSetGovernanceFee(provider: ContractProvider, via: Sender, fee: number | bigint, query_id: number | bigint = 1) {
+    async sendSetGovernanceFee(provider: ContractProvider, via: Sender, fee: number | bigint, query_id: number | bigint = 1, value:bigint = toNano('0.05')) {
       await provider.internal(via, {
-        value: toNano('0.3'),
+        value,
         sendMode: SendMode.PAY_GAS_SEPARATELY,
         body: beginCell()
                    .storeUint(Op.governor.set_governance_fee, 32)
@@ -466,10 +466,10 @@ export class Pool implements Contract {
              .endCell()
 
     }
-    async sendHaltMessage(provider: ContractProvider, via: Sender, query_id: bigint | number = 0) {
+    async sendHaltMessage(provider: ContractProvider, via: Sender, query_id: bigint | number = 0, value?: bigint) {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            value: toNano('1'),
+            value: value ?? toNano('0.05'),
             body: Pool.haltMessage(query_id)
         });
     }
@@ -513,21 +513,21 @@ export class Pool implements Contract {
              .endCell()
     }
     async sendUpgrade(provider: ContractProvider, via: Sender,
-                      data: Cell | null, code: Cell | null, afterUpgrade: Cell | null) {
+                      data: Cell | null, code: Cell | null, afterUpgrade: Cell | null, value: bigint = toNano('0.05')) {
         //upgrade#96e7f528 query_id:uint64
         //data:(Maybe ^Cell) code:(Maybe ^Cell) after_upgrade:(Maybe ^Cell) = InternalMsgBody;
 
         await provider.internal(via, {
-            value: toNano('0.05'),
+            value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: Pool.upgradeMessage(data, code, afterUpgrade, 1)
         });
     }
 
-    async sendDepositSettings(provider:ContractProvider, via:Sender, optimistic:boolean, open:boolean) {
+    async sendDepositSettings(provider:ContractProvider, via:Sender, optimistic:boolean, open:boolean, value: bigint = toNano('0.05')) {
 
       await provider.internal(via, {
-        value: toNano('0.15'),
+        value,
         sendMode: SendMode.PAY_GAS_SEPARATELY,
         body: beginCell()
                 .storeUint(Op.governor.set_deposit_settings, 32)
