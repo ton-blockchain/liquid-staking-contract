@@ -81,6 +81,8 @@ export async function run(provider: NetworkProvider) {
           pool_jetton_wallet_code : dao_wallet_code,
           payout_minter_code : payout_collection,
           vote_keeper_code : dao_vote_keeper_code,
+          disbalanceTolerance: 30,
+          creditStartPriorElectionsEnd: 0
     };
 
     //deploy or use existing librarian
