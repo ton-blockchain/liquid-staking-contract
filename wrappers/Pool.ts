@@ -33,9 +33,9 @@ export type PoolFullConfig = {
   poolJetton: Address;
   poolJettonSupply: bigint;
   depositMinter: Address | null;
-  requestedForDeposit: bigint | null;
+  requestedForDeposit: bigint;
   withdrawalMinter: Address | null;
-  requestedForWithdrawal: bigint | null;
+  requestedForWithdrawal: bigint;
   interestRate: number;
   optimisticDepositWithdrawals: boolean;
   depositsOpen: boolean;
@@ -188,7 +188,7 @@ export function poolFullConfigToCell(config: PoolFullConfig): Cell {
       mintersData = mintersData.storeUint(1, 1)
                                .storeUint(0, 1)
                                .storeAddress(config.depositMinter!)
-                               .storeCoins(config.requestedForDeposit!);
+                               .storeCoins(config.requestedForDeposit);
     } else {
       mintersData = mintersData.storeUint(0, 1);
     }
@@ -196,7 +196,7 @@ export function poolFullConfigToCell(config: PoolFullConfig): Cell {
       mintersData = mintersData.storeUint(1, 1)
                                .storeBit(0)
                                .storeAddress(config.withdrawalMinter!)
-                               .storeCoins(config.requestedForWithdrawal!);
+                               .storeCoins(config.requestedForWithdrawal);
     } else {
       mintersData = mintersData.storeUint(0, 1);
     }
