@@ -406,25 +406,34 @@ export class Pool implements Contract {
       });
     }
 
+    static setRolesMessage(governor: Address | null,
+                           interestManager: Address | null,
+                           halter: Address | null,
+                           approver: Address | null) {
+      let body = beginCell()
+                 .storeUint(Op.governor.set_roles, 32)
+                 .storeUint(1, 64);
+      for (let role of [governor, interestManager, halter, approver]) {
+          if(role) {
+            body = body.storeBit(true).storeAddress(role!);
+          } else {
+            body = body.storeBit(false);
+          }
+      }
+
+      return body.endCell();
+    }
     async sendSetRoles(provider: ContractProvider, via: Sender,
                        governor: Address | null,
                        interestManager: Address | null,
                        halter: Address | null,
-                       approver: Address | null) {
-        let body = beginCell()
-                     .storeUint(Op.governor.set_roles, 32)
-                     .storeUint(1, 64);
-        for (let role of [governor, interestManager, halter, approver]) {
-            if(role) {
-              body = body.storeBit(true).storeAddress(role!);
-            } else {
-              body = body.storeBit(false);
-            }
-        }
+                       approver: Address | null,
+                       value: bigint = toNano('0.05')) {
+
         await provider.internal(via, {
-            value: toNano('1'),
+            value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: body.endCell()
+            body: Pool.setRolesMessage(governor, interestManager, halter, approver)
         });
     }
 
@@ -451,52 +460,67 @@ export class Pool implements Contract {
         });
     }
 
+    static unhaltMessage(query_id: bigint | number = 0) {
+      return beginCell().storeUint(Op.governor.unhalt, 32)
+                        .storeUint(query_id, 64)
+             .endCell()
+
+    }
     async sendHaltMessage(provider: ContractProvider, via: Sender, query_id: bigint | number = 0) {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             value: toNano('1'),
-            body: beginCell().storeUint(Op.halter.halt, 32)
-                             .storeUint(query_id, 64)
-                  .endCell()
+            body: Pool.haltMessage(query_id)
         });
     }
 
-    async sendUnhalt(provider: ContractProvider, via: Sender, query_id: bigint | number = 0) {
+    static haltMessage(query_id: bigint | number = 0) {
+      return beginCell().storeUint(Op.halter.halt, 32)
+                        .storeUint(query_id, 64)
+             .endCell()
+    }
+
+    async sendUnhalt(provider: ContractProvider, via: Sender, query_id: bigint | number = 0, value?: bigint) {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            value: toNano('1'),
-            body: beginCell().storeUint(Op.governor.unhalt, 32)
-                             .storeUint(query_id, 64)
-                  .endCell()
+            value: value ?? toNano('0.05'),
+            body: Pool.unhaltMessage(query_id)
         });
     }
 
-    async sendPrepareGovernanceMigration(provider: ContractProvider, via: Sender, time: number | bigint, query_id: bigint | number = 0) {
+    static prepareGovernanceMigrationMessage(time: number | bigint, query_id: number | bigint) {
+      return beginCell().storeUint(Op.governor.prepare_governance_migration, 32)
+                        .storeUint(query_id, 64)
+                        .storeUint(time, 48)
+             .endCell()
+
+    }
+    async sendPrepareGovernanceMigration(provider: ContractProvider, via: Sender, time: number | bigint, query_id: bigint | number = 0, value?: bigint) {
         await provider.internal(via, {
           sendMode: SendMode.PAY_GAS_SEPARATELY,
-          value: toNano('1'),
-          body: beginCell().storeUint(Op.governor.prepare_governance_migration, 32)
-                           .storeUint(query_id, 64)
-                           .storeUint(time, 48)
-                .endCell()
+          value: value ?? toNano('0.05'),
+          body: Pool.prepareGovernanceMigrationMessage(time, query_id)
         });
     }
 
+    static upgradeMessage(data: Cell | null, code: Cell | null, afterUpgrade: Cell | null, query_id: bigint | number = 0) {
+      return beginCell()
+                .storeUint(Op.sudo.upgrade, 32) // op = touch
+                .storeUint(query_id, 64) // query id
+                .storeMaybeRef(data)
+                .storeMaybeRef(code)
+                .storeMaybeRef(afterUpgrade)
+             .endCell()
+    }
     async sendUpgrade(provider: ContractProvider, via: Sender,
                       data: Cell | null, code: Cell | null, afterUpgrade: Cell | null) {
         //upgrade#96e7f528 query_id:uint64
         //data:(Maybe ^Cell) code:(Maybe ^Cell) after_upgrade:(Maybe ^Cell) = InternalMsgBody;
 
         await provider.internal(via, {
-            value: toNano('0.5'),
+            value: toNano('0.05'),
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: beginCell()
-                     .storeUint(Op.sudo.upgrade, 32) // op = touch
-                     .storeUint(1, 64) // query id
-                     .storeMaybeRef(data)
-                     .storeMaybeRef(code)
-                     .storeMaybeRef(afterUpgrade)
-                  .endCell(),
+            body: Pool.upgradeMessage(data, code, afterUpgrade, 1)
         });
     }
 
