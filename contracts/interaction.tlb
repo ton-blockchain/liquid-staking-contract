@@ -39,11 +39,13 @@ validator_withdrawal#30026327 query_id:uint64 amount:Coins = InternalMsgBody;
 new_stake#e0505d0e query_id:uint64 value:Coins validator_pubkey:uint256 stake_at:uint32 max_factor:uint32 adnl_addr:uint256 signature:^(bits 512) = InternalMsgBody;
 return_available_funds#55c26cd5 query_id:uint64 = InternalMsgBody;
 
-send_request_loan#6335b11a query_id:uint64  min_loan:Coins max_loan:Coins max_interest:uint16 = InternalMsgBody;
+send_request_loan#6335b11a query_id:uint64  min_loan:Coins max_loan:Coins max_interest:uint24 = InternalMsgBody;
 return_unused_loan#ed7378a6 query_id:uint64 = InternalMsgBody;
 
 // Messages to pool
-request_loan#e642c965 query_id:uint64 min_loan:Coins max_loan:Coins max_interest:uint16 controller_id:uint32 validator:MsgAddress = InternalMsgBody;
+data#_ controller_id:uint32 validator:MsgAddress pool:MsgAddress governor:MsgAddress ^[approver:MsgAddress halter:MsgAddress] = ControllerData;
+request_loan#e642c965 query_id:uint64 min_loan:Coins max_loan:Coins max_interest:uint24 controller_data:^ControllerData = InternalMsgBody;
+
 loan_repayment#dfdca27b query_id:uint64 = InternalMsgBody;
 touch#4bc7c2df query_id:uint64 = InternalMsgBody;
 set_governance_fee#2aaa96a0 query_id:uint64 governance_fee:uint16 = InternalMsgBody;
@@ -70,7 +72,7 @@ top_up#d372158c query_id:uint64 = InternalMsgBody;
 // Interest manager
 set_interest#c9f04485 query_id:uint64 interest_rate:uint16 = InternalMsgBody;
 operation_fee#54d37487 query_id:uint64 = InternalMsgBody;
-request_notification#b1ebae06 query_id:uint64 min_loan:Coins max_loan:Coins max_interest:uint16 = InternalMsgBody;
+request_notification#b1ebae06 query_id:uint64 min_loan:Coins max_loan:Coins max_interest:uint24 = InternalMsgBody;
 stats#c1344900 query_id:uint64 borrowed:Coins expected:Coins returned:Coins profit_sign:int1 profit:Coins total_balance:Coins = InternalMsgBody;
 
 
