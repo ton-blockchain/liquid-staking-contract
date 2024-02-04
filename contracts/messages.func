@@ -1,3 +1,5 @@
+#include "types.func";
+
 ;; int_msg_info$0 ihr_disabled:Bool bounce:Bool bounced:Bool src:MsgAddress -> 011000
 const int msgflag::NON_BOUNCEABLE = 0x10;
 const int msgflag::BOUNCEABLE = 0x18;
@@ -68,18 +70,20 @@ builder store_masterchain_address(builder b, int address_hash) inline {
 }
 
 () send_msg_builder(slice to_address, int amount, builder payload, int flags, int send_mode) impure inline_ref {
-    int payload_length = payload.null?() ? 0 : payload.builder_bits();
-
     builder msg = begin_cell()
         .store_msg_flags(flags)
         .store_slice(to_address)
         .store_coins(amount);
 
-    if (payload_length + msg.builder_bits() > 1023 - (1 + 4 + 4 + 64 + 32 + 1 + 1)) {
-        msg = msg.store_msgbody_prefix_ref(begin_cell().store_builder(payload).end_cell());
-    } else {
-        msg = msg.store_msgbody_prefix_slice()
-                 .store_builder(payload);
+    try {
+        ;; store body in slice, may overflow
+        msg = msg
+                .store_msgbody_prefix_slice()
+                .store_builder(payload);
+    } catch (_, _) {
+        ;; overflowed, lets store in ref
+        msg = msg
+                .store_msgbody_prefix_ref(begin_cell().store_builder(payload).end_cell());
     }
 
     send_raw_message(msg.end_cell(), send_mode);
@@ -104,13 +108,14 @@ builder store_masterchain_address(builder b, int address_hash) inline {
             .store_uint (1, 2)          ;; addr_extern$01
             .store_uint (256, 9)        ;; len:(## 9)
             .store_uint(topic, 256); ;; external_address:(bits len)
-
-    if (data.builder_bits() > 1023 - (4 + 2 + 9 + 256 + 64 + 32 + 2) ) {
-        msg = msg.store_uint(1, 64 + 32 + 2) ;; created_lt, created_at, init:Maybe, body:Either
-                .store_ref(begin_cell().store_builder(data).end_cell());
-    } else {
+    try {
+        ;; store body in slice, may overflow
         msg = msg.store_uint(0, 64 + 32 + 2) ;; created_lt, created_at, init:Maybe, body:Either
                 .store_builder(data);
+    } catch (_, _) {
+        ;; overflowed, lets store in ref
+        msg = msg.store_uint(1, 64 + 32 + 2) ;; created_lt, created_at, init:Maybe, body:Either
+                .store_ref(begin_cell().store_builder(data).end_cell());
     }
 
     send_raw_message(msg.end_cell(), sendmode::REGULAR);
