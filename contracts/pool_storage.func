@@ -157,8 +157,9 @@ global slice untouched_data;
     ds~load_minters_data();
     untouched_data = ds;
     interest_rate = ds~load_share();
-    optimistic_deposit_withdrawals = ds~load_bool();
-    deposits_open? = ds~load_bool();
+    int optimistic_deposit_withdrawals = ds~load_bool();
+    int deposits_open? = ds~load_bool();
+    deposit_withdrawal_parameters = [optimistic_deposit_withdrawals, deposits_open?];
     saved_validator_set_hash = ds~load_uint(256);
     slice round_data = ds~load_ref().begin_parse();
     current_round_borrowers = round_data~load_round_data();
@@ -181,8 +182,9 @@ global slice untouched_data;
     ds~load_minters_data();
     untouched_data = ds;
     interest_rate = ds~load_share();
-    optimistic_deposit_withdrawals = ds~load_bool();
-    deposits_open? = ds~load_bool();
+    int optimistic_deposit_withdrawals = ds~load_bool();
+    int deposits_open? = ds~load_bool();
+    deposit_withdrawal_parameters = [optimistic_deposit_withdrawals, deposits_open?];
     saved_validator_set_hash = ds~load_uint(256);
     slice round_data = ds~load_ref().begin_parse();
     current_round_borrowers = round_data~load_round_data();
@@ -212,6 +214,7 @@ global slice untouched_data;
 
 () save_data() impure inline_ref {
     [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
+    [int optimistic_deposit_withdrawals, int deposits_open?] = deposit_withdrawal_parameters;
     set_data(begin_cell()
         .store_uint(state, 8)
         .store_bool(halted?)
