@@ -18,8 +18,8 @@ global int state; ;; Currently pool can only be in NORMAL state. This variable r
 global int halted?;
 global int total_balance;
 global int interest_rate; ;; times SHARE_BASIS == 2**24
-;; optimistic_deposit_withdrawals, deposits_open?
-global [int, int] deposit_withdrawal_parameters;
+;; optimistic_deposit_withdrawals, deposits_open?, instant_withdrawal_params([fee (time SHARE_BASIS), non_taxable_amount])
+global [int, int, [int, int]] deposit_withdrawal_parameters;
 global int saved_validator_set_hash;
 
 ;; [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit]
@@ -28,7 +28,8 @@ global [cell, int, int, int, int, int, int] prev_round_borrowers;
 
 ;;[min, max]
 global [int, int] loan_params_per_validator;
-global int governance_fee; ;; times SHARE_BASIS == 2**24
+global int governance_fee_share; ;; times SHARE_BASIS == 2**24
+global int accrued_governance_fee;
 global int disbalance_tolerance;
 global int credit_start_prior_elections_end;
 
@@ -198,7 +199,8 @@ int muldiv_extra(int a, int b, int c) inline {
             assert_not_halted!(); ;; otherwise mint back
             int approximate_amount = muldiv(jetton_amount, total_balance, supply);
             int available_funds = balance - msg_value - MIN_TONS_FOR_STORAGE - sent_during_rotation;
-            [int optimistic_deposit_withdrawals, int deposits_open?] = deposit_withdrawal_parameters;
+            [int optimistic_deposit_withdrawals,
+             _, [int,int] instant_withdrawal_params] = deposit_withdrawal_parameters;
             if(optimistic_deposit_withdrawals &
                     request_immediate_withdrawal_if_possible &
                     (state == state::NORMAL) &
@@ -206,7 +208,17 @@ int muldiv_extra(int a, int b, int c) inline {
                 throw_unless(error::output_amount_is_zero, approximate_amount > 0);
                 total_balance -= approximate_amount;
                 supply -= jetton_amount;
-                raw_reserve(balance - msg_value - approximate_amount - sent_during_rotation, reservemode::STRICT);
+
+                [int instant_withdrawal_fee, int non_taxable_amount] = instant_withdrawal_params;
+                int additional_fee = 0;
+                if(instant_withdrawal_fee > 0) {
+                    additional_fee = muldiv(max(approximate_amount - non_taxable_amount, 0),
+                                            instant_withdrawal_fee,
+                                            SHARE_BASIS);
+                    accrued_governance_fee += additional_fee;
+                }
+
+                raw_reserve(balance - msg_value - approximate_amount - sent_during_rotation + additional_fee, reservemode::STRICT);
                 available_funds -= approximate_amount;
                 var msg = begin_cell()
                         .store_msg_flags(msgflag::NON_BOUNCEABLE)
@@ -243,7 +255,7 @@ int muldiv_extra(int a, int b, int c) inline {
             supply -= jetton_amount;
             request_to_mint_pool_jettons(from_address, jetton_amount, query_id, true);
         }
-        
+
     {- ========== Governance operations ========== -}
     } elseif (op == sudo::send_message) {
                 process_sudo_request(sender_address, in_msg_body);
@@ -277,11 +289,15 @@ int muldiv_extra(int a, int b, int c) inline {
                 assert_sender!(sender_address, governor);
                 int optimistic_deposit_withdrawals = in_msg_body~load_bool();
                 int deposits_open?  = in_msg_body~load_bool();
-                deposit_withdrawal_parameters = [optimistic_deposit_withdrawals, deposits_open?];
+                [int, int] instant_withdrawal_params = [in_msg_body~load_share(),
+                                                        in_msg_body~load_coins()];
+                deposit_withdrawal_parameters = [optimistic_deposit_withdrawals,
+                                                 deposits_open?,
+                                                 instant_withdrawal_params];
                 in_msg_body.end_parse();
     } elseif(op == governor::set_governance_fee) {
                 assert_sender!(sender_address, governor);
-                governance_fee = in_msg_body~load_share();
+                governance_fee_share = in_msg_body~load_share();
                 in_msg_body.end_parse();
     } elseif (op == interest_manager::set_interest) {
         assert_state!(state::NORMAL);
@@ -308,7 +324,10 @@ int muldiv_extra(int a, int b, int c) inline {
                 ;; we do not end_parse here, because apps may use
                 ;; unprocessed data in depositd message for offchain analytics
                 assert_state!(state::NORMAL);
-                [int optimistic_deposit_withdrawals, int deposits_open?] = deposit_withdrawal_parameters;
+                [int optimistic_deposit_withdrawals,
+                 int deposits_open?,
+                 [int, int] instant_withdrawal_params
+                ] = deposit_withdrawal_parameters;
                 throw_unless(error::deposits_are_closed, deposits_open?);
                 raw_reserve(balance - DEPOSIT_FEE - sent_during_rotation, reservemode::STRICT);
                 int deposit_amount = msg_value - DEPOSIT_FEE;
@@ -521,20 +540,22 @@ int muldiv_extra(int a, int b, int c) inline {
 
     profit -= FINALIZE_ROUND_FEE;
 
-    ;; governance_fee / SHARE_BASIS < 1, share to send to governance
-    int fee = max(muldiv(governance_fee, profit, SHARE_BASIS), 0);
+    ;; governance_fee_share / SHARE_BASIS < 1, share to send to governance
+    int fee = max(muldiv(governance_fee_share, profit, SHARE_BASIS), 0);
     profit -= fee;
 
     ;; if there is negative profit (loss), then it can take maximum all the balance
     profit = max(profit, - total_balance);
     total_balance += profit;
 
+    fee += accrued_governance_fee;
     if (fee > SERVICE_NOTIFICATION_AMOUNT) { ;; otherwise it is less than msg cost
       sent_during_rotation += fee;
+      accrued_governance_fee = 0;
       send_msg_builder(interest_manager, fee,
                begin_cell().store_body_header(interest_manager::operation_fee, cur_lt()),
                msgflag::NON_BOUNCEABLE, sendmode::REGULAR);
-      
+
     }
     sent_during_rotation += SERVICE_NOTIFICATION_AMOUNT;
     send_msg_builder(interest_manager, SERVICE_NOTIFICATION_AMOUNT,
@@ -646,7 +667,7 @@ int muldiv_extra(int a, int b, int c) inline {
 (int, int) _get_projected_conversion_ratio () inline {
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = prev_round_borrowers;
     int expected_profit = expected - borrowed - FINALIZE_ROUND_FEE;
-    int fee = max(muldiv(governance_fee, expected_profit, SHARE_BASIS), 0);
+    int fee = max(muldiv(governance_fee_share, expected_profit, SHARE_BASIS), 0);
     expected_profit -= fee;
     return (max(total_balance + expected_profit, 0), supply);
 }
@@ -690,17 +711,20 @@ var compose_pool_full_data_internal( int update?) inline_ref {
     if (update?) {
         update_round(pair_first(get_balance()));
     }
-    [int optimistic_deposit_withdrawals, int deposits_open?] = deposit_withdrawal_parameters;
+    [int optimistic_deposit_withdrawals, int deposits_open?,
+     [int, int] instant_withdrawal_params] = deposit_withdrawal_parameters;
+    [int instant_withdrawal_fee, int non_taxable_amount] = instant_withdrawal_params;
     return (state, halted?,
             total_balance,
             interest_rate,
             optimistic_deposit_withdrawals, deposits_open?,
+            instant_withdrawal_fee, non_taxable_amount,
             saved_validator_set_hash,
 
             prev_round_borrowers, current_round_borrowers,
             unpair(loan_params_per_validator),
             ;;min_loan_per_validator, max_loan_per_validator,
-            governance_fee,
+            governance_fee_share, accrued_governance_fee,
             disbalance_tolerance,
             credit_start_prior_elections_end,
 

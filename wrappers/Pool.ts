@@ -39,6 +39,7 @@ export type PoolFullConfig = {
   interestRate: number;
   optimisticDepositWithdrawals: boolean;
   depositsOpen: boolean;
+  instantWithdrawalParams: {fee: number, nonTaxableAmount: bigint};
   savedValidatorSetHash: bigint;
   currentRound: RoundData;
   prevRound: RoundData;
@@ -47,6 +48,7 @@ export type PoolFullConfig = {
   maxLoanPerValidator: bigint;
 
   governanceFee: number;
+  accruedGovernanceFee: bigint;
 
   disbalanceTolerance: number;
   creditStartPriorElectionsEnd: number;
@@ -110,6 +112,8 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeUint(Conf.testInterest, 24) // minimal interest_rate
               .storeInt(config.optimistic_deposit_withdrawals, 1) // optimistic_deposit_withdrawals
               .storeInt(-1n, 1) // deposits_open?
+              .storeInt(0, 24) // instant_withdrawal_params->fee
+              .storeCoins(0)   // instant_withdrawal_params->non_taxable_amount
               .storeUint(0, 256) // saved_validator_set_hash
               .storeRef(
                 beginCell()
@@ -120,6 +124,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeCoins(100 * 1000000000) // min_loan_per_validator
               .storeCoins(1000000 * 1000000000) // max_loan_per_validator
               .storeUint(155 * (2 ** 8), 24) // governance fee
+              .storeCoins(0) //accruedGovernanceFee
               .storeUint(30, 8) // disbalance tolerance
               .storeUint(0, 48) //creditStartPriorElectionsEnd
               .storeRef(roles)
@@ -147,12 +152,14 @@ export function dataToFullConfig(data: PoolData) : PoolFullConfig {
     interestRate: data.interestRate,
     optimisticDepositWithdrawals: data.optimisticDepositWithdrawals,
     depositsOpen: data.depositsOpen,
+    instantWithdrawalParams: data.instantWithdrawalParams,
     savedValidatorSetHash: data.savedValidatorSetHash,
     currentRound: data.currentRound,
     prevRound: data.previousRound,
     minLoanPerValidator: data.minLoan,
     maxLoanPerValidator: data.maxLoan,
     governanceFee: data.governanceFee,
+    accruedGovernanceFee: data.accruedGovernanceFee,
     disbalanceTolerance: data.disbalanceTolerance,
     creditStartPriorElectionsEnd: data.creditStartPriorElectionsEnd,
     sudoer: data.sudoer,
@@ -227,6 +234,8 @@ export function poolFullConfigToCell(config: PoolFullConfig): Cell {
               .storeUint(config.interestRate, 24) // minimal interest_rate
               .storeBit(config.optimisticDepositWithdrawals) // optimistic_deposit_withdrawals
               .storeBit(config.depositsOpen) // deposits_open?
+              .storeInt(config.instantWithdrawalParams.fee, 24)
+              .storeCoins(config.instantWithdrawalParams.nonTaxableAmount)
               .storeUint(config.savedValidatorSetHash, 256) // saved_validator_set_hash
               .storeRef(
                 beginCell()
@@ -237,6 +246,7 @@ export function poolFullConfigToCell(config: PoolFullConfig): Cell {
               .storeCoins(config.minLoanPerValidator) // min_loan_per_validator
               .storeCoins(config.maxLoanPerValidator) // max_loan_per_validator
               .storeUint(config.governanceFee, 24) // governance fee
+              .storeCoins(config.accruedGovernanceFee)
               .storeUint(config.disbalanceTolerance, 8)
               .storeUint(config.creditStartPriorElectionsEnd, 48)
               .storeRef(roles)
@@ -314,7 +324,10 @@ export class Pool implements Contract {
                   .endCell(),
         });
    }
-    async sendSetDepositSettings(provider: ContractProvider, via: Sender, value: bigint, optimistic: Boolean, depositOpen: Boolean) {
+    async sendSetDepositSettings(provider: ContractProvider, via: Sender, value: bigint,
+                                 optimistic: Boolean, depositOpen: Boolean,
+                                 instantWithdrawalFee: number = 0,
+                                 instantWithdrawalNonTaxable: bigint = 0n) {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
@@ -323,6 +336,8 @@ export class Pool implements Contract {
                      .storeUint(1, 64) // query id
                      .storeUint(Number(optimistic), 1)
                      .storeUint(Number(depositOpen), 1)
+                     .storeUint(instantWithdrawalFee, 24)
+                     .storeCoins(instantWithdrawalNonTaxable)
                   .endCell(),
         });
     }
@@ -500,20 +515,6 @@ export class Pool implements Contract {
         });
     }
 
-    async sendDepositSettings(provider:ContractProvider, via:Sender, optimistic:boolean, open:boolean) {
-
-      await provider.internal(via, {
-        value: toNano('0.15'),
-        sendMode: SendMode.PAY_GAS_SEPARATELY,
-        body: beginCell()
-                .storeUint(Op.governor.set_deposit_settings, 32)
-                .storeUint(1, 64)
-                .storeBit(optimistic)
-                .storeBit(open)
-              .endCell(),
-      });
-    }
-
     // Get methods
     /*
     async getDepositPayout(provider: ContractProvider) {
@@ -585,13 +586,18 @@ export class Pool implements Contract {
     }
     async getFullData(provider: ContractProvider) {
         let { stack } = await provider.get('get_pool_full_data', []);
-        let new_contract_version = stack.remaining == 32;
+        let new_contract_version = stack.remaining == 35;
         let state = stack.readNumber() as State;
         let halted = stack.readBoolean();
         let totalBalance = stack.readBigNumber();
         let interestRate = stack.readNumber();
         let optimisticDepositWithdrawals = stack.readBoolean();
         let depositsOpen = stack.readBoolean();
+        let instantWithdrawalParams = {fee:0, nonTaxableAmount:0n};
+        if(new_contract_version) {
+            instantWithdrawalParams.fee = stack.readNumber();
+            instantWithdrawalParams.nonTaxableAmount = stack.readBigNumber();
+        }
         let savedValidatorSetHash = stack.readBigNumber();
 
         let prv = stack.readTuple();
@@ -634,9 +640,11 @@ export class Pool implements Contract {
         let maxLoan = stack.readBigNumber();
         let governanceFee = stack.readNumber();
 
+        let accruedGovernanceFee = 0n;
         let disbalanceTolerance = 30;
         let creditStartPriorElectionsEnd = 0;
         if(new_contract_version) {
+            accruedGovernanceFee = stack.readBigNumber();
             disbalanceTolerance = stack.readNumber();
             creditStartPriorElectionsEnd = stack.readNumber();
         }
@@ -670,13 +678,13 @@ export class Pool implements Contract {
         return {
             state, halted,
             totalBalance, interestRate,
-            optimisticDepositWithdrawals, depositsOpen,
+            optimisticDepositWithdrawals, depositsOpen, instantWithdrawalParams,
             savedValidatorSetHash,
 
             previousRound, currentRound,
 
             minLoan, maxLoan,
-            governanceFee,
+            governanceFee, accruedGovernanceFee,
             disbalanceTolerance, creditStartPriorElectionsEnd,
 
             poolJettonMinter, poolJettonSupply, supply:poolJettonSupply,
@@ -699,13 +707,18 @@ export class Pool implements Contract {
 
     async getFullDataRaw(provider: ContractProvider) {
         let { stack } = await provider.get('get_pool_full_data_raw', []);
-        let new_contract_version = stack.remaining == 32;
+        let new_contract_version = stack.remaining == 35;
         let state = stack.readNumber() as State;
         let halted = stack.readBoolean();
         let totalBalance = stack.readBigNumber();
         let interestRate = stack.readNumber();
         let optimisticDepositWithdrawals = stack.readBoolean();
         let depositsOpen = stack.readBoolean();
+        let instantWithdrawalParams = {fee:0, nonTaxableAmount:0n};
+        if(new_contract_version) {
+            instantWithdrawalParams.fee = stack.readNumber();
+            instantWithdrawalParams.nonTaxableAmount = stack.readBigNumber();
+        }
         let savedValidatorSetHash = stack.readBigNumber();
 
         let prv = stack.readTuple();
@@ -748,9 +761,11 @@ export class Pool implements Contract {
         let maxLoan = stack.readBigNumber();
         let governanceFee = stack.readNumber();
 
+        let accruedGovernanceFee = 0n;
         let disbalanceTolerance = 30;
         let creditStartPriorElectionsEnd = 0;
         if(new_contract_version) {
+            accruedGovernanceFee = stack.readBigNumber();
             disbalanceTolerance = stack.readNumber();
             creditStartPriorElectionsEnd = stack.readNumber();
         }
@@ -784,13 +799,13 @@ export class Pool implements Contract {
         return {
             state, halted,
             totalBalance, interestRate,
-            optimisticDepositWithdrawals, depositsOpen,
+            optimisticDepositWithdrawals, depositsOpen, instantWithdrawalParams,
             savedValidatorSetHash,
 
             previousRound, currentRound,
 
             minLoan, maxLoan,
-            governanceFee,
+            governanceFee, accruedGovernanceFee,
             disbalanceTolerance, creditStartPriorElectionsEnd,
 
             poolJettonMinter, poolJettonSupply, supply:poolJettonSupply,

@@ -1547,7 +1547,7 @@ describe('Integrational tests', () => {
         it('Should set optimistic', async () => {
             const poolBefore = await pool.getFullData();
             expect(poolBefore.optimisticDepositWithdrawals).toBe(false);
-            const res = await pool.sendDepositSettings(deployer.getSender(), true, true);
+            const res = await pool.sendSetDepositSettings(deployer.getSender(), toNano("0.3"), true, true);
             expect(res.transactions).toHaveTransaction({
                 from: deployer.address,
                 to: pool.address,
