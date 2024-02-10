@@ -313,6 +313,22 @@ int muldiv_extra(int a, int b, int c) inline {
         disbalance_tolerance = in_msg_body~load_uint(DISBALANCE_BIT_SIZE);
         credit_start_prior_elections_end = in_msg_body~load_timestamp();
         in_msg_body.end_parse();
+    } elseif (op == halter::partial_halt) {
+        int stop_optimistic = in_msg_body~load_bool();
+        int close_deposits = in_msg_body~load_bool();
+        in_msg_body.end_parse();
+        [int optimistic_deposit_withdrawals,
+         int deposits_open?,
+         int instant_withdrawal_fee] = deposit_withdrawal_parameters;
+        if (stop_optimistic) {
+            optimistic_deposit_withdrawals = false;
+        }
+        if (close_deposits) {
+            deposits_open? = false;
+        }
+        deposit_withdrawal_parameters = [optimistic_deposit_withdrawals,
+                                         deposits_open?,
+                                         instant_withdrawal_fee];
     } else {
         update_round(pair_first(get_balance()) - msg_value);
         assert_not_halted!();

@@ -58,7 +58,7 @@ const int governor::return_available_funds = 0x55c26cd5;
 const int governor::prepare_governance_migration = 0x9971881c;
 
 const int halter::halt = 0x139a1b4e;
-
+const int halter::partial_halt = 0x77778888; ;;todo
 
 const int interest_manager::operation_fee = 0x54d37487;
 const int interest_manager::request_notification = 0xb1ebae06;
