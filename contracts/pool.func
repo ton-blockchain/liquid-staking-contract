@@ -18,8 +18,8 @@ global int state; ;; Currently pool can only be in NORMAL state. This variable r
 global int halted?;
 global int total_balance;
 global int interest_rate; ;; times SHARE_BASIS == 2**24
-;; optimistic_deposit_withdrawals, deposits_open?, instant_withdrawal_params([fee (time SHARE_BASIS), non_taxable_amount])
-global [int, int, [int, int]] deposit_withdrawal_parameters;
+;; optimistic_deposit_withdrawals, deposits_open?, instant_withdrawal_fee (time SHARE_BASIS)
+global [int, int, int] deposit_withdrawal_parameters;
 global int saved_validator_set_hash;
 
 ;; [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit]
@@ -200,7 +200,7 @@ int muldiv_extra(int a, int b, int c) inline {
             int approximate_amount = muldiv(jetton_amount, total_balance, supply);
             int available_funds = balance - msg_value - MIN_TONS_FOR_STORAGE - sent_during_rotation;
             [int optimistic_deposit_withdrawals,
-             _, [int,int] instant_withdrawal_params] = deposit_withdrawal_parameters;
+             _, int instant_withdrawal_fee] = deposit_withdrawal_parameters;
             if(optimistic_deposit_withdrawals &
                     request_immediate_withdrawal_if_possible &
                     (state == state::NORMAL) &
@@ -209,10 +209,9 @@ int muldiv_extra(int a, int b, int c) inline {
                 total_balance -= approximate_amount;
                 supply -= jetton_amount;
 
-                [int instant_withdrawal_fee, int non_taxable_amount] = instant_withdrawal_params;
                 int additional_fee = 0;
                 if(instant_withdrawal_fee > 0) {
-                    additional_fee = muldiv(max(approximate_amount - non_taxable_amount, 0),
+                    additional_fee = muldiv(approximate_amount,
                                             instant_withdrawal_fee,
                                             SHARE_BASIS);
                     accrued_governance_fee += additional_fee;
@@ -289,11 +288,10 @@ int muldiv_extra(int a, int b, int c) inline {
                 assert_sender!(sender_address, governor);
                 int optimistic_deposit_withdrawals = in_msg_body~load_bool();
                 int deposits_open?  = in_msg_body~load_bool();
-                [int, int] instant_withdrawal_params = [in_msg_body~load_share(),
-                                                        in_msg_body~load_coins()];
+                int instant_withdrawal_fee = in_msg_body~load_share();
                 deposit_withdrawal_parameters = [optimistic_deposit_withdrawals,
                                                  deposits_open?,
-                                                 instant_withdrawal_params];
+                                                 instant_withdrawal_fee];
                 in_msg_body.end_parse();
     } elseif(op == governor::set_governance_fee) {
                 assert_sender!(sender_address, governor);
@@ -326,7 +324,7 @@ int muldiv_extra(int a, int b, int c) inline {
                 assert_state!(state::NORMAL);
                 [int optimistic_deposit_withdrawals,
                  int deposits_open?,
-                 [int, int] instant_withdrawal_params
+                 int instant_withdrawal_fee
                 ] = deposit_withdrawal_parameters;
                 throw_unless(error::deposits_are_closed, deposits_open?);
                 raw_reserve(balance - DEPOSIT_FEE - sent_during_rotation, reservemode::STRICT);
@@ -712,13 +710,12 @@ var compose_pool_full_data_internal( int update?) inline_ref {
         update_round(pair_first(get_balance()));
     }
     [int optimistic_deposit_withdrawals, int deposits_open?,
-     [int, int] instant_withdrawal_params] = deposit_withdrawal_parameters;
-    [int instant_withdrawal_fee, int non_taxable_amount] = instant_withdrawal_params;
+     int instant_withdrawal_fee] = deposit_withdrawal_parameters;
     return (state, halted?,
             total_balance,
             interest_rate,
             optimistic_deposit_withdrawals, deposits_open?,
-            instant_withdrawal_fee, non_taxable_amount,
+            instant_withdrawal_fee,
             saved_validator_set_hash,
 
             prev_round_borrowers, current_round_borrowers,

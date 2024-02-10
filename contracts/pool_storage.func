@@ -160,9 +160,8 @@ global slice untouched_data;
     int optimistic_deposit_withdrawals = ds~load_bool();
     int deposits_open? = ds~load_bool();
     int instant_withdrawal_fee = ds~load_share();
-    int non_taxable_amount = ds~load_coins();
     deposit_withdrawal_parameters = [optimistic_deposit_withdrawals, deposits_open?,
-                                     [instant_withdrawal_fee, non_taxable_amount]];
+                                     instant_withdrawal_fee];
     saved_validator_set_hash = ds~load_uint(256);
     slice round_data = ds~load_ref().begin_parse();
     current_round_borrowers = round_data~load_round_data();
@@ -188,7 +187,7 @@ global slice untouched_data;
     interest_rate = ds~load_share();
     int optimistic_deposit_withdrawals = ds~load_bool();
     int deposits_open? = ds~load_bool();
-    deposit_withdrawal_parameters = [optimistic_deposit_withdrawals, deposits_open?, [0, 0]];
+    deposit_withdrawal_parameters = [optimistic_deposit_withdrawals, deposits_open?, 0];
     saved_validator_set_hash = ds~load_uint(256);
     slice round_data = ds~load_ref().begin_parse();
     current_round_borrowers = round_data~load_round_data();
@@ -214,7 +213,7 @@ global slice untouched_data;
         ;; zero means do not check time
         credit_start_prior_elections_end = 0;
         accrued_governance_fee = 0;
-        ;; also [0,0] for instant_withdrawal_params in deposit_withdrawal_parameters
+        ;; also 0 for instant_withdrawal_fee in deposit_withdrawal_parameters
     }
 }
 
@@ -222,8 +221,7 @@ global slice untouched_data;
     [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
     [int optimistic_deposit_withdrawals,
      int deposits_open?,
-     [int, int] instant_withdrawal_params] = deposit_withdrawal_parameters;
-    [int instant_withdrawal_fee, int non_taxable_amount] = instant_withdrawal_params;
+     int instant_withdrawal_fee] = deposit_withdrawal_parameters;
     ;; 8 + 1 + 124 + 24 + 1 + 1 + 256 + 124 + 124 + 24 + 8 + 48 + 24 + 124 + 124
     set_data(begin_cell()
         .store_uint(state, 8)
@@ -234,7 +232,6 @@ global slice untouched_data;
         .store_bool(optimistic_deposit_withdrawals)
         .store_bool(deposits_open?)
         .store_share(instant_withdrawal_fee)
-        .store_coins(non_taxable_amount)
         .store_uint(saved_validator_set_hash, 256)
         .store_ref(
           begin_cell()
