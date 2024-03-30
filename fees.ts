@@ -1,10 +1,10 @@
 /*
  * https://github.com/ton-community/ton/blob/v12.3.3/src/block/fees.ts
- * Actualized to the current @ton/core types
+ * Actualized to the current ton-core types
  * Currently only message related function
 */
 
-import { Cell, Slice, Message, loadMessageRelaxed, Dictionary  } from '@ton/core';
+import { Cell, Slice, Message, loadMessageRelaxed, Dictionary  } from 'ton-core';
 
 export type MsgPrices = ReturnType<typeof configParseMsgPrices>
 

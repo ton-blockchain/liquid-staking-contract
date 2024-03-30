@@ -1,13 +1,13 @@
-import { Blockchain, SandboxContract, TreasuryContract, BlockchainSnapshot } from '@ton/sandbox';
-import { Cell, toNano, fromNano, beginCell, Address, Dictionary } from '@ton/core';
+import { Blockchain, SandboxContract, TreasuryContract, BlockchainSnapshot } from '@ton-community/sandbox';
+import { Cell, toNano, fromNano, beginCell, Address, Dictionary } from 'ton-core';
 import { Pool } from '../wrappers/Pool';
 import { Controller } from '../wrappers/Controller';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
 import { setConsigliere } from '../wrappers/PayoutMinter.compile';
 import { getElectionsConf, getVset, loadConfig, packValidatorsSet } from "../wrappers/ValidatorUtils";
-import '@ton/test-utils';
+import '@ton-community/test-utils';
 import { readFileSync } from 'fs';
-import { compile } from '@ton/blueprint';
+import { compile } from '@ton-community/blueprint';
 
 export function readCompiled(name: string): Cell {
     const filename = 'build/' + name + '.compiled.json';

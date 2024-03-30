@@ -1,4 +1,4 @@
-import { CompilerConfig } from '@ton/blueprint';
+import { CompilerConfig } from '@ton-community/blueprint';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 

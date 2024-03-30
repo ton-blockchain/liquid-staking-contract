@@ -1,4 +1,4 @@
-import { Address, toNano, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, Message, storeMessage } from '@ton/core';
+import { Address, toNano, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, Message, storeMessage } from 'ton-core';
 import { buff2bigint } from '../utils';
 import { signData } from "./ValidatorUtils";
 import { Conf, Op } from "../PoolConstants";

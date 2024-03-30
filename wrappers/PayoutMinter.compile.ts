@@ -1,9 +1,9 @@
-import { CompilerConfig } from '@ton/blueprint';
+import { CompilerConfig } from '@ton-community/blueprint';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import fs from 'fs';
-import { compile as compileFunc } from '@ton/blueprint';
-import { Address } from '@ton/core';
+import { compile as compileFunc } from '@ton-community/blueprint';
+import { Address } from 'ton-core';
 
 
 export const compile: CompilerConfig = {

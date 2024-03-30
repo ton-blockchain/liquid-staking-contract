@@ -1,7 +1,7 @@
-import { Blockchain,BlockchainSnapshot, BlockchainTransaction, createShardAccount,internal,SandboxContract,SendMessageResult,SmartContractTransaction,TreasuryContract } from "@ton/sandbox";
-import { Address, Cell, beginCell, toNano, Sender, Dictionary } from '@ton/core';
-import { compile } from '@ton/blueprint';
-import '@ton/test-utils';
+import { Blockchain,BlockchainSnapshot, BlockchainTransaction, createShardAccount,internal,SandboxContract,SendMessageResult,SmartContractTransaction,TreasuryContract } from "@ton-community/sandbox";
+import { Address, Cell, beginCell, toNano, Sender, Dictionary } from 'ton-core';
+import { compile } from '@ton-community/blueprint';
+import '@ton-community/test-utils';
 import { keyPairFromSeed, getSecureRandomBytes, getSecureRandomWords, KeyPair } from 'ton-crypto';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
 import { JettonWallet as DAOWallet } from '../wrappers/JettonWallet';
@@ -20,7 +20,7 @@ import { ConfigTest } from "../wrappers/ConfigTest";
 import { computeMessageForwardFees, getMsgPrices } from "../fees";
 import { getRandomInt, randomAddress } from "../contracts/jetton_dao/tests/utils";
 import { PayoutCollectionConfig } from "../wrappers/PayoutNFTCollection";
-import { flattenTransaction } from "@ton/test-utils";
+import { flattenTransaction } from "@ton-community/test-utils";
 
 type Validator = {
   wallet: SandboxContract<TreasuryContract>,

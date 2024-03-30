@@ -1,4 +1,4 @@
-import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano, TupleReader } from '@ton/core';
+import { Address, beginCell, Cell, Contract, contractAddress, ContractProvider, Sender, SendMode, toNano, TupleReader } from 'ton-core';
 import { JettonWalletConfig, JettonData, DaoData, jettonWalletConfigToCell, JettonWallet as BasicJettonWallet } from '../contracts/jetton_dao/wrappers/JettonWallet';
 
 
