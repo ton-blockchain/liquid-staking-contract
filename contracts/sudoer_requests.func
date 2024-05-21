@@ -1,12 +1,9 @@
 #include "asserts.func";
 
-;; common function in all contracts
-global slice sudoer;
-global int sudoer_set_at;
 
 const int SUDOER_QUARANTINE = 2 * 24 * 3600 ;
 
-() process_sudo_request(slice sender, slice in_msg) impure inline_ref {
+() process_sudo_request(slice sender, slice in_msg, slice sudoer, int sudoer_set_at) impure inline_ref {
     assert_sender!(sender, sudoer);
     throw_unless(sudoer::quarantine, now() > sudoer_set_at + SUDOER_QUARANTINE);
     int mode = in_msg~load_uint(8);
@@ -17,7 +14,7 @@ const int SUDOER_QUARANTINE = 2 * 24 * 3600 ;
 
 
 () execute(cont c) impure asm "EXECUTE";
-() process_sudo_upgrade_request(slice sender, slice in_msg) impure inline_ref {
+() process_sudo_upgrade_request(slice sender, slice in_msg, slice sudoer, int sudoer_set_at) impure inline_ref {
     assert_sender!(sender, sudoer);
     throw_unless(sudoer::quarantine, now() > sudoer_set_at + SUDOER_QUARANTINE);
     cell data = in_msg~load_maybe_ref();

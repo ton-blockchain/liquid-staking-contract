@@ -1,3 +1,5 @@
+#include "pool.func";
+#include "stdlib.func";
 ;;[borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit]
 (slice, ([cell, int, int, int, int, int, int])) ~load_round_data(slice s) inline {
     slice ds = s~load_ref().begin_parse();
@@ -98,32 +100,39 @@ builder save_minters_data(builder pb) inline {
 
 (slice, ()) ~load_roles(slice s) impure inline {
     slice ds = s~load_ref().begin_parse();
-    sudoer = ds~load_msg_addr();
-    sudoer_set_at = ds~load_timestamp();
-    governor = ds~load_msg_addr();
-    governor_update_after = ds~load_timestamp();
-    interest_manager = ds~load_msg_addr();
+    slice sudoer = ds~load_msg_addr();
+    int sudoer_set_at = ds~load_timestamp();
+    slice governor = ds~load_msg_addr();
+    int governor_update_after = ds~load_timestamp();
+    slice interest_manager = ds~load_msg_addr();
     ds = ds~load_ref().begin_parse();
-    halter = ds~load_msg_addr();
-    approver = ds~load_msg_addr();
+    slice halter = ds~load_msg_addr();
+    slice approver = ds~load_msg_addr();
+    slice treasury = ds.slice_bits() ? ds~load_msg_addr() : interest_manager;
+    roles = [sudoer, sudoer_set_at, governor, governor_update_after, interest_manager,
+             halter, approver, treasury];
     return (s, ());
 }
 
 builder save_roles(builder pb) inline {
-    cell roles = begin_cell()
-                 .store_slice(sudoer)
-                 .store_timestamp(sudoer_set_at)
-                 .store_slice(governor)
-                 .store_timestamp(governor_update_after)
-                 .store_slice(interest_manager)
-                 .store_ref(
-                   begin_cell()
-                   .store_slice(halter)
-                   .store_slice(approver)
-                   .end_cell()
-                  )
-                 .end_cell();
-   return pb.store_ref(roles);
+    [slice sudoer, int sudoer_set_at,
+     slice governor, int governor_update_after,
+     slice interest_manager, slice halter, slice approver, slice treasury] = roles;
+    cell roles_ref = begin_cell()
+                     .store_slice(sudoer)
+                     .store_timestamp(sudoer_set_at)
+                     .store_slice(governor)
+                     .store_timestamp(governor_update_after)
+                     .store_slice(interest_manager)
+                     .store_ref(
+                       begin_cell()
+                       .store_slice(halter)
+                       .store_slice(approver)
+                       .store_slice(treasury)
+                       .end_cell()
+                      )
+                     .end_cell();
+   return pb.store_ref(roles_ref);
 }
 
 (slice, ()) ~load_codes(slice s) impure inline {

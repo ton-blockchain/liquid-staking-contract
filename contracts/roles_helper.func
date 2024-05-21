@@ -1,0 +1,45 @@
+
+global [slice, int, slice, int, slice, slice, slice, slice] roles;
+
+slice get_sudoer([slice, int, slice, int, slice, slice, slice, slice] roles_) asm "0 INDEX";
+int get_sudoer_set_at([slice, int, slice, int, slice, slice, slice, slice] roles_) asm "1 INDEX";
+slice get_governor([slice, int, slice, int, slice, slice, slice, slice] roles_) asm "2 INDEX";
+int get_governor_update_after([slice, int, slice, int, slice, slice, slice, slice] roles_) asm "3 INDEX";
+slice get_interest_manager([slice, int, slice, int, slice, slice, slice, slice] roles_) asm "4 INDEX";
+slice get_halter([slice, int, slice, int, slice, slice, slice, slice] roles_) asm "5 INDEX";
+slice get_approver([slice, int, slice, int, slice, slice, slice, slice] roles_) asm "6 INDEX";
+slice get_treasury([slice, int, slice, int, slice, slice, slice, slice] roles_) asm "7 INDEX";
+
+
+[slice, int, slice, int, slice, slice, slice, slice] set_sudoer_internal([slice, int, slice, int, slice, slice, slice, slice] roles_, slice sudoer) asm "0 SETINDEX";
+() set_sudoer(slice sudoer) impure inline {
+    roles = set_sudoer_internal(roles, sudoer);
+}
+[slice, int, slice, int, slice, slice, slice, slice] set_sudoer_set_at_internal([slice, int, slice, int, slice, slice, slice, slice] roles_, int set_at) asm "1 SETINDEX";
+() set_sudoer_set_at(int set_at) impure inline {
+    roles = set_sudoer_set_at_internal(roles, set_at);
+}
+[slice, int, slice, int, slice, slice, slice, slice] set_governor_internal([slice, int, slice, int, slice, slice, slice, slice] roles_, slice governor) asm "2 SETINDEX";
+() set_governor(slice governor) impure inline {
+    roles = set_governor_internal(roles, governor);
+}
+[slice, int, slice, int, slice, slice, slice, slice] set_governor_update_after_internal([slice, int, slice, int, slice, slice, slice, slice] roles_, int update_after) asm "3 SETINDEX";
+() set_governor_update_after(int update_after) impure inline {
+    roles = set_governor_update_after_internal(roles, update_after);
+}
+[slice, int, slice, int, slice, slice, slice, slice] set_interest_manager_internal([slice, int, slice, int, slice, slice, slice, slice] roles_, slice interest_manager) asm "4 SETINDEX";
+() set_interest_manager(slice interest_manager) impure inline {
+    roles = set_interest_manager_internal(roles, interest_manager);
+}
+[slice, int, slice, int, slice, slice, slice, slice] set_halter_internal([slice, int, slice, int, slice, slice, slice, slice] roles_, slice halter) asm "5 SETINDEX";
+() set_halter(slice halter) impure inline {
+    roles = set_halter_internal(roles, halter);
+}
+[slice, int, slice, int, slice, slice, slice, slice] set_approver_internal([slice, int, slice, int, slice, slice, slice, slice] roles_, slice approver) asm "6 SETINDEX";
+() set_approver(slice approver) impure inline {
+    roles = set_approver_internal(roles, approver);
+}
+[slice, int, slice, int, slice, slice, slice, slice] set_treasury_internal([slice, int, slice, int, slice, slice, slice, slice] roles_, slice treasury) asm "7 SETINDEX";
+() set_treasury(slice treasury) impure inline {
+    roles = set_treasury_internal(roles, treasury);
+}

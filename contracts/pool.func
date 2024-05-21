@@ -6,8 +6,6 @@
 #include "asserts.func";
 #include "sudoer_requests.func";
 #include "address_calculations.func";
-#include "governor_requests.func";
-#include "halter_requests.func";
 #include "network_config_utils.func";
 #include "jetton_dao/contracts/jetton-utils.func";
 
@@ -43,13 +41,19 @@ global slice withdrawal_payout;
 global int requested_for_withdrawal; ;; in jettons
 
 ;; ROLES
-global slice sudoer;            ;; has right to send any message on behalf of any contract
-global int sudoer_set_at;
-global slice governor;          ;; sets roles, unhalt and get reward
-global int governor_update_after;
-global slice interest_manager;  ;; gets round stats and update interest
-global slice halter;            ;; halts operation
-global slice approver;          ;; approves controllers to ask for credit
+{-
+pack all roles to one global variable
+    sudoer;            ;; has right to send any message on behalf of any contract
+    int sudoer_set_at;
+    governor;          ;; sets roles, unhalt and get reward
+    int governor_update_after;
+    interest_manager;  ;; gets round stats and update interest
+    halter;            ;; halts operation
+    approver;          ;; approves controllers to ask for credit
+    treasury;          ;; receives all the fees
+-}
+#include "roles_helper.func";
+global [slice, int, slice, int, slice, slice, slice, slice] roles;
 
 ;; CHILD CONTRACT CODES
 ;; [controller_code, pool_jetton_wallet_code, payout_minter_code]
@@ -86,7 +90,7 @@ const int MAX_POOL_GAS_ON_USER_ACTION = ONE_TON / 3;
 const int PAYOUT_DISTRIBUTION_AMOUNT = ONE_TON / 5; ;; we will get excesses back
 const int MINTER_DEPLOY_FEE = ONE_TON / 10;
 
-
+const int GOVERNOR_QUARANTINE = 86400; ;; 1 day
 #include "pool_storage.func";
 
 () log_loan (slice, int)  impure;
@@ -182,7 +186,8 @@ int muldiv_extra(int a, int b, int c) inline {
     if (op == halter::halt) {
         ;; we do not end_parse here, because unprocessed data
         ;; in message maybe used for reason in offchain analytics
-        process_halt_request(sender_address);
+        assert_sender!(sender_address, get_halter(roles));
+        halted? = true;
     } elseif (op == pool::withdraw) {
         assert_sender!(sender_address, jetton_minter);
         int jetton_amount = in_msg_body~load_coins();
@@ -257,35 +262,50 @@ int muldiv_extra(int a, int b, int c) inline {
 
     {- ========== Governance operations ========== -}
     } elseif (op == sudo::send_message) {
-                process_sudo_request(sender_address, in_msg_body);
+                process_sudo_request(sender_address, in_msg_body,
+                              get_sudoer(roles), get_sudoer_set_at(roles));
     } elseif (op == sudo::upgrade) {
-        process_sudo_upgrade_request(sender_address, in_msg_body);
+        process_sudo_upgrade_request(sender_address, in_msg_body,
+                                     get_sudoer(roles), get_sudoer_set_at(roles));
     } elseif (op == governor::set_sudoer) {
-                process_set_sudo_request(sender_address, in_msg_body);
+                assert_sender!(sender_address, get_governor(roles));
+                set_sudoer_set_at(now());
+                set_sudoer(in_msg_body~load_msg_addr());
+                in_msg_body.end_parse();
     } elseif (op == governor::unhalt) {
-        process_unhalt_request(sender_address);
+        assert_sender!(sender_address, get_governor(roles));
+        halted? = false;
         in_msg_body.end_parse();
     } elseif (op == governor::prepare_governance_migration) {
-        process_prepare_governance_migration(sender_address, in_msg_body);
+        assert_sender!(sender_address, get_governor(roles));
+        int governor_update_after = in_msg_body~load_timestamp();
+        set_governor_update_after(governor_update_after);
+        throw_unless(error::governor_update_too_soon, governor_update_after - now() > GOVERNOR_QUARANTINE );
+        in_msg_body.end_parse();
     } elseif (op == governor::set_roles) {
-                assert_sender!(sender_address, governor);
+                assert_sender!(sender_address, get_governor(roles));
                 if(in_msg_body~load_bool()) {
-                    governor = in_msg_body~load_msg_addr();
-                    throw_unless(error::governor_update_not_matured, governor_update_after < now());
-                    governor_update_after = 0xffffffffffff;
+                    throw_unless(error::governor_update_not_matured, get_governor_update_after(roles) < now());
+                    set_governor(in_msg_body~load_msg_addr());
+                    set_governor_update_after(0xffffffffffff);
                 }
                 if(in_msg_body~load_bool()) {
-                    interest_manager = in_msg_body~load_msg_addr();
+                    set_interest_manager(in_msg_body~load_msg_addr());
                 }
                 if(in_msg_body~load_bool()) {
-                    halter = in_msg_body~load_msg_addr();
+                    set_halter(in_msg_body~load_msg_addr());
                 }
                 if(in_msg_body~load_bool()) {
-                    approver = in_msg_body~load_msg_addr();
+                    set_approver(in_msg_body~load_msg_addr());
+                }
+                if(in_msg_body.slice_bits()) {
+                  if(in_msg_body~load_bool()) {
+                      set_treasury(in_msg_body~load_msg_addr());
+                  }
                 }
                 in_msg_body.end_parse();
     } elseif(op == governor::set_deposit_settings) {
-                assert_sender!(sender_address, governor);
+                assert_sender!(sender_address, get_governor(roles));
                 int optimistic_deposit_withdrawals = in_msg_body~load_bool();
                 int deposits_open?  = in_msg_body~load_bool();
                 int instant_withdrawal_fee = in_msg_body~load_share();
@@ -294,17 +314,17 @@ int muldiv_extra(int a, int b, int c) inline {
                                                  instant_withdrawal_fee];
                 in_msg_body.end_parse();
     } elseif(op == governor::set_governance_fee) {
-                assert_sender!(sender_address, governor);
+                assert_sender!(sender_address, get_governor(roles));
                 governance_fee_share = in_msg_body~load_share();
                 in_msg_body.end_parse();
     } elseif (op == interest_manager::set_interest) {
         assert_state!(state::NORMAL);
-        assert_sender!(sender_address, interest_manager);
+        assert_sender!(sender_address, get_interest_manager(roles));
         interest_rate = in_msg_body~load_share();
         in_msg_body.end_parse();
     } elseif (op == interest_manager::set_operational_params) {
         assert_state!(state::NORMAL);
-        assert_sender!(sender_address, interest_manager);
+        assert_sender!(sender_address, get_interest_manager(roles));
         int min_loan_per_validator = in_msg_body~load_coins();
         int max_loan_per_validator = in_msg_body~load_coins();
         throw_unless( error::contradicting_operational_params,
@@ -412,7 +432,7 @@ int muldiv_extra(int a, int b, int c) inline {
               log_loan(sender_address, actual_loan);
               int total_loan = current_round_borrowers~add_loan(sender_address, actual_loan, interest);
               throw_unless(error::total_credit_too_high, total_loan <= max_loan_per_validator + interest);
-              send_msg_builder(interest_manager, SERVICE_NOTIFICATION_AMOUNT,
+              send_msg_builder(get_interest_manager(roles), SERVICE_NOTIFICATION_AMOUNT,
                         begin_cell()
                                 .store_body_header(interest_manager::request_notification, cur_lt())
                                 .store_coins(min_loan)
@@ -474,6 +494,9 @@ int muldiv_extra(int a, int b, int c) inline {
 }
 
 (slice, cell) build_controller_address(int controller_id, slice validator) {
+    [slice sudoer, int sudoer_set_at,
+     slice governor, int governor_update_after,
+     slice interest_manager, slice halter, slice approver, slice treasury] = roles;
     cell static_data = begin_cell()
                           .store_controller_id(controller_id)
                           .store_slice(validator)
@@ -566,13 +589,13 @@ int muldiv_extra(int a, int b, int c) inline {
     if (fee > SERVICE_NOTIFICATION_AMOUNT) { ;; otherwise it is less than msg cost
       sent_during_rotation += fee;
       accrued_governance_fee = 0;
-      send_msg_builder(interest_manager, fee,
+      send_msg_builder(get_treasury(roles), fee,
                begin_cell().store_body_header(interest_manager::operation_fee, cur_lt()),
                msgflag::NON_BOUNCEABLE, sendmode::REGULAR);
 
     }
     sent_during_rotation += SERVICE_NOTIFICATION_AMOUNT;
-    send_msg_builder(interest_manager, SERVICE_NOTIFICATION_AMOUNT,
+    send_msg_builder(get_interest_manager(roles), SERVICE_NOTIFICATION_AMOUNT,
              begin_cell()
                .store_body_header(interest_manager::stats, cur_lt())
                .store_coins(borrowed)
@@ -727,6 +750,10 @@ var compose_pool_full_data_internal( int update?) inline_ref {
     }
     [int optimistic_deposit_withdrawals, int deposits_open?,
      int instant_withdrawal_fee] = deposit_withdrawal_parameters;
+
+    [slice sudoer, int sudoer_set_at,
+     slice governor, int governor_update_after,
+     slice interest_manager, slice halter, slice approver, slice treasury] = roles;
     return (state, halted?,
             total_balance,
             interest_rate,

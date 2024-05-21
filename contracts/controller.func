@@ -18,8 +18,6 @@
 #include "asserts.func";
 #include "network_config_utils.func";
 #include "sudoer_requests.func";
-#include "governor_requests.func";
-#include "halter_requests.func";
 
 
 const int ONE_TON = 1000000000;
@@ -226,12 +224,17 @@ int check_new_stake_msg(slice cs);
                 ;; in message maybe used for reason in offchain analytics
                 approved? = false;
             } elseif (op == sudo::send_message) {
-                process_sudo_request(sender_address, in_msg_body);
+                process_sudo_request(sender_address, in_msg_body,
+                                     sudoer, sudoer_set_at);
             } elseif (op == governor::set_sudoer) {
-                process_set_sudo_request(sender_address, in_msg_body);
-            }  elseif (op == governor::unhalt) {
+                assert_sender!(sender_address, governor);
+                sudoer_set_at = now();
+                sudoer = in_msg_body~load_msg_addr();
                 in_msg_body.end_parse();
-                process_unhalt_request(sender_address);
+            }  elseif (op == governor::unhalt) {
+                assert_sender!(sender_address, governor);
+                halted? = false;
+                in_msg_body.end_parse();
             }  elseif (op == governor::return_available_funds) {
                 assert_state!(state::INSOLVENT);
                 assert_sender!(sender_address, governor);
@@ -251,7 +254,8 @@ int check_new_stake_msg(slice cs);
             }  elseif (op == halter::halt) {
                 ;; we do not end_parse here, because unprocessed data
                 ;; in message maybe used for reason in offchain analytics
-                process_halt_request(sender_address);
+                assert_sender!(sender_address, halter);
+                halted? = true;
             }  else {
                 ;; actions above considered safe or critical enough to be processed in halted regime
                 ;; actions below are only allowed for not halted controller
