@@ -45,6 +45,11 @@ const int pool::touch = 0x4bc7c2df;
 const int pool::donate = 0x73affe21;
 
 const int pool::deploy_controller = 0xb27edcad;
+;; Method called unsafe because data may change till response reach requester
+const int pool::get_conversion_rate_unsafe = 0x4b7b42e6;
+const int pool::take_conversion_rate_unsafe = 0x42e64b7b;
+
+{- ========== Governance OPCODES ========== -}
 
 
 const int sudo::send_message = 0x270695fb;
@@ -60,7 +65,7 @@ const int governor::prepare_governance_migration = 0x9971881c;
 const int halter::halt = 0x139a1b4e;
 const int halter::partial_halt = 0x77778888; ;;todo
 
-const int interest_manager::operation_fee = 0x54d37487;
+const int treasury::operation_fee = 0x54d37487;
 const int interest_manager::request_notification = 0xb1ebae06;
 const int interest_manager::stats = 0xc1344900;
 const int interest_manager::set_interest = 0xc9f04485;

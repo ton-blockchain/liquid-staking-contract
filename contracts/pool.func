@@ -485,6 +485,21 @@ int muldiv_extra(int a, int b, int c) inline {
                     .store_msgbody_prefix_slice()
                     .store_body_header(jetton::excesses, query_id);
             send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_BALANCE);
+        } elseif (op == pool::get_conversion_rate_unsafe) {
+            ;; Method called unsafe because data may change till response reach requester
+            (int projected_balance, int projected_supply) = _get_projected_conversion_ratio ();
+            in_msg_body.end_parse();
+            builder response = begin_cell()
+                    .store_body_header(pool::take_conversion_rate_unsafe, query_id)
+                    .store_coins(projected_balance)
+                    .store_coins(projected_supply);
+            builder msg = begin_cell()
+                .store_msg_flags(msgflag::NON_BOUNCEABLE)
+                .store_slice(sender_address)
+                .store_coins(0)
+                .store_msgbody_prefix_slice()
+                .store_builder(response);
+            send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);
         } else {
             throw(error::unknown_op);
         }
@@ -590,7 +605,7 @@ int muldiv_extra(int a, int b, int c) inline {
       sent_during_rotation += fee;
       accrued_governance_fee = 0;
       send_msg_builder(get_treasury(roles), fee,
-               begin_cell().store_body_header(interest_manager::operation_fee, cur_lt()),
+               begin_cell().store_body_header(treasury::operation_fee, cur_lt()),
                msgflag::NON_BOUNCEABLE, sendmode::REGULAR);
 
     }
