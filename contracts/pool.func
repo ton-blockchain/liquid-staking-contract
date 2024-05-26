@@ -192,8 +192,13 @@ int muldiv_extra(int a, int b, int c) inline {
         assert_sender!(sender_address, jetton_minter);
         int jetton_amount = in_msg_body~load_coins();
         slice from_address = in_msg_body~load_msg_addr();
-        ;; response will be ignored
+        ;; Send to response address if it is in correct workchain
         slice response_address = in_msg_body~load_msg_addr();
+        ifnot((response_address.slice_bits() == 267) & (response_address.preload_uint(11) == 0x400)) {
+            ;;addr_std$10 anycast:(Maybe Anycast) workchain_id:int8 address:bits256  = MsgAddressInt;
+            ;; 0x400 = 0b10'0'00000000 == standard address in basechain
+            response_address = from_address;
+        }
         ;; after that point we should not revert because jettons should not be lost
         try {
             throw_unless(error::not_enough_TON_to_process, msg_value > WITHDRAWAL_FEE);
@@ -226,7 +231,7 @@ int muldiv_extra(int a, int b, int c) inline {
                 available_funds -= approximate_amount;
                 var msg = begin_cell()
                         .store_msg_flags(msgflag::NON_BOUNCEABLE)
-                        .store_slice(from_address)
+                        .store_slice(response_address)
                         .store_coins(0)
                         .store_msgbody_prefix_slice()
                         .store_body_header(pool::withdrawal, query_id);
@@ -235,7 +240,7 @@ int muldiv_extra(int a, int b, int c) inline {
                 throw_if(105, fill_or_kill);
                 throw_unless(error::output_amount_is_zero, jetton_amount);
                 raw_reserve(balance - msg_value - sent_during_rotation, reservemode::STRICT);
-                request_to_mint_withdrawal(from_address, jetton_amount, query_id);
+                request_to_mint_withdrawal(response_address, jetton_amount, query_id);
             }
             ;;  conservatively use `borrowed` instead of `expected` as amount that will be returned
             var [_, _, _, borrowed, _, _, _] = prev_round_borrowers;
