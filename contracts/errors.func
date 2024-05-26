@@ -54,6 +54,7 @@ const int error::too_early_loan_request = 0xfa02;
 const int error::too_late_loan_request = 0xfa03;
 const int error::too_high_loan_request_amount = 0xfa04;
 const int error::credit_interest_too_high = 0xfa05;
+const int error::profit_share_mismatch = 0xfa06;
 
 const int error::no_credit = 0xfb00;
 const int error::too_early_loan_return = 0xfb01;

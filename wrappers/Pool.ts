@@ -112,7 +112,7 @@ export function poolConfigToCell(config: PoolConfig): Cell {
               .storeUint(Conf.testInterest, 24) // minimal interest_rate
               .storeInt(config.optimistic_deposit_withdrawals, 1) // optimistic_deposit_withdrawals
               .storeInt(-1n, 1) // deposits_open?
-              .storeInt(0, 24) // instant_withdrawal_fee
+              .storeUint(0, 24) // instant_withdrawal_fee
               .storeUint(0, 256) // saved_validator_set_hash
               .storeRef(
                 beginCell()
@@ -174,6 +174,86 @@ export function dataToFullConfig(data: PoolData) : PoolFullConfig {
   };
 }
 
+
+export function poolFullConfigToCellOld(config: PoolFullConfig): Cell {
+    let abs = (x:bigint) => { return x < 0n ? -x : x };
+    let serializeRoundData = (round: RoundData) => beginCell()
+                             .storeMaybeRef(round.borrowers)
+                             .storeUint(round.roundId, 32) // round_id
+                             .storeUint(round.activeBorrowers, 32) // active borrowers
+                             .storeCoins(round.borrowed) // borrowed
+                             .storeCoins(round.expected) // expected
+                             .storeCoins(round.returned) // returned
+                             .storeUint(Number(round.profit < 0), 1) // profit sign
+                             .storeCoins(abs(round.profit)) // profit
+                         .endCell();
+
+    let mintersData = beginCell()
+                          .storeAddress(config.poolJetton)
+                          .storeCoins(config.poolJettonSupply);
+    if(config.depositMinter) {
+      mintersData = mintersData.storeUint(1, 1)
+                               .storeUint(0, 1)
+                               .storeAddress(config.depositMinter!)
+                               .storeCoins(config.requestedForDeposit!);
+    } else {
+      mintersData = mintersData.storeUint(0, 1);
+    }
+    if(config.withdrawalMinter) {
+      mintersData = mintersData.storeUint(1, 1)
+                               .storeBit(0)
+                               .storeAddress(config.withdrawalMinter!)
+                               .storeCoins(config.requestedForWithdrawal!);
+    } else {
+      mintersData = mintersData.storeUint(0, 1);
+    }
+    let minters:Cell = mintersData.endCell();
+    let roles = beginCell()
+                   .storeAddress(config.sudoer)
+                   .storeUint(config.sudoerSetAt, 48) // sudoer set at
+                   .storeAddress(config.governor)
+                   .storeUint(config.governorUpdateAfter, 48) // givernor update after
+                   .storeAddress(config.interest_manager)
+                   .storeRef(
+                       beginCell()
+                         .storeAddress(config.halter)
+                         .storeAddress(config.approver)
+                       .endCell()
+                   )
+                .endCell();
+    let codes = beginCell()
+                    .storeRef(config.controller_code)
+                    .storeRef(config.pool_jetton_wallet_code)
+                    .storeRef(config.payout_minter_code)
+                .endCell();
+    return beginCell()
+              .storeUint(config.state, 8) // state NORMAL
+              .storeBit(config.halted) // halted?
+              .storeCoins(config.totalBalance) // total_balance
+              .storeRef(minters)
+              .storeUint(config.interestRate, 24) // minimal interest_rate
+              .storeBit(config.optimisticDepositWithdrawals) // optimistic_deposit_withdrawals
+              .storeBit(config.depositsOpen) // deposits_open?
+              //.storeUint(config.instantWithdrawalFee, 24)
+              .storeUint(config.savedValidatorSetHash, 256) // saved_validator_set_hash
+              .storeRef(
+                beginCell()
+                  .storeRef(serializeRoundData(config.currentRound))
+                  .storeRef(serializeRoundData(config.prevRound))
+                .endCell()
+              )
+              .storeCoins(config.minLoanPerValidator) // min_loan_per_validator
+              .storeCoins(config.maxLoanPerValidator) // max_loan_per_validator
+              .storeUint(config.governanceFee, 24) // governance fee
+              //.storeCoins(config.accruedGovernanceFee)
+              //.storeUint(config.disbalanceTolerance, 8)
+              //.storeUint(config.creditStartPriorElectionsEnd, 48)
+              .storeRef(roles)
+              .storeRef(codes)
+           .endCell();
+}
+
+
 export function poolFullConfigToCell(config: PoolFullConfig): Cell {
     let abs = (x:bigint) => { return x < 0n ? -x : x };
     let serializeRoundData = (round: RoundData) => beginCell()
@@ -233,7 +313,7 @@ export function poolFullConfigToCell(config: PoolFullConfig): Cell {
               .storeUint(config.interestRate, 24) // minimal interest_rate
               .storeBit(config.optimisticDepositWithdrawals) // optimistic_deposit_withdrawals
               .storeBit(config.depositsOpen) // deposits_open?
-              .storeInt(config.instantWithdrawalFee, 24)
+              .storeUint(config.instantWithdrawalFee, 24)
               .storeUint(config.savedValidatorSetHash, 256) // saved_validator_set_hash
               .storeRef(
                 beginCell()

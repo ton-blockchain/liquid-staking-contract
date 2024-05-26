@@ -119,7 +119,7 @@ describe('Cotroller mock', () => {
 
         assertHashUpdate = async (exp_hash:Buffer | bigint, exp_time:number, exp_count:number) => {
           const curData  = await controller.getControllerData();
-          const testHash = exp_hash instanceof Buffer ? buff2bigint(exp_hash) : exp_hash; 
+          const testHash = exp_hash instanceof Buffer ? buff2bigint(exp_hash.slice(0, 16)) : exp_hash;
           expect(curData.validatorSetHash).toEqual(testHash);
           expect(curData.validatorSetChangeTime).toEqual(exp_time);
           expect(curData.validatorSetChangeCount).toEqual(exp_count);
@@ -479,7 +479,7 @@ describe('Cotroller mock', () => {
       const stateBefore  = await getContractData(controller.address);
       const borrowAmount = getRandomTon(100000, 200000)
       // 2000 TON interest
-      const msgVal       = borrowAmount + toNano('2000');
+      const msgVal       = borrowAmount - toNano('5');
       let res = await controller.sendCredit(bc.sender(notPool), borrowAmount, msgVal);
       expect(res.transactions).toHaveTransaction({
         from: notPool,
@@ -1157,7 +1157,7 @@ describe('Cotroller mock', () => {
         const curSet = getVset(bc.config, 34);
         // Too early
         bc.now = curSet.utime_since;
-        await controller.sendCredit(bc.sender(poolAddress), toNano('200000'), toNano('201000'));
+        await controller.sendCredit(bc.sender(poolAddress), toNano('201000'), toNano('200000'));
         await testNewStake(Errors.newStake.wrongly_used_credit,
                            validator.wallet.getSender(),
                            deposit);
@@ -1220,7 +1220,7 @@ describe('Cotroller mock', () => {
         expect(stateAfter.stakeSent).toEqual(deposit - Conf.electorOpValue);
         const confDict = loadConfig(bc.config);
         expect(stateAfter.validatorSetHash).toEqual(
-          buff2bigint(confDict.get(34)!.hash())
+          buff2bigint(confDict.get(34)!.hash().slice(0, 16))
         );
         expect(stateAfter.validatorSetChangeCount).toEqual(0);
         expect(stateAfter.validatorSetChangeTime).toEqual(getVset(confDict, 34).utime_since);
@@ -1736,7 +1736,7 @@ describe('Cotroller mock', () => {
       it('Hash update should not trigger if vset hash didn\'t change', async () => {
         const stateBefore = await getContractData(controller.address);
         const confDict = loadConfig(bc.config);
-        const curHash  = buff2bigint(confDict.get(34)!.hash());
+        const curHash  = buff2bigint(confDict.get(34)!.hash().slice(0, 16));
         expect((await controller.getControllerData()).validatorSetHash).toEqual(curHash);
         let noNewSetHashUpdateResult = await controller.sendUpdateHash(validator.wallet.getSender());
         expect(noNewSetHashUpdateResult.transactions).toHaveTransaction({

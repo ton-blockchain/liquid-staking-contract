@@ -23,6 +23,7 @@ const int elector::recover_stake_ok = 0xf96f7324;
 const int controller::top_up = 0xd372158c;
 const int controller::update_validator_hash = 0xf0fd2250;
 const int controller::approve = 0x7b4b42e6;
+const int controller::approve_extended = 0x7b2142e6;
 const int controller::disapprove = 0xe8a0abfe;
 const int controller::recover_stake = 0xeb373a05;
 const int controller::new_stake = elector::new_stake;

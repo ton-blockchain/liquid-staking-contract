@@ -21,7 +21,7 @@ export function controllerConfigToCell(config: ControllerConfig): Cell {
               .storeInt(0n, 1)   // approved?
               .storeCoins(0)     // stake_amount_sent
               .storeUint(0, 48)  // stake_at
-              .storeUint(0, 256) // saved_validator_set_hash
+              .storeUint(0, 128) // saved_validator_set_hash
               .storeUint(0, 8)   // validator_set_changes_count
               .storeUint(0, 48)  // validator_set_change_time
               .storeUint(0, 48)  // stake_held_for
@@ -30,6 +30,10 @@ export function controllerConfigToCell(config: ControllerConfig): Cell {
               .storeUint(0, 2)   // sudoer addr_none
               .storeUint(0, 48)  // sudoer_set_at
               .storeUint(0, 24)  // max_expected_interest
+              .storeUint(0, 48)  // allowed_borrow_start_prior_elections_end
+              .storeUint(0, 24)  // approver_set_profit_share
+              .storeUint(0, 24)  // acceptable_profit_share
+              .storeCoins(0)     // allocation
               .storeRef(
                   beginCell()
                   .storeUint(config.controllerId, 32)
@@ -315,6 +319,11 @@ export class Controller implements Contract {
             validatorSetChangeCount: stack.readNumber(),
             validatorSetChangeTime: stack.readNumber(),
             stakeHeldFor: stack.readNumber(),
+            interest: stack.readNumber(),
+            allowedBorrowStartPriorElectionsEnd: stack.readNumber(),
+            approverSetProfitShare: stack.readNumber(),
+            acceptableProfitShare: stack.readNumber(),
+            allocation: stack.readNumber(),
             borrowedAmount: stack.readBigNumber(),
             borrowingTime: stack.readNumber(),
             validator: stack.readAddress(),

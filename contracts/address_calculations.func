@@ -1,4 +1,5 @@
 #include "metadata_utils.func";
+#include "types.func";
 #include "auto/metadata.func";
 
 ;; [controller_code, pool_jetton_wallet_code, payout_minter_code]
@@ -9,13 +10,16 @@ builder store_zeros(builder b, int n) asm "STZEROES";
 
 cell controller_init_data (cell static_data) {
   ;; TODO optimize with store_zeros
+  ;; Note, given maximal amounts equal to 5'000'000'000 TONs
+  ;; all store_coins sizes are limited to 67 bits
+  ;; so the size is at most 8+1+1+67+48+128+8+48+48+67+48+267+48+24+48+24+24+67 = 974 bits
   return begin_cell()
             .store_uint(0, 8) ;; state
             .store_bool(false)  ;; halted
             .store_bool(false)  ;; approved
             .store_coins(0) ;; stake_amount_sent
             .store_timestamp(0) ;; stake_at
-            .store_uint(0, 256) ;; saved_validator_set_hash
+            .store_uint(0, 128) ;; saved_validator_set_hash higher 128 bits
             .store_uint(0, 8) ;; validator_set_changes_count
             .store_timestamp(0) ;; validator_set_change_time
             .store_timestamp(0) ;; stake_held_for
@@ -24,6 +28,10 @@ cell controller_init_data (cell static_data) {
             .store_uint(0, 2) ;; sudoer addr_none
             .store_timestamp(0) ;; sudoer_set_at
             .store_share(0)     ;; max_expected_interest
+            .store_timestamp(0) ;; allowed_borrow_start_prior_elections_end
+            .store_share(0)    ;; approver_set_profit_share
+            .store_share(0)    ;; acceptable_profit_share
+            .store_coins(0)    ;; allocation
             .store_ref(static_data)
            .end_cell();
 }
