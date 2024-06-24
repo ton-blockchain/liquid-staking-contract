@@ -177,6 +177,7 @@ describe('Governor actions tests', () => {
         let newInterestManager: Address;
         let newHalter: Address;
         let newApprover: Address;
+        let newTreasury: Address;
         let prevState: BlockchainSnapshot;
         beforeAll(() => {
             bc.now = Math.floor(Date.now() / 1000);
@@ -184,6 +185,7 @@ describe('Governor actions tests', () => {
             newInterestManager = randomAddress();
             newHalter          = randomAddress();
             newApprover        = randomAddress();
+            newTreasury        = randomAddress();
             prevState          = bc.snapshot();
         });
         afterAll(async () => {
@@ -293,6 +295,18 @@ describe('Governor actions tests', () => {
                 expect(dataAfter.interestManager).toEqualAddress(newInterestManager);
                 expect(dataAfter.halter).toEqualAddress(newHalter);
                 expect(dataAfter.approver).toEqualAddress(newApprover);
+            });
+            // Should we merge it in test above?
+            it('Only governor could should be able to set treasury role', async () => {
+                const stateBefore = await getContractData(pool.address);
+
+                for(let testAddr of [newApprover, newInterestManager, newHalter, newInterestManager, newGovernor]) {
+                    const res = await pool.sendSetRoles(bc.sender(testAddr),{treasury: newTreasury});
+                    await assertSetRoles(res.transactions, Errors.wrong_sender, stateBefore);
+                }
+
+                const res = await pool.sendSetRoles(deployer.getSender(), {treasury: newTreasury});
+                await assertSetRoles(res.transactions, 0);
             });
             it('Till governor quarantine expires no one should be able to trigger governor role', async () => {
                 const prevState   = bc.snapshot();
