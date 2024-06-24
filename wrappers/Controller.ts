@@ -113,26 +113,31 @@ export class Controller implements Contract {
     static requestLoanMessage(min_loan: bigint,
                               max_loan: bigint,
                               max_interest: number,
+                              acceptable_profit_share: number = 0,
                               query_id: bigint | number = 0) {
 
-        return beginCell().storeUint(Op.controller.send_request_loan, 32)
-                          .storeUint(query_id, 64)
-                          .storeCoins(min_loan)
-                          .storeCoins(max_loan)
-                          .storeUint(max_interest, 24)
-               .endCell();
+        const ds = beginCell().storeUint(Op.controller.send_request_loan, 32)
+                              .storeUint(query_id, 64)
+                              .storeCoins(min_loan)
+                              .storeCoins(max_loan)
+                              .storeUint(max_interest, 24)
+        if(acceptable_profit_share > 0) {
+            ds.storeUint(acceptable_profit_share, 24);
+        }
+        return ds.endCell();
     }
     async sendRequestLoan(provider: ContractProvider,
                           via: Sender,
                           min_loan: bigint,
                           max_loan: bigint,
                           max_interest: number,
+                          acceptable_profit_share: number = 0,
                           value: bigint = toNano('1'),
                           query_id: bigint | number = 0) {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: Controller.requestLoanMessage(min_loan, max_loan, max_interest, query_id)
+            body: Controller.requestLoanMessage(min_loan, max_loan, max_interest, acceptable_profit_share, query_id)
         });
     }
 
