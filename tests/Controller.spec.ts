@@ -474,29 +474,7 @@ describe('Cotroller mock', () => {
         }
       });
     });
-    it('Controller credit should only be accepted from pool address', async() => {
-      const notPool = differentAddress(poolAddress);
-      const stateBefore  = await getContractData(controller.address);
-      const borrowAmount = getRandomTon(100000, 200000)
-      // 2000 TON interest
-      const msgVal       = borrowAmount - toNano('5');
-      let res = await controller.sendCredit(bc.sender(notPool), borrowAmount, msgVal);
-      expect(res.transactions).toHaveTransaction({
-        from: notPool,
-        to: controller.address,
-        success: false,
-        exitCode: Errors.wrong_sender
-      });
 
-      expect(await getContractData(controller.address)).toEqualCell(stateBefore);
-
-      res = await controller.sendCredit(bc.sender(poolAddress), borrowAmount, msgVal);
-      expect(res.transactions).toHaveTransaction({
-        from: poolAddress,
-        to: controller.address,
-        success: true
-      });
-    });
     it('Approve should only be accepted from approver address', async () => {
       const notApprover  = differentAddress(deployer.address);
       await testApprove(Errors.wrong_sender, bc.sender(notApprover), true);
@@ -517,7 +495,7 @@ describe('Cotroller mock', () => {
     });
 
     describe('Request loan', () => {
-      const interest = Math.floor(0.05 * 256 * 256 * 256);
+      const interest = Conf.testInterest;
       let approved : BlockchainSnapshot;
       let reqReady : BlockchainSnapshot;
 
@@ -556,8 +534,10 @@ describe('Cotroller mock', () => {
 
         const dataAfter = await controller.getControllerData();
         expect(dataAfter.state).toEqual(ControllerState.SENT_BORROWING_REQUEST);
+        expect(dataAfter.interest).toEqual(interest);
         snapStates.set('borrowing_req', bc.snapshot());
       });
+
       it('Only validator can request loan', async () => {
         const interest = Math.floor(0.05 * 256*256*256);
         await testRequestLoan(Errors.wrong_sender,
@@ -849,6 +829,33 @@ describe('Cotroller mock', () => {
       });
     });
     describe('Credit', () => {
+    it('Controller credit should only be accepted from pool address', async() => {
+      // Request should come first, otherwise max_interest would be 0
+      await loadSnapshot('creditAwaited');
+      const notPool = differentAddress(poolAddress);
+      const stateBefore  = await getContractData(controller.address);
+      const controllerData = await controller.getControllerData();
+      const borrowAmount = getRandomTon(100000, 200000);
+      const withInterest = borrowAmount + borrowAmount * BigInt(controllerData.interest) / BigInt(256**3);
+      let res = await controller.sendCredit(bc.sender(notPool), withInterest, borrowAmount);
+      expect(res.transactions).toHaveTransaction({
+        from: notPool,
+        to: controller.address,
+        success: false,
+        exitCode: Errors.wrong_sender
+      });
+
+      expect(await getContractData(controller.address)).toEqualCell(stateBefore);
+
+      res = await controller.sendCredit(bc.sender(poolAddress), withInterest, borrowAmount);
+      expect(res.transactions).toHaveTransaction({
+        from: poolAddress,
+        to: controller.address,
+        success: true
+      });
+      const controllerAfter = await controller.getControllerData();
+      // expect(controllerAfter.interest).toEqual(interest);
+    });
     it('Should account for controller credit', async () => {
       await loadSnapshot('approved');
       const curVset      = getVset(bc.config, 34);
