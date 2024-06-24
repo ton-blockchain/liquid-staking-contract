@@ -514,6 +514,49 @@ describe('Cotroller mock', () => {
       snapStates.set('profit_share_set', bc.snapshot());
       await bc.loadFrom(prevState);
     });
+    it('should reject loan in approver set profit share higher than acceptable', async () => {
+      /*
+       * Loan request now has new parameter - acceptalbe_profit_share
+       * This indicates max profit share validator is willing to pay back to pool
+       * if approver set share is <= we're good
+       * Otherwise loan request should be rejected at controller level
+      */
+      await loadSnapshot('profit_share_set');
+
+      const controllerBefore = await controller.getControllerData();
+      const profitShare      = controllerBefore.approverSetProfitShare;
+      const loanAmount       = toNano('10000');
+
+      const curVset = getVset(bc.config, 34);
+      if(getCurTime() < curVset.utime_unitl - eConf.end_before - controllerBefore.allowedBorrowStartPriorElectionsEnd) {
+          bc.now = curVset.utime_unitl - eConf.end_before - controllerBefore.allowedBorrowStartPriorElectionsEnd + 1;
+      }
+
+      let res = await controller.sendRequestLoan(validator.wallet.getSender(),
+                                                 loanAmount, loanAmount,
+                                                 Conf.testInterest, profitShare - 1);
+      const shareMissmatch = {
+        on: controller.address,
+        from: validator.wallet.address,
+        op: Op.controller.send_request_loan,
+        aborted: true,
+        exitCode: Errors.profit_share_mismatch
+      };
+
+      expect(res.transactions).toHaveTransaction(shareMissmatch);
+      res = await controller.sendRequestLoan(validator.wallet.getSender(),
+                                             loanAmount, loanAmount,
+                                             Conf.testInterest, profitShare);
+
+      expect(res.transactions).not.toHaveTransaction(shareMissmatch);
+
+      // Revert state and see if we're allowed to exeed approver set share
+      await loadSnapshot('profit_share_set');
+      res = await controller.sendRequestLoan(validator.wallet.getSender(),
+                                             loanAmount, loanAmount,
+                                             Conf.testInterest, profitShare + getRandomInt(1, 10));
+      expect(res.transactions).not.toHaveTransaction(shareMissmatch);
+    });
     it('Approve from approver address should set approve flag', async () => {
       await testApprove(0, deployer.getSender(), true);
       snapStates.set('approved', bc.snapshot());
@@ -2260,6 +2303,25 @@ describe('Cotroller mock', () => {
         await loadSnapshot('insolvent');
         await testState(acceptedState, testCb);
       })
+      it('increse approved profit share only available in REST state', async () => {
+        console.log("Profit share state test");
+        const testCb = async () => {
+          const controllerData = await controller.getControllerData();
+          const higherShare = controllerData.approverSetProfitShare + 1;
+          return await controller.sendApproveExtended(deployer.getSender(), {
+            allocation: controllerData.allocation,
+            startPriorElectionsEnd: controllerData.allowedBorrowStartPriorElectionsEnd || 65536,
+            profitShare: higherShare
+          });
+        };
+        await testStates(statesAvailable.filter(x => x !== InitialState), wrongState, testCb);
+
+        await bc.loadFrom(InitialState);
+        await testState(acceptedState, testCb);
+
+        await loadSnapshot('profit_share_set');
+        await testState(acceptedState, testCb);
+      });
     });
     // TODO "insolvent can become solvent after via top up"
     // TODO "after solvency another address can return_unused_stake"

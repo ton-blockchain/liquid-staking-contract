@@ -141,7 +141,7 @@ describe('Integrational tests', () => {
                         new_minter: boolean) => Promise<K extends true ? DistributionComplete : T extends false ? DistributionDelayed : DistributionResult>);
 
     let assertPoolBalanceNotChanged:(balance: bigint) => Promise<void>;
-    let assertGetLoan:(controller: SandboxContract<Controller>, amount: bigint, exp_success: boolean, min_amount?:bigint) => Promise<SendMessageResult>;
+    let assertGetLoan:(controller: SandboxContract<Controller>, amount: bigint, exp_success: boolean, min_profit_share?:number) => Promise<SendMessageResult>;
     // let getLoanWithExpProfit:(controller: SandboxContract<Controller>, exp_profit: bigint) => Promise<bigint>;
 
 
@@ -1041,7 +1041,7 @@ describe('Integrational tests', () => {
             // https://github.com/microsoft/TypeScript-Website/issues/1931
             return nm as DistributionDelayed;
         }
-        assertGetLoan = async (lender, amount, exp_success, min_amount?) => {
+        assertGetLoan = async (lender, amount, exp_success, min_profit_share?) => {
             const poolData = await pool.getFullDataRaw();
             const stateBefore = await getContractData(pool.address);
             const controllerData = await lender.getControllerData();
@@ -1057,7 +1057,7 @@ describe('Integrational tests', () => {
             if(controllerBalance < reqBalance && exp_success) {
                 await lender.sendTopUp(vSender, reqBalance - controllerBalance + toNano('1'));
             }
-            const res =await lender.sendRequestLoan(vSender, amount, amount, poolData.interestRate);
+            const res =await lender.sendRequestLoan(vSender, amount, amount, poolData.interestRate, min_profit_share);
             const succcesTx = {
                 from: pool.address,
                 to: lender.address,
@@ -1784,6 +1784,77 @@ describe('Integrational tests', () => {
                 on: testWallet.address,
                 from: pool.address
             });
+        });
+        it('should return profit according to profit share', async () => {
+            await loadSnapshot('pre_withdraw');
+            const cat = await bc.treasury('FatCat');
+            const poolBefore = await pool.getFullData();
+            // We want to take some hefty chunk to exceed interest
+            const testProfitShare = 1 << 20;
+
+            let res = await controller.sendApproveExtended(deployer.getSender(), {
+                allocation: 0n,
+                startPriorElectionsEnd: 65536,
+                profitShare: testProfitShare
+            });
+
+            expect((await controller.getControllerData()).approverSetProfitShare).toEqual(testProfitShare);
+            await assertGetLoan(controller, sConf.min_stake, true, testProfitShare);
+            const expInterest = sConf.min_stake * BigInt(poolBefore.interestRate) / Conf.shareBase;
+            const poolLoaned = await pool.getFullData();
+            const electId = await announceElections();
+            res = await controller.sendNewStake(validator.wallet.getSender(),
+                                                sConf.min_stake + toNano('1'),
+                                                validator.keys.publicKey,
+                                                validator.keys.secretKey,
+                                                electId);
+            expect(res.transactions).toHaveTransaction({
+                from: elector.address,
+                to: controller.address,
+                op: Op.elector.new_stake_ok
+            });
+
+            const controllerBorrowed = await controller.getControllerData();
+
+            await nextRound();
+            await controller.sendUpdateHash(validator.wallet.getSender());
+            await nextRound();
+            await controller.sendUpdateHash(validator.wallet.getSender());
+            waitUnlock(getCurTime());
+            await elector.sendTickTock("tock"); // Announce elecitons
+            await elector.sendTickTock("tock"); // Update credits
+
+            res = await controller.sendRecoverStake(validator.wallet.getSender());
+
+            const returnStake = findTransaction(res.transactions, {
+                on: controller.address,
+                from: elector.address,
+                op: Op.elector.recover_stake_ok,
+                aborted: false
+            })!;
+            expect(returnStake).not.toBeUndefined();
+
+            const recMsg = returnStake.inMessage!;
+            if(recMsg.info.type !== 'internal') {
+                throw new Error("No way");
+            }
+
+            const profit = recMsg.info.value.coins - controllerBorrowed.stakeSent;
+            // console.log(`Profit: ${profit}`);
+            expect(profit).toBeGreaterThan(0n);
+            const profitShare = profit * BigInt(testProfitShare) / Conf.shareBase;
+            // console.log(`Borrowed amount: ${controllerBorrowed.borrowedAmount} ${sConf.min_stake}`);
+            // console.log(`Without interest: ${controllerBorrowed.borrowedAmount - expInterest}`);
+            // console.log(`Profit share:${profitShare}`);
+
+            // Should trigger loan repayment with according profit share
+            expect(res.transactions).toHaveTransaction({
+                from: controller.address,
+                to: pool.address,
+                op: Op.pool.loan_repayment,
+                value: controllerBorrowed.borrowedAmount - expInterest + profitShare,
+                success: true
+            })!;
         });
         it('Should not be possible to fail distribution action phase with low burn msg value', async() => {
             await loadSnapshot('has_loan');
