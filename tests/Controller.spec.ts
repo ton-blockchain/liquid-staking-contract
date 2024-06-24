@@ -856,6 +856,36 @@ describe('Cotroller mock', () => {
       const controllerAfter = await controller.getControllerData();
       // expect(controllerAfter.interest).toEqual(interest);
     });
+    it('Controller should reject credit with interest higher that expected', async () => {
+      await loadSnapshot('creditAwaited');
+      const stateBefore  = await getContractData(controller.address);
+      let   controllerData = await controller.getControllerData();
+      expect(controllerData.borrowedAmount).toEqual(0n);
+      const borrowAmount = getRandomTon(100000, 200000);
+      const withInterest = borrowAmount + borrowAmount * BigInt(controllerData.interest) / Conf.shareBase;
+      // If interest exceed expected by >= 1 TON, controller should return credit
+      const extraInterest = toNano('1');
+      let   res = await controller.sendCredit(bc.sender(poolAddress), withInterest + extraInterest, borrowAmount);
+      expect(res.transactions).toHaveTransaction({
+        on: controller.address,
+        from: poolAddress,
+        op: Op.controller.credit,
+        success: false,
+        aborted: true,
+        exitCode: Errors.credit_interest_too_high
+      });
+      expect(await getContractData(controller.address)).toEqualCell(stateBefore);
+
+      res = await controller.sendCredit(bc.sender(poolAddress), withInterest + extraInterest - 1n, borrowAmount);
+      expect(res.transactions).toHaveTransaction({
+        on: controller.address,
+        from: poolAddress,
+        op: Op.controller.credit,
+        aborted: false
+      });
+      controllerData = await controller.getControllerData();
+      expect(controllerData.borrowedAmount).toEqual(withInterest + extraInterest - 1n);
+    });
     it('Should account for controller credit', async () => {
       await loadSnapshot('approved');
       const curVset      = getVset(bc.config, 34);
