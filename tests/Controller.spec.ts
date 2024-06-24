@@ -1,5 +1,5 @@
 import { Blockchain,BlockchainSnapshot, createShardAccount,internal,SandboxContract,SendMessageResult,SmartContractTransaction,TreasuryContract } from "@ton/sandbox";
-import { Controller, controllerConfigToCell } from '../wrappers/Controller';
+import { ApproveOptions, Controller, ControllerConfig, controllerConfigToCell } from '../wrappers/Controller';
 import { Address, Sender, Cell, toNano, Dictionary, beginCell } from '@ton/core';
 import { keyPairFromSeed, getSecureRandomBytes, getSecureRandomWords, KeyPair } from 'ton-crypto';
 import '@ton/test-utils';
@@ -38,7 +38,7 @@ describe('Cotroller mock', () => {
     let simpleBody:(op: number, query_id?: bigint | number) => Cell;
     let bouncedBody:(op: number, query_id?: bigint | number) => Cell;
     let assertHashUpdate:(exp_hash: Buffer | bigint, exp_time:number, exp_count:number) => Promise<void>;
-    let testApprove:(exp_code:number, via:Sender, approve:boolean) => Promise<SendMessageResult>;
+    let testApprove:(exp_code:number, via:Sender, approve:boolean, opts?:ApproveOptions) => Promise<SendMessageResult>;
     let testRequestLoan:(exp_code: number,
                          via: Sender,
                          min_loan: bigint,
@@ -75,7 +75,7 @@ describe('Cotroller mock', () => {
           balance: toNano('1000')
         }));
 
-        let controllerConfig = {
+        let controllerConfig : ControllerConfig = {
           controllerId:0,
           validator: validator.wallet.address,
           pool: poolAddress,
@@ -146,11 +146,20 @@ describe('Cotroller mock', () => {
           await bc.loadFrom(state);
         }
 
-        testApprove  = async (exp_code:number, via: Sender, approve:boolean) => {
+        testApprove  = async (exp_code:number, via: Sender, approve:boolean, opts?: ApproveOptions) => {
+          let   res : SendMessageResult;
           const stateBefore = await getContractData(controller.address);
-          const approveBefore = (await controller.getControllerData()).approved;
-          expect(approveBefore).not.toEqual(approve);
-          const res = await controller.sendApprove(via, approve);
+          const dataBefore  = await controller.getControllerData();
+          const approveExt  = approve && opts;
+          expect(dataBefore.approved).not.toEqual(approve);
+
+          if(approveExt) {
+            res = await controller.sendApproveExtended(via, opts);
+          }
+          else {
+            res = await controller.sendApprove(via, approve);
+          }
+
           expect(res.transactions).toHaveTransaction({
             from: via.address!,
             to: controller.address,
@@ -162,7 +171,17 @@ describe('Cotroller mock', () => {
             expect(await getContractData(controller.address)).toEqualCell(stateBefore);
           }
           else {
-            expect((await controller.getControllerData()).approved).toEqual(approve);
+            const dataAfter = await controller.getControllerData();
+            if(approveExt) {
+              expect(dataAfter.approverSetProfitShare).toEqual(opts.profitShare);
+              expect(dataAfter.allowedBorrowStartPriorElectionsEnd).toEqual(opts.startPriorElectionsEnd);
+              expect(dataAfter.allocation).toEqual(opts.allocation);
+            }
+            else {
+              expect(dataAfter.allowedBorrowStartPriorElectionsEnd).toEqual(65536);
+              expect(dataAfter.allocation).toEqual(0n);
+            }
+            expect(dataAfter.approved).toEqual(approve);
           }
           return res;
         };
@@ -480,6 +499,21 @@ describe('Cotroller mock', () => {
       await testApprove(Errors.wrong_sender, bc.sender(notApprover), true);
     });
 
+    it('Approve extended should only be accepted from approver address', async () => {
+      const prevState    = bc.snapshot();
+      const notApprover  = differentAddress(deployer.address);
+      const approveExtra = {
+        allocation: getRandomTon(100000, 200000),
+        startPriorElectionsEnd: getRandomInt(20000, 30000),
+        profitShare: getRandomInt(Number(Conf.shareBase / 100n), Number(Conf.shareBase / 2n))
+      };
+      await testApprove(Errors.wrong_sender, bc.sender(notApprover), true, approveExtra);
+
+      const res = await testApprove(Errors.success, deployer.getSender(), true, approveExtra);
+
+      snapStates.set('profit_share_set', bc.snapshot());
+      await bc.loadFrom(prevState);
+    });
     it('Approve from approver address should set approve flag', async () => {
       await testApprove(0, deployer.getSender(), true);
       snapStates.set('approved', bc.snapshot());
