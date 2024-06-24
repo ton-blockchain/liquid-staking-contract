@@ -1680,6 +1680,111 @@ describe('Integrational tests', () => {
             expect(await balanceBefore).toEqual(await catPton.getJettonBalance());
             await bc.loadFrom(prevState);
         });
+        it('pessimistic withdraw should account for response address', async () => {
+            await loadSnapshot('pre_withdraw');
+            // Nominator
+            const cat = await bc.treasury('FatCat');
+            const poolBefore = await pool.getFullData();
+            const testWallet = await bc.treasury('test_wallet');
+            const catPton = await getUserJetton(cat);
+
+            const balanceBefore = await catPton.getJettonBalance();
+            expect(balanceBefore).toBeGreaterThan(0n);
+
+            const res = await catPton.sendBurnWithParams(cat.getSender(),
+                                                         toNano('1'),
+                                                         balanceBefore,
+                                                         testWallet.address,
+                                                         true, false);
+            const payout = await assertNewPayout(res.transactions,true,
+                                                 poolBefore.withdrawalPayout, false);
+            // Nft item is minted for the response address
+            await assertPayoutMint(res.transactions, payout,
+                                   {billsCount: 0n, totalBill: 0n}, testWallet.address,
+                                   balanceBefore, 0);
+            // Make sure only one item is minted
+            expect((await payout.getCollectionData()).nextItemIndex).toBe(1n);
+
+        });
+        it('pessimistic withdraw should ignore response address from masterchain', async () => {
+            await loadSnapshot('pre_withdraw');
+            // Nominator
+            const cat = await bc.treasury('FatCat');
+            const poolBefore = await pool.getFullData();
+            const testWallet = await bc.treasury('test_wallet', {workchain: -1});
+            const catPton = await getUserJetton(cat);
+
+            const balanceBefore = await catPton.getJettonBalance();
+            expect(balanceBefore).toBeGreaterThan(0n);
+
+            const res = await catPton.sendBurnWithParams(cat.getSender(),
+                                                         toNano('1'),
+                                                         balanceBefore,
+                                                         testWallet.address,
+                                                         true, false);
+
+            const payout = await assertNewPayout(res.transactions,true,
+                                                 poolBefore.withdrawalPayout, false);
+
+            // Nft item should be minted for source address instead
+            await assertPayoutMint(res.transactions, payout,
+                                   {billsCount: 0n, totalBill: 0n}, cat.address,
+                                   balanceBefore, 0);
+            expect((await payout.getCollectionData()).nextItemIndex).toBe(1n);
+        });
+        it('optimistic withdraw should account for response address', async () => {
+            await loadSnapshot('pre_withdraw');
+            // Nominator
+            const cat = await bc.treasury('FatCat');
+            const poolBefore = await pool.getFullData();
+            const testWallet = await bc.treasury('test_wallet');
+            const catPton = await getUserJetton(cat);
+
+            const balanceBefore = await catPton.getJettonBalance();
+            expect(balanceBefore).toBeGreaterThan(0n);
+
+            const res = await catPton.sendBurnWithParams(cat.getSender(),
+                                                         toNano('1'),
+                                                         balanceBefore,
+                                                         testWallet.address,
+                                                         false, false);
+            expect(res.transactions).toHaveTransaction({
+                on: testWallet.address,
+                from: pool.address,
+                op: Op.pool.withdrawal
+            });
+            expect(res.transactions).not.toHaveTransaction({
+                on: cat.address,
+                from: pool.address
+            });
+        });
+        it('optimistic withdraw should ignore response address from masterchain', async () => {
+            await loadSnapshot('pre_withdraw');
+            // Nominator
+            const cat = await bc.treasury('FatCat');
+            const poolBefore = await pool.getFullData();
+            const testWallet = await bc.treasury('test_wallet', {workchain: -1});
+            const catPton = await getUserJetton(cat);
+
+            const balanceBefore = await catPton.getJettonBalance();
+            expect(balanceBefore).toBeGreaterThan(0n);
+
+            const res = await catPton.sendBurnWithParams(cat.getSender(),
+                                                         toNano('1'),
+                                                         balanceBefore,
+                                                         testWallet.address,
+                                                         false, false);
+
+            expect(res.transactions).toHaveTransaction({
+                on: cat.address,
+                from: pool.address,
+                op: Op.pool.withdrawal
+            });
+            expect(res.transactions).not.toHaveTransaction({
+                on: testWallet.address,
+                from: pool.address
+            });
+        });
         it('Should not be possible to fail distribution action phase with low burn msg value', async() => {
             await loadSnapshot('has_loan');
             const cat = await bc.treasury('FatCat');
