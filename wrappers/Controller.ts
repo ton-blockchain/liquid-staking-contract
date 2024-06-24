@@ -171,7 +171,7 @@ export class Controller implements Contract {
     }
 
     async sendApproveExtended(provider: ContractProvider, via: Sender,
-                              opts: ApproveOptions, value: bigint = toNano('0.1'), query_id: bigint | number = 0) {
+                              opts: ApproveOptions, value: bigint = toNano('0.15'), query_id: bigint | number = 0) {
         await provider.internal(via, {
             value,
             body: Controller.approveExtendedMessage(opts, query_id),
