@@ -333,6 +333,84 @@ describe('Governor actions tests', () => {
                 expect(poolAfter.depositsOpen).toEqual(depoOpened);
                 expect(poolAfter.instantWithdrawalFee).toEqual(randomFee);
             });
+            it('halter should be able to disable optimistic/close deposits', async () => {
+                let   poolBefore = await pool.getFullData();
+                expect(poolBefore.optimisticDepositWithdrawals).toBe(true);
+
+                if(!poolBefore.depositsOpen || !poolBefore.optimisticDepositWithdrawals) {
+                    await pool.sendSetDepositSettings(bc.sender(newGovernor), toNano('1'), true, true, poolBefore.instantWithdrawalFee);
+
+                    poolBefore = await pool.getFullData();
+                }
+                const rollBack = bc.snapshot();
+
+                expect(poolBefore.depositsOpen).toBe(true);
+                expect(poolBefore.optimisticDepositWithdrawals).toBe(true);
+
+                for (let params of [[false, false], [true, false], [false, true], [true, true]]) {
+                    const res = await pool.sendPartialHalt(bc.sender(newHalter), params[0], params[1]);
+                    expect(res.transactions).toHaveTransaction({
+                        on: pool.address,
+                        from: newHalter,
+                        op: Op.halter.partial_halt,
+                        aborted: false
+                    });
+                    const poolAfter = await pool.getFullData();
+
+                    expect(poolAfter.optimisticDepositWithdrawals).toBe(!params[0]);
+                    expect(poolAfter.depositsOpen).toBe(!params[1]);
+                    // Roll back each iteration
+                    await bc.loadFrom(rollBack);
+                }
+            });
+            it('no one except halter should be able to disable optimistic/close deposts', async () => {
+                const stateBefore = await getContractData(pool.address);
+
+                for (let addr of [newGovernor, newInterestManager, newApprover]) {
+                    expect(addr).not.toEqualAddress(newHalter);
+                    const testSender = bc.sender(addr);
+                    for (let params of [[false, false], [true, false], [false, true], [true, true]]) {
+                        const res = await pool.sendPartialHalt(bc.sender(addr), params[0], params[1]);
+                        expect(res.transactions).toHaveTransaction({
+                            on: pool.address,
+                            from: addr,
+                            op: Op.halter.partial_halt,
+                            aborted: true,
+                            success: false,
+                            exitCode: Errors.wrong_sender
+                        });
+                        expect(await getContractData(pool.address)).toEqualCell(stateBefore);
+                    }
+                }
+            });
+            it('should reject malformed partial halt messages', async () => {
+                const stateBefore = await getContractData(pool.address);
+                // Point is that payload doesn't ocasionally match something meaningfull
+                const extraTrue   = beginCell().storeBit(true).endCell();
+                const extraFalse  = beginCell().storeBit(false).endCell();
+                const bitLength   = getRandomInt(2, 32);
+                const appendBits  = getRandomInt(0, (1 << bitLength ) - 1);
+                const extraSome   = beginCell().storeUint(appendBits, bitLength).endCell();
+
+                const halter      = bc.sender(newHalter);
+
+                for (let params of [[false, false], [true, false], [false, true], [true, true]]) {
+                    const validMsg = Pool.partialHaltMessage(params[0], params[1]);
+                    for(let extra of [extraTrue, extraFalse, extraSome]) {
+                        const res = await bc.sendMessage(internal({
+                            from: newHalter,
+                            to: pool.address,
+                            body: beginCell().storeSlice(validMsg.asSlice()).storeSlice(extra.asSlice()).endCell(),
+                            value: toNano('0.1'),
+                        }));
+                        expect(res.transactions).toHaveTransaction({
+                            on: pool.address,
+                            op: Op.halter.partial_halt,
+                            success: false,
+                        });
+                        expect(await getContractData(pool.address)).toEqualCell(stateBefore);
+                    }
+                }
             });
             it('Closing deposit should prevent anyone from furhter deposits', async() => {
                 const poolBefore = await pool.getFullData();
