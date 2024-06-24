@@ -1785,6 +1785,9 @@ describe('Integrational tests', () => {
             // After this we expect total balance to reduce by finalizeRoundFee
             const balanceBefore = poolBefore.totalBalance - Conf.finalizeRoundFee;
             const poolAfter = await pool.getFullData();
+            // For get_conversion_rate_unsafe
+            // In case no other snap states has any meaningfull projected impact
+            snapStates.set('projected_changed', bc.snapshot());
             expect(poolAfter.previousRound.expected).toEqual(poolBefore.currentRound.expected + totalExpReturn);
             totalExpProfit -= Conf.finalizeRoundFee;
             totalExpProfit -= Conf.governanceFee * totalExpProfit / Conf.shareBase;
@@ -2307,5 +2310,40 @@ describe('Integrational tests', () => {
         const poolAfter = await pool.getFullData();
         expect(poolAfter.halted).toBe(false);
     });
+    });
+    describe('Convertion rate unsafe', () => {
+        afterAll(async () => await loadSnapshot('initial'));
+        it('conversion rate should match get method data at any point', async () => {
+            const msgValue = toNano('0.1');
+            for(let snap of snapStates.values()) {
+                await bc.loadFrom(snap);
+                const poolData = await pool.getFullDataRaw();
+                const res = await pool.sendConversionRateUnsafe(deployer.getSender(), msgValue);
+                const requestRate = findTransaction(res.transactions, {
+                    on: pool.address,
+                    from: deployer.address,
+                    op: Op.pool.get_conversion_rate_unsafe,
+                    aborted: false
+                });
+                if(requestRate == undefined) {
+                    throw new Error("Conversion rate request failed");
+                }
+                const computed = computedGeneric(requestRate);
+                expect(res.transactions).toHaveTransaction({
+                    on: deployer.address,
+                    from: pool.address,
+                    op: Op.pool.take_conversion_rate_unsafe,
+                    body: (x) => {
+                        const ds = x!.beginParse().skip(32 + 64);
+                        const pb = ds.loadCoins();
+                        const ps = ds.loadCoins();
+                        return pb    == poolData.projectedTotalBalance
+                               && ps == poolData.projectedPoolSupply;
+                    },
+                    // Should return change
+                    value: msgValue - computed.gasFees - msgConf.lumpPrice
+                });
+            }
+        });
     });
 });
