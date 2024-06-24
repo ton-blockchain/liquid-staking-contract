@@ -994,11 +994,19 @@ describe('Integrational tests', () => {
                     return {burnt: 0n, distributed: 0n} as any;
                 }
                 if(fundsAvailabe > tonAmount) {
+                    let withdrawFee = 0n;
+                    if(poolBefore.instantWithdrawalFee > 0n) {
+                        const base = Conf.shareBase;
+                        // Just in case
+                        expect(poolAfter.instantWithdrawalFee).toEqual(poolBefore.instantWithdrawalFee);
+                        withdrawFee = tonAmount * BigInt(poolAfter.instantWithdrawalFee) / base;
+                        expect(poolAfter.accruedGovernanceFee).toEqual(poolBefore.accruedGovernanceFee + withdrawFee);
+                    }
                     expect(res.transactions).toHaveTransaction({
                         from: pool.address,
                         to: withdrawAddr,
                         op: Op.pool.withdrawal,
-                        value: tonAmount + inValue - bcConf.lumpPrice - computedGeneric(reqTx).gasFees
+                        value: tonAmount + inValue - bcConf.lumpPrice - computedGeneric(reqTx).gasFees - withdrawFee
                     });
                     expect(poolAfter.totalBalance).toEqual(poolBefore.totalBalance - tonAmount);
                     expect(poolAfter.supply).toEqual(poolBefore.supply - amount);
@@ -1803,6 +1811,38 @@ describe('Integrational tests', () => {
                 balance -= res.distributed;
                 supply  -= res.burnt;
             }
+        });
+        it('Should account for instant withdraw fee', async () => {
+            await loadSnapshot('opt_depo');
+
+            const withdrawFee = getRandomInt(1, (2 ** 24) - 1);
+            const res = await pool.sendSetDepositSettings(deployer.getSender(), toNano('0.05'),
+                                                          true, true, withdrawFee);
+            const poolBefore = await pool.getFullData();
+            expect(poolBefore.instantWithdrawalFee).toEqual(withdrawFee);
+            expect(poolBefore.accruedGovernanceFee).toEqual(0n);
+            let   balance    = poolBefore.totalBalance;
+            let   supply     = poolBefore.supply;
+            const depoIdx = getRandomInt(0, depoAddresses.length - 1);
+            const owner   = bc.sender(depoAddresses[depoIdx]);
+            const pton       = await getUserJetton(depoAddresses[depoIdx]);
+            const burnAmount = await pton.getJettonBalance(); // / share;
+
+            await assertWithdraw(owner, burnAmount, true, true, balance, supply, 0, false);
+            const poolAfter = await pool.getFullData();
+            expect(poolAfter.accruedGovernanceFee).toBeGreaterThan(0n);
+            snapStates.set('fee_accured', bc.snapshot());
+
+            await nextRound();
+
+            const round = await pool.sendTouch(deployer.getSender());
+
+            expect(round.transactions).toHaveTransaction({
+                from: pool.address,
+                to: deployer.address,
+                op: Op.interestManager.operation_fee,
+                value: poolAfter.accruedGovernanceFee - msgConf.lumpPrice
+            });
         });
         it('Should be able to use balance in the same round', async() => {
             await loadSnapshot('opt_depo');
