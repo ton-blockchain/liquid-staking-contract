@@ -1847,6 +1847,31 @@ describe('Integrational tests', () => {
                 value: poolAfter.accruedGovernanceFee - msgConf.lumpPrice
             });
         });
+        it('Should send fee to treasury if set', async () => {
+            await loadSnapshot('fee_accured');
+            const newTreasury = await bc.treasury('test_treasury');
+
+            const res = await pool.sendSetRoles(deployer.getSender(), {treasury: newTreasury.address});
+            expect(res.transactions).toHaveTransaction({
+                on: pool.address,
+                from: deployer.address,
+                op: Op.governor.set_roles,
+                success: true,
+                aborted: false
+            });
+
+            const poolAfter = await pool.getFullData();
+            await nextRound();
+
+            const round = await pool.sendTouch(deployer.getSender());
+            expect(round.transactions).toHaveTransaction({
+                from: pool.address,
+                to: newTreasury.address,
+                op: Op.interestManager.operation_fee,
+                // New treasury is in basechain, while previous was in mc
+                value: poolAfter.accruedGovernanceFee - bcConf.lumpPrice
+            });
+        });
         it('Should be able to use balance in the same round', async() => {
             await loadSnapshot('opt_depo');
             // Optimists don't wait
