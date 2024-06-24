@@ -836,7 +836,7 @@ describe('Cotroller mock', () => {
       const stateBefore  = await getContractData(controller.address);
       const controllerData = await controller.getControllerData();
       const borrowAmount = getRandomTon(100000, 200000);
-      const withInterest = borrowAmount + borrowAmount * BigInt(controllerData.interest) / BigInt(256**3);
+      const withInterest = borrowAmount + borrowAmount * BigInt(Conf.testInterest) / Conf.shareBase;
       let res = await controller.sendCredit(bc.sender(notPool), withInterest, borrowAmount);
       expect(res.transactions).toHaveTransaction({
         from: notPool,
@@ -854,7 +854,7 @@ describe('Cotroller mock', () => {
         success: true
       });
       const controllerAfter = await controller.getControllerData();
-      // expect(controllerAfter.interest).toEqual(interest);
+      expect(controllerAfter.interest).toEqual(Conf.testInterest);
     });
     it('Controller should reject credit with interest higher that expected', async () => {
       await loadSnapshot('creditAwaited');
