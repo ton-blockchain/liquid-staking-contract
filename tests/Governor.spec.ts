@@ -311,22 +311,28 @@ describe('Governor actions tests', () => {
                 const rollBack = bc.snapshot();
                 const notGovernor    = differentAddress(newGovernor);
                 const msgVal = toNano('1');
-                let res = await pool.sendSetDepositSettings(bc.sender(notGovernor), msgVal, true, true);
+                const randomFee  = getRandomInt(1, (2 ** 24) - 1);
+                const dataBefore = await getContractData(pool.address);
+                let res = await pool.sendSetDepositSettings(bc.sender(notGovernor), msgVal, true, true, randomFee);
                 assertExitCode(res.transactions, Errors.wrong_sender);
+                expect(dataBefore).toEqualCell(await getContractData(pool.address));
                 res = await pool.sendSetDepositSettings(bc.sender(newGovernor), msgVal, true, true);
                 assertExitCode(res.transactions, 0);
                 await bc.loadFrom(rollBack);
             });
             it('Governor should be able to set deposit settings', async() => {
+                const randomFee  = getRandomInt(1, (2 ** 24) - 1);
                 const poolBefore = await pool.getFullData();
                 const optimistic = !poolBefore.optimisticDepositWithdrawals;
                 const depoOpened = !poolBefore.depositsOpen;
-                const res = await pool.sendSetDepositSettings(bc.sender(newGovernor), toNano('1'), optimistic, depoOpened);
+                const res = await pool.sendSetDepositSettings(bc.sender(newGovernor), toNano('1'), optimistic, depoOpened, randomFee);
                 assertExitCode(res.transactions, 0);
 
-                const poolAfter = await pool.getFullData();
+                let poolAfter = await pool.getFullData();
                 expect(poolAfter.optimisticDepositWithdrawals).toEqual(optimistic);
                 expect(poolAfter.depositsOpen).toEqual(depoOpened);
+                expect(poolAfter.instantWithdrawalFee).toEqual(randomFee);
+            });
             });
             it('Closing deposit should prevent anyone from furhter deposits', async() => {
                 const poolBefore = await pool.getFullData();
