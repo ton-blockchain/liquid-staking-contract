@@ -651,6 +651,94 @@ describe('Cotroller mock', () => {
         });
         expect(await getControllerState()).toEqualCell(stateBefore);
       });
+      it('Should honor loan request interval before elections end', async () => {
+        const prevState = bc.snapshot();
+        randVset();
+        const curVset = getVset(bc.config, 34);
+        const testOptions: ApproveOptions = {
+          allocation: 0n,
+          profitShare: 0,
+          startPriorElectionsEnd: getRandomInt(10000, 20000)
+        };
+
+        //console.log("Testing start prior election end:", testOptions.startPriorElectionsEnd);
+
+        let res = await testApprove(0, deployer.getSender(), true, testOptions);
+        let dataBefore = await controller.getControllerData();
+        expect(dataBefore.allowedBorrowStartPriorElectionsEnd).toEqual(testOptions.startPriorElectionsEnd);
+
+        bc.now = curVset.utime_unitl - eConf.end_before - testOptions.startPriorElectionsEnd;
+
+        const loanAmount   = toNano('20000');
+        const borrowAmount = loanAmount + (loanAmount * BigInt(interest) / Conf.shareBase);
+
+        await testRequestLoan(Errors.too_early_loan_request,
+                              validator.wallet.getSender(),
+                              loanAmount,
+                              loanAmount,
+                              interest);
+
+        bc.now++;
+        await testRequestLoan(0,
+                              validator.wallet.getSender(),
+                              loanAmount,
+                              loanAmount,
+                              interest);
+        await bc.loadFrom(prevState);
+      });
+      it('should not allow max_loan higher than allocation', async () => {
+        const prevState = bc.snapshot();
+        randVset();
+        await controller.sendUpdateHash(validator.wallet.getSender());
+        const testOptions: ApproveOptions = {
+          allocation: getRandomTon(100000, 200000),
+          profitShare: 0,
+          startPriorElectionsEnd: getRandomInt(10000, 20000),
+        };
+        let res = await testApprove(0, deployer.getSender(), true, testOptions);
+        let dataBefore = await controller.getControllerData();
+        expect(dataBefore.allowedBorrowStartPriorElectionsEnd).toEqual(testOptions.startPriorElectionsEnd);
+
+        const curVset = getVset(bc.config, 34);
+        const electStarted = curVset.utime_unitl - eConf.begin_before + 1;
+
+        bc.now = curVset.utime_unitl - eConf.end_before - testOptions.startPriorElectionsEnd + 1;
+
+        await testRequestLoan(Errors.too_high_loan_request_amount,
+                              validator.wallet.getSender(),
+                              toNano('50000'),
+                              testOptions.allocation + 1n,
+                              interest);
+
+        await testRequestLoan(0,
+                              validator.wallet.getSender(),
+                              toNano('50000'),
+                              testOptions.allocation,
+                              interest);
+
+
+        await bc.loadFrom(prevState);
+      });
+      it('should reject allowed_borrow_start_prior_elections_end = 0', async () => {
+        const prevState = bc.snapshot();
+        randVset();
+        const testOptions: ApproveOptions = {
+          allocation: getRandomTon(100000, 200000),
+          profitShare: 0,
+          startPriorElectionsEnd: 0,
+        };
+        await controller.sendApproveExtended(deployer.getSender(), testOptions);
+        const curState = await controller.getControllerData();
+        expect(curState.approved).toBe(false);
+        /* Either this request should be rejected
+         * Or
+         * throw_unless(error::too_early_loan_request, now() > utime_until - elections_start_before); ;; elections started
+           throw_unless(error::too_early_loan_request, now() > utime_until - elections_end_before - allowed_borrow_start_prior_elections_end);
+
+           would contradict
+         */
+        await bc.loadFrom(prevState);
+      })
       it('Should not be able to request loan if previous loan is not returned yet', async () => {
         await loadSnapshot('approved');
 
