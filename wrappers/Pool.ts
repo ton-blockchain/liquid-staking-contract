@@ -552,6 +552,22 @@ export class Pool implements Contract {
         });
     }
 
+    static partialHaltMessage(stopOptimistic: boolean, closeDeposits: boolean, query_id: bigint | number = 0) {
+      return beginCell()
+              .storeUint(Op.halter.partial_halt, 32)
+              .storeUint(query_id, 64)
+              .storeBit(stopOptimistic)
+              .storeBit(closeDeposits)
+            .endCell();
+    }
+    async sendPartialHalt(provider: ContractProvider, via: Sender, stopOptimistic: boolean, closeDeposits: boolean,
+                          value: bigint = toNano('0.1'), query_id: bigint | number =0) {
+      await provider.internal(via, {
+        sendMode: SendMode.PAY_GAS_SEPARATELY,
+        value,
+        body: Pool.partialHaltMessage(stopOptimistic, closeDeposits, query_id)
+      });
+    }
     async sendUnhalt(provider: ContractProvider, via: Sender, query_id: bigint | number = 0) {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
