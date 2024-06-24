@@ -1159,12 +1159,11 @@ describe('Cotroller mock', () => {
       });
       it('New stake wrong round', async () => {
         const deposit    = toNano('100000');
-        // We have to do that because we can't roll time back without emulator account timestamp error
-        await bc.loadFrom(InitialState);
+        randVset();
         const curSet = getVset(bc.config, 34);
         // Too early
         bc.now = curSet.utime_since;
-        await controller.sendCredit(bc.sender(poolAddress), toNano('201000'), toNano('200000'));
+
         await testNewStake(Errors.newStake.wrongly_used_credit,
                            validator.wallet.getSender(),
                            deposit);
