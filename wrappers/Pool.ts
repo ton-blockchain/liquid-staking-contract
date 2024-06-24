@@ -583,6 +583,22 @@ export class Pool implements Contract {
         body: Pool.partialHaltMessage(stopOptimistic, closeDeposits, query_id)
       });
     }
+
+    static conversionRateUnsafeMessage(query_id: bigint | number = 0) {
+      return beginCell()
+              .storeUint(Op.pool.get_conversion_rate_unsafe, 32)
+              .storeUint(query_id, 64)
+             .endCell();
+    }
+    async sendConversionRateUnsafe(provider: ContractProvider, via: Sender,
+                                   value: bigint = toNano('0.05'), query_id: bigint | number = 0) {
+      await provider.internal(via,{
+        value,
+        body: Pool.conversionRateUnsafeMessage(query_id),
+        sendMode: SendMode.PAY_GAS_SEPARATELY
+      });
+    }
+
     async sendUnhalt(provider: ContractProvider, via: Sender, query_id: bigint | number = 0) {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
