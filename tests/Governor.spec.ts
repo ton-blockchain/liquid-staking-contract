@@ -1,5 +1,5 @@
 import { Blockchain, BlockchainSnapshot, BlockchainTransaction, internal, SandboxContract, TreasuryContract } from '@ton/sandbox';
-import { Address, Cell, toNano, Dictionary, beginCell, Sender, SendMode, Slice } from '@ton/core';
+import { Address, Cell, toNano, Dictionary, beginCell, Sender, SendMode, Slice, Transaction } from '@ton/core';
 import { Pool } from '../wrappers/Pool';
 import { Controller } from '../wrappers/Controller';
 import { JettonMinter as DAOJettonMinter, jettonContentToCell } from '../contracts/jetton_dao/wrappers/JettonMinter';
@@ -177,6 +177,7 @@ describe('Governor actions tests', () => {
         let newInterestManager: Address;
         let newHalter: Address;
         let newApprover: Address;
+        let newTreasury: Address;
         let prevState: BlockchainSnapshot;
         beforeAll(() => {
             bc.now = Math.floor(Date.now() / 1000);
@@ -184,6 +185,7 @@ describe('Governor actions tests', () => {
             newInterestManager = randomAddress();
             newHalter          = randomAddress();
             newApprover        = randomAddress();
+            newTreasury        = randomAddress();
             prevState          = bc.snapshot();
         });
         afterAll(async () => {
@@ -242,38 +244,49 @@ describe('Governor actions tests', () => {
             });
         });
         describe('Roles update', () => {
-            it('Till governor quarantine expires no one should be able to trigger governor role', async () => {
-                const poolBefore = await pool.getFullData();
-                expect(poolBefore.governorUpdateAfter).toEqual(updateTime);
-                expect(bc.now).toBeLessThan(updateTime);
+            let assertSetRoles :(txs: Transaction[], res: number, state?: Cell) => Promise<void>;
 
-                let res = await pool.sendSetRoles(deployer.getSender(),
-                                                  newGovernor,
-                                                  null,
-                                                  null,
-                                                  null);
+            beforeAll(async () => {
+                expect(newGovernor).not.toEqualAddress(deployer.address);
+                assertSetRoles = async (txs, res, state) => {
+                    expect(txs).toHaveTransaction({
+                        on: pool.address,
+                        op: Op.governor.set_roles,
+                        success: res == 0,
+                        aborted: res != 0,
+                        exitCode: res
+                    });
+                    if(state) {
+                        expect(await getContractData(pool.address)).toEqualCell(state);
+                    }
+                };
+            });
+            it('Only governor should be able to update roles', async () => {
+                const stateBefore = await getContractData(pool.address);
+                for(let testAddr of [newApprover, newInterestManager, newHalter, newInterestManager, newGovernor]) {
+                    let res = await pool.sendSetRoles(bc.sender(testAddr),
+                                                     {governor: newGovernor});
 
-                expect(res.transactions).toHaveTransaction({
-                    on: pool.address,
-                    from: deployer.address,
-                    op: Op.governor.set_roles,
-                    success: false,
-                    aborted: true,
-                    exitCode: Errors.governor_update_not_matured
-                });
+                    await assertSetRoles(res.transactions, Errors.wrong_sender, stateBefore);
+                    res = await pool.sendSetRoles(bc.sender(testAddr), {
+                                                  interestManager: newInterestManager,
+                                                  halter: newHalter,
+                                                  approver: newApprover
+                                                });
 
-                res = await pool.sendSetRoles(deployer.getSender(),
-                                              null,
-                                              newInterestManager,
-                                              newHalter,
-                                              newApprover);
-                // Other roles update is not limited
+                    await assertSetRoles(res.transactions, Errors.wrong_sender, stateBefore);
 
-                expect(res.transactions).toHaveTransaction({
-                    on: pool.address,
-                    from: deployer.address,
-                    success: true
-                });
+                }
+
+                // Should succeed
+                const res = await pool.sendSetRoles(deployer.getSender(), {
+                                                  interestManager: newInterestManager,
+                                                  halter: newHalter,
+                                                  approver: newApprover
+                                              });
+
+
+                await assertSetRoles(res.transactions, 0);
 
                 const dataAfter = await pool.getFullData();
                 // Should not change
@@ -283,20 +296,52 @@ describe('Governor actions tests', () => {
                 expect(dataAfter.halter).toEqualAddress(newHalter);
                 expect(dataAfter.approver).toEqualAddress(newApprover);
             });
-            it('After governance update quarantine expired, governor should be able to update roles', async() => {
-                bc.now = updateTime + 1;
-                const poolBefore = await pool.getFullData();
-                const res = await pool.sendSetRoles(deployer.getSender(),
-                                                    newGovernor,
-                                                    null,
-                                                    null,
-                                                    null);
+            // Should we merge it in test above?
+            it('Only governor could should be able to set treasury role', async () => {
+                const stateBefore = await getContractData(pool.address);
 
-                expect(res.transactions).toHaveTransaction({
-                    from: deployer.address,
-                    on: pool.address,
-                    success: true
-                });
+                for(let testAddr of [newApprover, newInterestManager, newHalter, newInterestManager, newGovernor]) {
+                    const res = await pool.sendSetRoles(bc.sender(testAddr),{treasury: newTreasury});
+                    await assertSetRoles(res.transactions, Errors.wrong_sender, stateBefore);
+                }
+
+                const res = await pool.sendSetRoles(deployer.getSender(), {treasury: newTreasury});
+                await assertSetRoles(res.transactions, 0);
+            });
+            it('Till governor quarantine expires no one should be able to trigger governor role', async () => {
+                const prevState   = bc.snapshot();
+                const poolBefore  = await pool.getFullData();
+                const stateBefore = await getContractData(pool.address);
+                expect(poolBefore.governorUpdateAfter).toEqual(updateTime);
+                expect(bc.now).toBeLessThan(updateTime);
+
+                let res = await pool.sendSetRoles(deployer.getSender(),
+                                                  {governor: newGovernor});
+
+                await assertSetRoles(res.transactions, Errors.governor_update_not_matured, stateBefore);
+                // No one means no one
+                for(let testAddr of [newApprover, newInterestManager, newHalter, newInterestManager, newGovernor]) {
+                    res = await pool.sendSetRoles(bc.sender(testAddr),
+                                                      {governor: newGovernor});
+                    await assertSetRoles(res.transactions, Errors.wrong_sender, stateBefore);
+                }
+
+            });
+            it('After governance update quarantine expired, only governor should be able to set new governor', async() => {
+                bc.now = updateTime + 1;
+                const stateBefore = await getContractData(pool.address);
+                const poolBefore = await pool.getFullData();
+                // Quarantine should not impact roles able to set new governor
+                for(let testAddr of [newApprover, newInterestManager, newHalter, newInterestManager, newGovernor]) {
+                    const res = await pool.sendSetRoles(bc.sender(testAddr),
+                                                      {governor: newGovernor});
+                    await assertSetRoles(res.transactions, Errors.wrong_sender, stateBefore);
+                }
+
+                const res = await pool.sendSetRoles(deployer.getSender(),
+                                                    {governor: newGovernor});
+
+                await assertSetRoles(res.transactions, 0);
                 const poolAfter = await pool.getFullData();
                 // Should reset update timer
                 expect(poolAfter.governorUpdateAfter).toEqual(0xffffffffffff);
@@ -311,22 +356,106 @@ describe('Governor actions tests', () => {
                 const rollBack = bc.snapshot();
                 const notGovernor    = differentAddress(newGovernor);
                 const msgVal = toNano('1');
-                let res = await pool.sendSetDepositSettings(bc.sender(notGovernor), msgVal, true, true);
+                const randomFee  = getRandomInt(1, (2 ** 24) - 1);
+                const dataBefore = await getContractData(pool.address);
+                let res = await pool.sendSetDepositSettings(bc.sender(notGovernor), msgVal, true, true, randomFee);
                 assertExitCode(res.transactions, Errors.wrong_sender);
+                expect(dataBefore).toEqualCell(await getContractData(pool.address));
                 res = await pool.sendSetDepositSettings(bc.sender(newGovernor), msgVal, true, true);
                 assertExitCode(res.transactions, 0);
                 await bc.loadFrom(rollBack);
             });
             it('Governor should be able to set deposit settings', async() => {
+                const randomFee  = getRandomInt(1, (2 ** 24) - 1);
                 const poolBefore = await pool.getFullData();
                 const optimistic = !poolBefore.optimisticDepositWithdrawals;
                 const depoOpened = !poolBefore.depositsOpen;
-                const res = await pool.sendSetDepositSettings(bc.sender(newGovernor), toNano('1'), optimistic, depoOpened);
+                const res = await pool.sendSetDepositSettings(bc.sender(newGovernor), toNano('1'), optimistic, depoOpened, randomFee);
                 assertExitCode(res.transactions, 0);
 
-                const poolAfter = await pool.getFullData();
+                let poolAfter = await pool.getFullData();
                 expect(poolAfter.optimisticDepositWithdrawals).toEqual(optimistic);
                 expect(poolAfter.depositsOpen).toEqual(depoOpened);
+                expect(poolAfter.instantWithdrawalFee).toEqual(randomFee);
+            });
+            it('halter should be able to disable optimistic/close deposits', async () => {
+                let   poolBefore = await pool.getFullData();
+                expect(poolBefore.optimisticDepositWithdrawals).toBe(true);
+
+                if(!poolBefore.depositsOpen || !poolBefore.optimisticDepositWithdrawals) {
+                    await pool.sendSetDepositSettings(bc.sender(newGovernor), toNano('1'), true, true, poolBefore.instantWithdrawalFee);
+
+                    poolBefore = await pool.getFullData();
+                }
+                const rollBack = bc.snapshot();
+
+                expect(poolBefore.depositsOpen).toBe(true);
+                expect(poolBefore.optimisticDepositWithdrawals).toBe(true);
+
+                for (let params of [[false, false], [true, false], [false, true], [true, true]]) {
+                    const res = await pool.sendPartialHalt(bc.sender(newHalter), params[0], params[1]);
+                    expect(res.transactions).toHaveTransaction({
+                        on: pool.address,
+                        from: newHalter,
+                        op: Op.halter.partial_halt,
+                        aborted: false
+                    });
+                    const poolAfter = await pool.getFullData();
+
+                    expect(poolAfter.optimisticDepositWithdrawals).toBe(!params[0]);
+                    expect(poolAfter.depositsOpen).toBe(!params[1]);
+                    // Roll back each iteration
+                    await bc.loadFrom(rollBack);
+                }
+            });
+            it('no one except halter should be able to disable optimistic/close deposts', async () => {
+                const stateBefore = await getContractData(pool.address);
+
+                for (let addr of [newGovernor, newInterestManager, newApprover]) {
+                    expect(addr).not.toEqualAddress(newHalter);
+                    const testSender = bc.sender(addr);
+                    for (let params of [[false, false], [true, false], [false, true], [true, true]]) {
+                        const res = await pool.sendPartialHalt(bc.sender(addr), params[0], params[1]);
+                        expect(res.transactions).toHaveTransaction({
+                            on: pool.address,
+                            from: addr,
+                            op: Op.halter.partial_halt,
+                            aborted: true,
+                            success: false,
+                            exitCode: Errors.wrong_sender
+                        });
+                        expect(await getContractData(pool.address)).toEqualCell(stateBefore);
+                    }
+                }
+            });
+            it('should reject malformed partial halt messages', async () => {
+                const stateBefore = await getContractData(pool.address);
+                // Point is that payload doesn't ocasionally match something meaningfull
+                const extraTrue   = beginCell().storeBit(true).endCell();
+                const extraFalse  = beginCell().storeBit(false).endCell();
+                const bitLength   = getRandomInt(2, 32);
+                const appendBits  = getRandomInt(0, (1 << bitLength ) - 1);
+                const extraSome   = beginCell().storeUint(appendBits, bitLength).endCell();
+
+                const halter      = bc.sender(newHalter);
+
+                for (let params of [[false, false], [true, false], [false, true], [true, true]]) {
+                    const validMsg = Pool.partialHaltMessage(params[0], params[1]);
+                    for(let extra of [extraTrue, extraFalse, extraSome]) {
+                        const res = await bc.sendMessage(internal({
+                            from: newHalter,
+                            to: pool.address,
+                            body: beginCell().storeSlice(validMsg.asSlice()).storeSlice(extra.asSlice()).endCell(),
+                            value: toNano('0.1'),
+                        }));
+                        expect(res.transactions).toHaveTransaction({
+                            on: pool.address,
+                            op: Op.halter.partial_halt,
+                            success: false,
+                        });
+                        expect(await getContractData(pool.address)).toEqualCell(stateBefore);
+                    }
+                }
             });
             it('Closing deposit should prevent anyone from furhter deposits', async() => {
                 const poolBefore = await pool.getFullData();
@@ -492,7 +621,7 @@ describe('Governor actions tests', () => {
                     // We don't want halt state to change here
                     async () => pool.sendUnhalt(bc.sender(randomAddress())),
                     async () => pool.sendPrepareGovernanceMigration(governor, Math.floor(Date.now() / 1000)),
-                    async () => pool.sendSetRoles(governor, null, null, null, null),
+                    async () => pool.sendSetRoles(governor, {}),
                     async () => pool.sendSetDepositSettings(governor, toNano('1'), true, true),
                     async () => pool.sendSetGovernanceFee(governor, 0),
                     async () => pool.sendSetInterest(bc.sender(newInterestManager), 0)

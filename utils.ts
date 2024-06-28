@@ -86,7 +86,11 @@ export const buff2bigint = (buff: Buffer) : bigint => {
 }
 
 export const bigint2buff = (num:bigint) : Buffer => {
-    return Buffer.from(num.toString(16), 'hex')
+    let hexStr = num.toString(16);
+    if(hexStr.length % 2 != 0) {
+        hexStr = "0" + hexStr;
+    }
+    return Buffer.from(hexStr, 'hex')
 }
 
 export const computedGeneric = (trans:Transaction) => {

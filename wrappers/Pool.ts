@@ -13,6 +13,7 @@ export type PoolConfig = {
   interest_manager: Address;
   halter: Address;
   approver: Address;
+  treasury?: Address;
   
   controller_code: Cell;
   payout_wallet_code?: Cell;
@@ -60,6 +61,7 @@ export type PoolFullConfig = {
   interest_manager: Address;
   halter: Address;
   approver: Address;
+  treasury?: Address;
 
   controller_code: Cell;
   pool_jetton_wallet_code: Cell;
@@ -86,18 +88,20 @@ export function poolConfigToCell(config: PoolConfig): Cell {
                           .storeUint(0, 1) // no deposit_minter
                           .storeUint(0, 1) // no withdrawal_minter
                       .endCell();
+
+    let rolesExtra = beginCell().storeAddress(config.halter)
+                                .storeAddress(config.approver)
+    if(config.treasury) {
+      rolesExtra.storeAddress(config.treasury);
+    }
+
     let roles = beginCell()
                    .storeAddress(config.sudoer)
                    .storeUint(0, 48) // sudoer set at
                    .storeAddress(config.governor)
                    .storeUint(0xffffffffffff, 48) // givernor update after
                    .storeAddress(config.interest_manager)
-                   .storeRef(
-                       beginCell()
-                         .storeAddress(config.halter)
-                         .storeAddress(config.approver)
-                       .endCell()
-                   )
+                   .storeRef(rolesExtra.endCell())
                 .endCell();
     let codes = beginCell()
                     .storeRef(config.controller_code)
@@ -287,18 +291,21 @@ export function poolFullConfigToCell(config: PoolFullConfig): Cell {
       mintersData = mintersData.storeUint(0, 1);
     }
     let minters:Cell = mintersData.endCell();
+
+    let rolesExtra = beginCell().storeAddress(config.halter)
+                                .storeAddress(config.approver)
+    if(config.treasury) {
+      rolesExtra.storeAddress(config.treasury);
+    }
+
+
     let roles = beginCell()
                    .storeAddress(config.sudoer)
                    .storeUint(config.sudoerSetAt, 48) // sudoer set at
                    .storeAddress(config.governor)
                    .storeUint(config.governorUpdateAfter, 48) // givernor update after
                    .storeAddress(config.interest_manager)
-                   .storeRef(
-                       beginCell()
-                         .storeAddress(config.halter)
-                         .storeAddress(config.approver)
-                       .endCell()
-                   )
+                   .storeRef(rolesExtra.endCell())
                 .endCell();
     let codes = beginCell()
                     .storeRef(config.controller_code)
@@ -498,19 +505,27 @@ export class Pool implements Contract {
     }
 
     async sendSetRoles(provider: ContractProvider, via: Sender,
-                       governor: Address | null,
-                       interestManager: Address | null,
-                       halter: Address | null,
-                       approver: Address | null) {
+                       roles: {
+                         governor?: Address ,
+                         interestManager?: Address,
+                         halter?: Address,
+                         approver?: Address,
+                         treasury?: Address
+                       },
+                      ) {
         let body = beginCell()
                      .storeUint(Op.governor.set_roles, 32)
                      .storeUint(1, 64);
-        for (let role of [governor, interestManager, halter, approver]) {
+        for (let role of [roles.governor, roles.interestManager, roles.halter, roles.approver]) {
             if(role) {
               body = body.storeBit(true).storeAddress(role!);
             } else {
               body = body.storeBit(false);
             }
+        }
+        // Optimize message size
+        if(roles.treasury) {
+          body.storeBit(true).storeAddress(roles.treasury);
         }
         await provider.internal(via, {
             value: toNano('1'),
@@ -550,6 +565,38 @@ export class Pool implements Contract {
                              .storeUint(query_id, 64)
                   .endCell()
         });
+    }
+
+    static partialHaltMessage(stopOptimistic: boolean, closeDeposits: boolean, query_id: bigint | number = 0) {
+      return beginCell()
+              .storeUint(Op.halter.partial_halt, 32)
+              .storeUint(query_id, 64)
+              .storeBit(stopOptimistic)
+              .storeBit(closeDeposits)
+            .endCell();
+    }
+    async sendPartialHalt(provider: ContractProvider, via: Sender, stopOptimistic: boolean, closeDeposits: boolean,
+                          value: bigint = toNano('0.1'), query_id: bigint | number =0) {
+      await provider.internal(via, {
+        sendMode: SendMode.PAY_GAS_SEPARATELY,
+        value,
+        body: Pool.partialHaltMessage(stopOptimistic, closeDeposits, query_id)
+      });
+    }
+
+    static conversionRateUnsafeMessage(query_id: bigint | number = 0) {
+      return beginCell()
+              .storeUint(Op.pool.get_conversion_rate_unsafe, 32)
+              .storeUint(query_id, 64)
+             .endCell();
+    }
+    async sendConversionRateUnsafe(provider: ContractProvider, via: Sender,
+                                   value: bigint = toNano('0.05'), query_id: bigint | number = 0) {
+      await provider.internal(via,{
+        value,
+        body: Pool.conversionRateUnsafeMessage(query_id),
+        sendMode: SendMode.PAY_GAS_SEPARATELY
+      });
     }
 
     async sendUnhalt(provider: ContractProvider, via: Sender, query_id: bigint | number = 0) {

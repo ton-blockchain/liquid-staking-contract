@@ -11,7 +11,12 @@ export type ControllerConfig = {
   governor: Address;
   approver: Address;
   halter: Address;
-  
+};
+
+export type ApproveOptions = {
+    startPriorElectionsEnd: number,
+    allocation: bigint,
+    profitShare: number
 };
 
 export function controllerConfigToCell(config: ControllerConfig): Cell {
@@ -108,40 +113,69 @@ export class Controller implements Contract {
     static requestLoanMessage(min_loan: bigint,
                               max_loan: bigint,
                               max_interest: number,
+                              acceptable_profit_share: number = 0,
                               query_id: bigint | number = 0) {
 
-        return beginCell().storeUint(Op.controller.send_request_loan, 32)
-                          .storeUint(query_id, 64)
-                          .storeCoins(min_loan)
-                          .storeCoins(max_loan)
-                          .storeUint(max_interest, 24)
-               .endCell();
+        const ds = beginCell().storeUint(Op.controller.send_request_loan, 32)
+                              .storeUint(query_id, 64)
+                              .storeCoins(min_loan)
+                              .storeCoins(max_loan)
+                              .storeUint(max_interest, 24)
+        if(acceptable_profit_share > 0) {
+            ds.storeUint(acceptable_profit_share, 24);
+        }
+        return ds.endCell();
     }
     async sendRequestLoan(provider: ContractProvider,
                           via: Sender,
                           min_loan: bigint,
                           max_loan: bigint,
                           max_interest: number,
+                          acceptable_profit_share: number = 0,
                           value: bigint = toNano('1'),
                           query_id: bigint | number = 0) {
         await provider.internal(via, {
             value,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: Controller.requestLoanMessage(min_loan, max_loan, max_interest, query_id)
+            body: Controller.requestLoanMessage(min_loan, max_loan, max_interest, acceptable_profit_share, query_id)
         });
     }
 
-    async sendApprove(provider: ContractProvider, via: Sender, approve: boolean = true, amount: bigint = toNano('0.1')) {
+    static approveSimpleMessage(approve: boolean, query_id: bigint | number = 0) {
+        const op = approve ? Op.controller.approve : Op.controller.disapprove;
+
+        return beginCell()
+                .storeUint(op, 32)
+                .storeUint(query_id, 64)
+               .endCell();
+    }
+    async sendApprove(provider: ContractProvider, via: Sender, approve: boolean = true, amount: bigint = toNano('0.1'), query_id: bigint | number = 0) {
         // dissaprove support
         const op = approve ? Op.controller.approve : Op.controller.disapprove;
 
         await provider.internal(via, {
             value: amount,
             sendMode: SendMode.PAY_GAS_SEPARATELY,
-            body: beginCell()
-                     .storeUint(op, 32) // op
-                     .storeUint(1, 64) // query id
-                  .endCell(),
+            body: Controller.approveSimpleMessage(approve, query_id)
+        });
+    }
+
+    static approveExtendedMessage(opts: ApproveOptions, query_id: bigint | number = 0) {
+        return beginCell()
+                .storeUint(Op.controller.approve_extended, 32)
+                .storeUint(query_id, 64)
+                .storeUint(opts.startPriorElectionsEnd, 48)
+                .storeCoins(opts.allocation)
+                .storeUint(opts.profitShare, 24)
+               .endCell();
+    }
+
+    async sendApproveExtended(provider: ContractProvider, via: Sender,
+                              opts: ApproveOptions, value: bigint = toNano('0.15'), query_id: bigint | number = 0) {
+        await provider.internal(via, {
+            value,
+            body: Controller.approveExtendedMessage(opts, query_id),
+            sendMode: SendMode.PAY_GAS_SEPARATELY
         });
     }
 
@@ -323,7 +357,7 @@ export class Controller implements Contract {
             allowedBorrowStartPriorElectionsEnd: stack.readNumber(),
             approverSetProfitShare: stack.readNumber(),
             acceptableProfitShare: stack.readNumber(),
-            allocation: stack.readNumber(),
+            allocation: stack.readBigNumber(),
             borrowedAmount: stack.readBigNumber(),
             borrowingTime: stack.readNumber(),
             validator: stack.readAddress(),
@@ -349,7 +383,7 @@ export class Controller implements Contract {
         ]);
         return stack.readBigNumber();
     }
-  
+
     async getRequestWindow(provider: ContractProvider) {
         const { stack } = await provider.get("request_window_time", [])
         return {

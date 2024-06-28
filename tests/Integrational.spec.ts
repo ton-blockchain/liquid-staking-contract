@@ -141,7 +141,7 @@ describe('Integrational tests', () => {
                         new_minter: boolean) => Promise<K extends true ? DistributionComplete : T extends false ? DistributionDelayed : DistributionResult>);
 
     let assertPoolBalanceNotChanged:(balance: bigint) => Promise<void>;
-    let assertGetLoan:(controller: SandboxContract<Controller>, amount: bigint, exp_success: boolean, min_amount?:bigint) => Promise<SendMessageResult>;
+    let assertGetLoan:(controller: SandboxContract<Controller>, amount: bigint, exp_success: boolean, min_profit_share?:number) => Promise<SendMessageResult>;
     // let getLoanWithExpProfit:(controller: SandboxContract<Controller>, exp_profit: bigint) => Promise<bigint>;
 
 
@@ -994,11 +994,19 @@ describe('Integrational tests', () => {
                     return {burnt: 0n, distributed: 0n} as any;
                 }
                 if(fundsAvailabe > tonAmount) {
+                    let withdrawFee = 0n;
+                    if(poolBefore.instantWithdrawalFee > 0n) {
+                        const base = Conf.shareBase;
+                        // Just in case
+                        expect(poolAfter.instantWithdrawalFee).toEqual(poolBefore.instantWithdrawalFee);
+                        withdrawFee = tonAmount * BigInt(poolAfter.instantWithdrawalFee) / base;
+                        expect(poolAfter.accruedGovernanceFee).toEqual(poolBefore.accruedGovernanceFee + withdrawFee);
+                    }
                     expect(res.transactions).toHaveTransaction({
                         from: pool.address,
                         to: withdrawAddr,
                         op: Op.pool.withdrawal,
-                        value: tonAmount + inValue - bcConf.lumpPrice - computedGeneric(reqTx).gasFees
+                        value: tonAmount + inValue - bcConf.lumpPrice - computedGeneric(reqTx).gasFees - withdrawFee
                     });
                     expect(poolAfter.totalBalance).toEqual(poolBefore.totalBalance - tonAmount);
                     expect(poolAfter.supply).toEqual(poolBefore.supply - amount);
@@ -1033,7 +1041,7 @@ describe('Integrational tests', () => {
             // https://github.com/microsoft/TypeScript-Website/issues/1931
             return nm as DistributionDelayed;
         }
-        assertGetLoan = async (lender, amount, exp_success, min_amount?) => {
+        assertGetLoan = async (lender, amount, exp_success, min_profit_share?) => {
             const poolData = await pool.getFullDataRaw();
             const stateBefore = await getContractData(pool.address);
             const controllerData = await lender.getControllerData();
@@ -1049,7 +1057,7 @@ describe('Integrational tests', () => {
             if(controllerBalance < reqBalance && exp_success) {
                 await lender.sendTopUp(vSender, reqBalance - controllerBalance + toNano('1'));
             }
-            const res =await lender.sendRequestLoan(vSender, amount, amount, poolData.interestRate);
+            const res =await lender.sendRequestLoan(vSender, amount, amount, poolData.interestRate, min_profit_share);
             const succcesTx = {
                 from: pool.address,
                 to: lender.address,
@@ -1672,6 +1680,182 @@ describe('Integrational tests', () => {
             expect(await balanceBefore).toEqual(await catPton.getJettonBalance());
             await bc.loadFrom(prevState);
         });
+        it('pessimistic withdraw should account for response address', async () => {
+            await loadSnapshot('pre_withdraw');
+            // Nominator
+            const cat = await bc.treasury('FatCat');
+            const poolBefore = await pool.getFullData();
+            const testWallet = await bc.treasury('test_wallet');
+            const catPton = await getUserJetton(cat);
+
+            const balanceBefore = await catPton.getJettonBalance();
+            expect(balanceBefore).toBeGreaterThan(0n);
+
+            const res = await catPton.sendBurnWithParams(cat.getSender(),
+                                                         toNano('1'),
+                                                         balanceBefore,
+                                                         testWallet.address,
+                                                         true, false);
+            const payout = await assertNewPayout(res.transactions,true,
+                                                 poolBefore.withdrawalPayout, false);
+            // Nft item is minted for the response address
+            await assertPayoutMint(res.transactions, payout,
+                                   {billsCount: 0n, totalBill: 0n}, testWallet.address,
+                                   balanceBefore, 0);
+            // Make sure only one item is minted
+            expect((await payout.getCollectionData()).nextItemIndex).toBe(1n);
+
+        });
+        it('pessimistic withdraw should ignore response address from masterchain', async () => {
+            await loadSnapshot('pre_withdraw');
+            // Nominator
+            const cat = await bc.treasury('FatCat');
+            const poolBefore = await pool.getFullData();
+            const testWallet = await bc.treasury('test_wallet', {workchain: -1});
+            const catPton = await getUserJetton(cat);
+
+            const balanceBefore = await catPton.getJettonBalance();
+            expect(balanceBefore).toBeGreaterThan(0n);
+
+            const res = await catPton.sendBurnWithParams(cat.getSender(),
+                                                         toNano('1'),
+                                                         balanceBefore,
+                                                         testWallet.address,
+                                                         true, false);
+
+            const payout = await assertNewPayout(res.transactions,true,
+                                                 poolBefore.withdrawalPayout, false);
+
+            // Nft item should be minted for source address instead
+            await assertPayoutMint(res.transactions, payout,
+                                   {billsCount: 0n, totalBill: 0n}, cat.address,
+                                   balanceBefore, 0);
+            expect((await payout.getCollectionData()).nextItemIndex).toBe(1n);
+        });
+        it('optimistic withdraw should account for response address', async () => {
+            await loadSnapshot('pre_withdraw');
+            // Nominator
+            const cat = await bc.treasury('FatCat');
+            const poolBefore = await pool.getFullData();
+            const testWallet = await bc.treasury('test_wallet');
+            const catPton = await getUserJetton(cat);
+
+            const balanceBefore = await catPton.getJettonBalance();
+            expect(balanceBefore).toBeGreaterThan(0n);
+
+            const res = await catPton.sendBurnWithParams(cat.getSender(),
+                                                         toNano('1'),
+                                                         balanceBefore,
+                                                         testWallet.address,
+                                                         false, false);
+            expect(res.transactions).toHaveTransaction({
+                on: testWallet.address,
+                from: pool.address,
+                op: Op.pool.withdrawal
+            });
+            expect(res.transactions).not.toHaveTransaction({
+                on: cat.address,
+                from: pool.address
+            });
+        });
+        it('optimistic withdraw should ignore response address from masterchain', async () => {
+            await loadSnapshot('pre_withdraw');
+            // Nominator
+            const cat = await bc.treasury('FatCat');
+            const poolBefore = await pool.getFullData();
+            const testWallet = await bc.treasury('test_wallet', {workchain: -1});
+            const catPton = await getUserJetton(cat);
+
+            const balanceBefore = await catPton.getJettonBalance();
+            expect(balanceBefore).toBeGreaterThan(0n);
+
+            const res = await catPton.sendBurnWithParams(cat.getSender(),
+                                                         toNano('1'),
+                                                         balanceBefore,
+                                                         testWallet.address,
+                                                         false, false);
+
+            expect(res.transactions).toHaveTransaction({
+                on: cat.address,
+                from: pool.address,
+                op: Op.pool.withdrawal
+            });
+            expect(res.transactions).not.toHaveTransaction({
+                on: testWallet.address,
+                from: pool.address
+            });
+        });
+        it('should return profit according to profit share', async () => {
+            await loadSnapshot('pre_withdraw');
+            const cat = await bc.treasury('FatCat');
+            const poolBefore = await pool.getFullData();
+            // We want to take some hefty chunk to exceed interest
+            const testProfitShare = 1 << 20;
+
+            let res = await controller.sendApproveExtended(deployer.getSender(), {
+                allocation: 0n,
+                startPriorElectionsEnd: 65536,
+                profitShare: testProfitShare
+            });
+
+            expect((await controller.getControllerData()).approverSetProfitShare).toEqual(testProfitShare);
+            await assertGetLoan(controller, sConf.min_stake, true, testProfitShare);
+            const expInterest = sConf.min_stake * BigInt(poolBefore.interestRate) / Conf.shareBase;
+            const poolLoaned = await pool.getFullData();
+            const electId = await announceElections();
+            res = await controller.sendNewStake(validator.wallet.getSender(),
+                                                sConf.min_stake + toNano('1'),
+                                                validator.keys.publicKey,
+                                                validator.keys.secretKey,
+                                                electId);
+            expect(res.transactions).toHaveTransaction({
+                from: elector.address,
+                to: controller.address,
+                op: Op.elector.new_stake_ok
+            });
+
+            const controllerBorrowed = await controller.getControllerData();
+
+            await nextRound();
+            await controller.sendUpdateHash(validator.wallet.getSender());
+            await nextRound();
+            await controller.sendUpdateHash(validator.wallet.getSender());
+            waitUnlock(getCurTime());
+            await elector.sendTickTock("tock"); // Announce elecitons
+            await elector.sendTickTock("tock"); // Update credits
+
+            res = await controller.sendRecoverStake(validator.wallet.getSender());
+
+            const returnStake = findTransaction(res.transactions, {
+                on: controller.address,
+                from: elector.address,
+                op: Op.elector.recover_stake_ok,
+                aborted: false
+            })!;
+            expect(returnStake).not.toBeUndefined();
+
+            const recMsg = returnStake.inMessage!;
+            if(recMsg.info.type !== 'internal') {
+                throw new Error("No way");
+            }
+
+            const profit = recMsg.info.value.coins - controllerBorrowed.stakeSent;
+            // console.log(`Profit: ${profit}`);
+            expect(profit).toBeGreaterThan(0n);
+            const profitShare = profit * BigInt(testProfitShare) / Conf.shareBase;
+            // console.log(`Borrowed amount: ${controllerBorrowed.borrowedAmount} ${sConf.min_stake}`);
+            // console.log(`Without interest: ${controllerBorrowed.borrowedAmount - expInterest}`);
+            // console.log(`Profit share:${profitShare}`);
+
+            // Should trigger loan repayment with according profit share
+            expect(res.transactions).toHaveTransaction({
+                from: controller.address,
+                to: pool.address,
+                op: Op.pool.loan_repayment,
+                value: controllerBorrowed.borrowedAmount - expInterest + profitShare,
+                success: true
+            })!;
+        });
         it('Should not be possible to fail distribution action phase with low burn msg value', async() => {
             await loadSnapshot('has_loan');
             const cat = await bc.treasury('FatCat');
@@ -1777,6 +1961,9 @@ describe('Integrational tests', () => {
             // After this we expect total balance to reduce by finalizeRoundFee
             const balanceBefore = poolBefore.totalBalance - Conf.finalizeRoundFee;
             const poolAfter = await pool.getFullData();
+            // For get_conversion_rate_unsafe
+            // In case no other snap states has any meaningfull projected impact
+            snapStates.set('projected_changed', bc.snapshot());
             expect(poolAfter.previousRound.expected).toEqual(poolBefore.currentRound.expected + totalExpReturn);
             totalExpProfit -= Conf.finalizeRoundFee;
             totalExpProfit -= Conf.governanceFee * totalExpProfit / Conf.shareBase;
@@ -1803,6 +1990,63 @@ describe('Integrational tests', () => {
                 balance -= res.distributed;
                 supply  -= res.burnt;
             }
+        });
+        it('Should account for instant withdraw fee', async () => {
+            await loadSnapshot('opt_depo');
+
+            const withdrawFee = getRandomInt(1, (2 ** 24) - 1);
+            const res = await pool.sendSetDepositSettings(deployer.getSender(), toNano('0.05'),
+                                                          true, true, withdrawFee);
+            const poolBefore = await pool.getFullData();
+            expect(poolBefore.instantWithdrawalFee).toEqual(withdrawFee);
+            expect(poolBefore.accruedGovernanceFee).toEqual(0n);
+            let   balance    = poolBefore.totalBalance;
+            let   supply     = poolBefore.supply;
+            const depoIdx = getRandomInt(0, depoAddresses.length - 1);
+            const owner   = bc.sender(depoAddresses[depoIdx]);
+            const pton       = await getUserJetton(depoAddresses[depoIdx]);
+            const burnAmount = await pton.getJettonBalance(); // / share;
+
+            await assertWithdraw(owner, burnAmount, true, true, balance, supply, 0, false);
+            const poolAfter = await pool.getFullData();
+            expect(poolAfter.accruedGovernanceFee).toBeGreaterThan(0n);
+            snapStates.set('fee_accured', bc.snapshot());
+
+            await nextRound();
+
+            const round = await pool.sendTouch(deployer.getSender());
+
+            expect(round.transactions).toHaveTransaction({
+                from: pool.address,
+                to: deployer.address,
+                op: Op.interestManager.operation_fee,
+                value: poolAfter.accruedGovernanceFee - msgConf.lumpPrice
+            });
+        });
+        it('Should send fee to treasury if set', async () => {
+            await loadSnapshot('fee_accured');
+            const newTreasury = await bc.treasury('test_treasury');
+
+            const res = await pool.sendSetRoles(deployer.getSender(), {treasury: newTreasury.address});
+            expect(res.transactions).toHaveTransaction({
+                on: pool.address,
+                from: deployer.address,
+                op: Op.governor.set_roles,
+                success: true,
+                aborted: false
+            });
+
+            const poolAfter = await pool.getFullData();
+            await nextRound();
+
+            const round = await pool.sendTouch(deployer.getSender());
+            expect(round.transactions).toHaveTransaction({
+                from: pool.address,
+                to: newTreasury.address,
+                op: Op.interestManager.operation_fee,
+                // New treasury is in basechain, while previous was in mc
+                value: poolAfter.accruedGovernanceFee - bcConf.lumpPrice
+            });
         });
         it('Should be able to use balance in the same round', async() => {
             await loadSnapshot('opt_depo');
@@ -2267,5 +2511,40 @@ describe('Integrational tests', () => {
         const poolAfter = await pool.getFullData();
         expect(poolAfter.halted).toBe(false);
     });
+    });
+    describe('Convertion rate unsafe', () => {
+        afterAll(async () => await loadSnapshot('initial'));
+        it('conversion rate should match get method data at any point', async () => {
+            const msgValue = toNano('0.1');
+            for(let snap of snapStates.values()) {
+                await bc.loadFrom(snap);
+                const poolData = await pool.getFullDataRaw();
+                const res = await pool.sendConversionRateUnsafe(deployer.getSender(), msgValue);
+                const requestRate = findTransaction(res.transactions, {
+                    on: pool.address,
+                    from: deployer.address,
+                    op: Op.pool.get_conversion_rate_unsafe,
+                    aborted: false
+                });
+                if(requestRate == undefined) {
+                    throw new Error("Conversion rate request failed");
+                }
+                const computed = computedGeneric(requestRate);
+                expect(res.transactions).toHaveTransaction({
+                    on: deployer.address,
+                    from: pool.address,
+                    op: Op.pool.take_conversion_rate_unsafe,
+                    body: (x) => {
+                        const ds = x!.beginParse().skip(32 + 64);
+                        const pb = ds.loadCoins();
+                        const ps = ds.loadCoins();
+                        return pb    == poolData.projectedTotalBalance
+                               && ps == poolData.projectedPoolSupply;
+                    },
+                    // Should return change
+                    value: msgValue - computed.gasFees - msgConf.lumpPrice
+                });
+            }
+        });
     });
 });
