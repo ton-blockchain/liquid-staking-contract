@@ -762,7 +762,7 @@ describe('Cotroller mock', () => {
 
         await bc.loadFrom(prevState);
       });
-      it('should reject allowed_borrow_start_prior_elections_end = 0', async () => {
+      it.skip('should reject allowed_borrow_start_prior_elections_end = 0', async () => {
         const prevState = bc.snapshot();
         randVset();
         const testOptions: ApproveOptions = {

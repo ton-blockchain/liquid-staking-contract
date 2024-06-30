@@ -156,7 +156,7 @@ int check_new_stake_msg(slice cs);
                                            muldiv(borrowed_amount, SHARE_BASIS, SHARE_BASIS + interest) +  ;; restore credit body
                                               muldiv(approver_set_profit_share, profit, SHARE_BASIS));
                 if( amount_to_return ) {
-                  if(balance >= MIN_TONS_FOR_STORAGE + borrowed_amount) {
+                  if(balance >= MIN_TONS_FOR_STORAGE + amount_to_return) {
                     send_msg(pool,
                              amount_to_return, ;; TODO add fee???
                              begin_cell().store_body_header(pool::loan_repayment, query_id).end_cell(),
@@ -462,7 +462,7 @@ int check_new_stake_msg(slice cs);
                   int validator_amount = balance - borrowed_amount;
                     throw_unless(error::too_high_loan_request_amount, validator_amount >= ENSURABLE_BALANCE_FOR_STAKING + elector_fine + interest_payment);
                     if(allocation) { ;; zero allocation means no limit
-                      throw_unless(error::too_high_loan_request_amount, max_loan >= allocation);
+                      throw_unless(error::too_high_loan_request_amount, max_loan <= allocation);
                     }
 
                   cell payload = begin_cell()
