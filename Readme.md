@@ -180,3 +180,11 @@ In this scheme Payout is NFT collection and "conversion obligation" is an NFT. E
 When you deposit TON to pool you immediately get Deposit Bill. Later after current validation round ends and funds are released from Elector, correct poolJetton/TON ratio is discovered, amount of pool jetton corresponded to total deposits value is calculated and sent to Deposit Collection. After that Deposit Collection send *burn request* to the last minted NFT which trigger the conversion of that NFT and simulatneously sending *burn request* ton the NFT before that. Here the idea that NFTs are linked list is used to iterate through whole collection.
 
 This implementation allows processed deposits/withdrawals to be sent to other users as a whole and allows autoconversion to assets when ready. **In current implementation it is the main used mechanism**
+
+# Security
+
+The liquid staking contracts has been reviewed by TON Core team and audited by security companies:
+
+- CertiK: [Audit Report](https://skynet.certik.com/projects/tonstakers)
+
+Feel free to review these reports for a detailed understanding of the contracts security measures.
