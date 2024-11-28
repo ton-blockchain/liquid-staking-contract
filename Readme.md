@@ -183,7 +183,7 @@ This implementation allows processed deposits/withdrawals to be sent to other us
 
 # Security
 
-The liquid staking contracts has been reviewed by TON Core team and audited by security companies:
+The liquid staking contracts has been audited by security companies:
 
 - CertiK: [Audit Report](https://skynet.certik.com/projects/tonstakers)
 
