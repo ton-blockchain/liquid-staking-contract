@@ -39,7 +39,7 @@
         slice to_address = calc_address(JETTONS_WORKCHAIN, state_init);
         deposit_payout = to_address;
         slice deposit_minter_jetton_wallet = calc_address(JETTONS_WORKCHAIN,
-                calculate_jetton_wallet_state_init(to_address, jetton_minter, pool_jetton_wallet_code)
+                calculate_jetton_wallet_state_init(to_address, jetton_minter, child_contract_codes.triple_second())
         );
         builder msg = begin_cell()
                 .store_msg_flags(msgflag::BOUNCEABLE)

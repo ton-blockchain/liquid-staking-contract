@@ -17,7 +17,7 @@
 global int state; ;; Currently pool can only be in NORMAL state. This variable remains for future updates
 global int halted?;
 global int total_balance;
-global int interest_rate; ;; times 2**16
+global int interest_rate; ;; times SHARE_BASIS == 2**24
 global int optimistic_deposit_withdrawals;
 global int deposits_open?;
 global int saved_validator_set_hash;
@@ -28,7 +28,9 @@ global [cell, int, int, int, int, int, int] prev_round_borrowers;
 
 ;;[min, max]
 global [int, int] loan_params_per_validator;
-global int governance_fee; ;; times 2**16
+global int governance_fee; ;; times SHARE_BASIS == 2**24
+global int disbalance_tolerance;
+global int credit_start_prior_elections_end;
 
 ;; Basic jetton that represents share of the pool
 global slice jetton_minter;
@@ -40,18 +42,17 @@ global slice withdrawal_payout;
 global int requested_for_withdrawal; ;; in jettons
 
 ;; ROLES
-global slice sudoer;            ;; hav right to send any message on behalf of any contract
+global slice sudoer;            ;; has right to send any message on behalf of any contract
 global int sudoer_set_at;
-global slice governor;          ;; set roles, unhalt and get reward
+global slice governor;          ;; sets roles, unhalt and get reward
 global int governor_update_after;
-global slice interest_manager;  ;; get round stats and update interest
+global slice interest_manager;  ;; gets round stats and update interest
 global slice halter;            ;; halts operation
 global slice approver;          ;; approves controllers to ask for credit
 
 ;; CHILD CONTRACT CODES
-global cell controller_code;
-global cell pool_jetton_wallet_code;
-global cell payout_minter_code;
+;; [controller_code, pool_jetton_wallet_code, payout_minter_code]
+global [cell, cell, cell] child_contract_codes;
 
 
 ;; temporal variables (not saved to storage)
@@ -61,7 +62,8 @@ global int current_round_closed?; ;; hash of validator set changed since round s
 const int state::NORMAL = 0;
 
 
-const int DISBALANCE_TOLERANCE = 30; ;; x/256
+const int DISBALANCE_BIT_SIZE = 8;
+const int DISBALANCE_TOLERANCE_BASIS = 2 << DISBALANCE_BIT_SIZE; ;; 2 and not 1 is intentional
 const int JETTONS_WORKCHAIN = 0;
 const int MAX_LOAN_DICT_DEPTH = 12;
 
@@ -177,6 +179,8 @@ int muldiv_extra(int a, int b, int c) inline {
     }
 
     if (op == halter::halt) {
+        ;; we do not end_parse here, because unprocessed data
+        ;; in message maybe used for reason in offchain analytics
         process_halt_request(sender_address);
     } elseif (op == pool::withdraw) {
         assert_sender!(sender_address, jetton_minter);
@@ -189,6 +193,7 @@ int muldiv_extra(int a, int b, int c) inline {
             throw_unless(error::not_enough_TON_to_process, msg_value > WITHDRAWAL_FEE);
             int request_immediate_withdrawal_if_possible = ~ in_msg_body~load_bool();
             int fill_or_kill = in_msg_body~load_bool();
+            in_msg_body.end_parse();
             update_round(pair_first(get_balance()) - msg_value);
             assert_not_halted!(); ;; otherwise mint back
             int approximate_amount = muldiv(jetton_amount, total_balance, supply);
@@ -201,7 +206,7 @@ int muldiv_extra(int a, int b, int c) inline {
                 throw_unless(error::output_amount_is_zero, approximate_amount > 0);
                 total_balance -= approximate_amount;
                 supply -= jetton_amount;
-                raw_reserve(balance - msg_value - approximate_amount - sent_during_rotation, 0);
+                raw_reserve(balance - msg_value - approximate_amount - sent_during_rotation, reservemode::STRICT);
                 available_funds -= approximate_amount;
                 var msg = begin_cell()
                         .store_msg_flags(msgflag::NON_BOUNCEABLE)
@@ -213,7 +218,7 @@ int muldiv_extra(int a, int b, int c) inline {
             } else {
                 throw_if(105, fill_or_kill);
                 throw_unless(error::output_amount_is_zero, jetton_amount);
-                raw_reserve(balance - msg_value - sent_during_rotation, 0);
+                raw_reserve(balance - msg_value - sent_during_rotation, reservemode::STRICT);
                 request_to_mint_withdrawal(from_address, jetton_amount, query_id);
             }
             ;;  conservatively use `borrowed` instead of `expected` as amount that will be returned
@@ -232,7 +237,7 @@ int muldiv_extra(int a, int b, int c) inline {
         } catch (exc_arg, exc_num) {
             ;; note that sent_during_rotation is null because
             ;; effect of update_round is reverted in catch
-            raw_reserve(balance - msg_value, 0);
+            raw_reserve(balance - msg_value, reservemode::STRICT);
             ;; request_to_mint automatically increase supply by minted amount
             ;; however there is no extra tokens in this case
             supply -= jetton_amount;
@@ -248,6 +253,7 @@ int muldiv_extra(int a, int b, int c) inline {
                 process_set_sudo_request(sender_address, in_msg_body);
     } elseif (op == governor::unhalt) {
         process_unhalt_request(sender_address);
+        in_msg_body.end_parse();
     } elseif (op == governor::prepare_governance_migration) {
         process_prepare_governance_migration(sender_address, in_msg_body);
     } elseif (op == governor::set_roles) {
@@ -266,26 +272,43 @@ int muldiv_extra(int a, int b, int c) inline {
                 if(in_msg_body~load_bool()) {
                     approver = in_msg_body~load_msg_addr();
                 }
+                in_msg_body.end_parse();
     } elseif(op == governor::set_deposit_settings) {
                 assert_sender!(sender_address, governor);
                 optimistic_deposit_withdrawals = in_msg_body~load_bool();
                 deposits_open?  = in_msg_body~load_bool();
+                in_msg_body.end_parse();
     } elseif(op == governor::set_governance_fee) {
                 assert_sender!(sender_address, governor);
                 governance_fee = in_msg_body~load_share();
+                in_msg_body.end_parse();
     } elseif (op == interest_manager::set_interest) {
-                assert_state!(state::NORMAL);
-                assert_sender!(sender_address, interest_manager);
-                interest_rate = in_msg_body~load_share();
+        assert_state!(state::NORMAL);
+        assert_sender!(sender_address, interest_manager);
+        interest_rate = in_msg_body~load_share();
+        in_msg_body.end_parse();
+    } elseif (op == interest_manager::set_operational_params) {
+        assert_state!(state::NORMAL);
+        assert_sender!(sender_address, interest_manager);
+        int min_loan_per_validator = in_msg_body~load_coins();
+        int max_loan_per_validator = in_msg_body~load_coins();
+        throw_unless( error::contradicting_operational_params,
+                      max_loan_per_validator >= min_loan_per_validator);
+        loan_params_per_validator = [min_loan_per_validator, max_loan_per_validator];
+        disbalance_tolerance = in_msg_body~load_uint(DISBALANCE_BIT_SIZE);
+        credit_start_prior_elections_end = in_msg_body~load_timestamp();
+        in_msg_body.end_parse();
     } else {
         update_round(pair_first(get_balance()) - msg_value);
         assert_not_halted!();
         ;; it is ok, controller know how to process loan_repayment/request_loan bounces
         {- ========== Pool operations ========== -}
         if (op == pool::deposit) {
+                ;; we do not end_parse here, because apps may use
+                ;; unprocessed data in depositd message for offchain analytics
                 assert_state!(state::NORMAL);
                 throw_unless(error::deposits_are_closed, deposits_open?);
-                raw_reserve(balance - DEPOSIT_FEE - sent_during_rotation, 0);
+                raw_reserve(balance - DEPOSIT_FEE - sent_during_rotation, reservemode::STRICT);
                 int deposit_amount = msg_value - DEPOSIT_FEE;
                 throw_unless(error::deposit_amount_too_low, deposit_amount > 0);
                 if(optimistic_deposit_withdrawals) {
@@ -304,6 +327,11 @@ int muldiv_extra(int a, int b, int c) inline {
 
               assert_state!(state::NORMAL);
               throw_if(error::borrowing_request_in_closed_round, current_round_closed?);
+              if(credit_start_prior_elections_end) { ;; zero means do not check time
+                  (_, _, int elections_end_before) = get_validator_config();
+                  (_, int utime_until, _) = get_current_validator_set();
+                  throw_unless(error::too_early_borrowing_request, now() > utime_until - elections_end_before - credit_start_prior_elections_end);
+              }
 
               int min_loan = in_msg_body~load_coins();
               int max_loan = in_msg_body~load_coins();
@@ -312,6 +340,7 @@ int muldiv_extra(int a, int b, int c) inline {
               in_msg_body = in_msg_body.preload_ref().begin_parse();
               int controller_id = in_msg_body~load_controller_id();
               slice validator = in_msg_body~load_msg_addr();
+              ;; the rest of in_msg_body is currently unused static data
 
               assert_sender!(sender_address, _get_controller_address(controller_id, validator));
               throw_unless(error::interest_too_low, max_interest >= interest_rate);
@@ -321,7 +350,9 @@ int muldiv_extra(int a, int b, int c) inline {
                                      - muldiv_extra(requested_for_withdrawal, total_balance, supply)
                                      - MIN_TONS_FOR_STORAGE;
               var [_, _, _, borrowed, _, _, _] = current_round_borrowers;
-              int available_funds = min( creditable_funds, muldiv(256 + DISBALANCE_TOLERANCE, total_balance, 512) - borrowed );
+              int available_funds = min( creditable_funds,
+                                         muldiv( (DISBALANCE_TOLERANCE_BASIS / 2) + disbalance_tolerance, total_balance, DISBALANCE_TOLERANCE_BASIS)
+                                         - borrowed );
 
               [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
               min_loan = max(min_loan, min_loan_per_validator);
@@ -374,6 +405,8 @@ int muldiv_extra(int a, int b, int c) inline {
         } elseif (op == pool::deploy_controller) {
             assert_state!(state::NORMAL);
             int controller_id = in_msg_body~load_controller_id();
+            ;; we do not end_parse here, because apps may use
+            ;; unprocessed data in message for offchain analytics
             (slice controller_address, cell init_state ) = build_controller_address(controller_id, sender_address);
             builder msg = begin_cell()
                           .store_msg_flags(msgflag::BOUNCEABLE)
@@ -383,11 +416,13 @@ int muldiv_extra(int a, int b, int c) inline {
                           .store_body_header(controller::top_up, cur_lt());
             send_raw_message(msg.end_cell(), sendmode::CARRY_ALL_REMAINING_MESSAGE_VALUE);
         } elseif (op == pool::donate) {
+            ;; we do not end_parse here, because apps may use
+            ;; unprocessed data in message for offchain analytics
             assert_state!(state::NORMAL);
             int donate_value = msg_value - DEPOSIT_FEE;
             throw_unless(error::deposit_amount_too_low, donate_value > 0);
             total_balance += donate_value;
-            raw_reserve(balance - msg_value + donate_value - sent_during_rotation, 0);
+            raw_reserve(balance - msg_value + donate_value - sent_during_rotation, reservemode::STRICT);
             builder msg = begin_cell()
                     .store_msg_flags(msgflag::NON_BOUNCEABLE)
                     .store_slice(sender_address)
@@ -417,7 +452,7 @@ int muldiv_extra(int a, int b, int c) inline {
                           )
                         .end_cell();
     cell init_state = controller_init_state(static_data);
-    slice controller_address = calc_address(CONTROLLER_WORKCHAIN, controller_init_state(static_data));
+    slice controller_address = calc_address(CONTROLLER_WORKCHAIN, init_state);
     return (controller_address, init_state);
 }
 
@@ -477,22 +512,20 @@ int muldiv_extra(int a, int b, int c) inline {
 
 ([cell, int, int, int, int, int, int], ()) finalize_lending_round([cell, int, int, int, int, int, int] borrowers_data, int available_balance) impure {
     ;; Does all the necessary value checks, sends logs
-    ;; and governor fees, nulifies variables.
+    ;; and governor fees, nullifies variables.
     var [borrowers_dict, round_id, active_borrowers, borrowed, expected, returned, profit] = borrowers_data;
     throw_unless(error::finalizing_active_credit_round, borrowers_dict.null?());
     throw_unless(error::finalizing_active_credit_round, active_borrowers == 0);
 
     profit -= FINALIZE_ROUND_FEE;
 
-    ;; governance_fee / 65536 < 1 ratio, share to send to governance
+    ;; governance_fee / SHARE_BASIS < 1, share to send to governance
     int fee = max(muldiv(governance_fee, profit, SHARE_BASIS), 0);
     profit -= fee;
 
     ;; if there is negative profit (loss), then it can take maximum all the balance
     profit = max(profit, - total_balance);
     total_balance += profit;
-
-    ;;int effective_supply = supply + requested_for_withdrawal;
 
     if (fee > SERVICE_NOTIFICATION_AMOUNT) { ;; otherwise it is less than msg cost
       sent_during_rotation += fee;
@@ -519,13 +552,13 @@ int muldiv_extra(int a, int b, int c) inline {
     return ([null(), round_id, 0, 0, 0, 0, 0], ());
 }
 
-() log_loan(slice lender, int amount) impure {
-    emit_log(1, begin_cell().store_slice(lender)
+() log_loan(slice borrower, int amount) impure {
+    emit_log(1, begin_cell().store_slice(borrower)
                             .store_coins(amount));
 }
 
-() log_repayment(slice lender, int amount, int profit) impure {
-    emit_log(2, begin_cell().store_slice(lender)
+() log_repayment(slice borrower, int amount, int profit) impure {
+    emit_log(2, begin_cell().store_slice(borrower)
                             .store_coins(amount)
                             .store_signed_coins(profit));
 }
@@ -543,7 +576,7 @@ int muldiv_extra(int a, int b, int c) inline {
     emit_log(4, begin_cell().store_uint(round_id, 32));
 }
 
-() finalize_deposit_withdrawal_round (int available_balance, int round_id) {
+() finalize_deposit_withdrawal_round (int available_balance, int round_id) impure {
     initiate_distribution_of_tons(available_balance, round_id);
     initiate_distribution_of_pool_jettons(round_id);
 }
@@ -665,6 +698,9 @@ var compose_pool_full_data_internal( int update?) inline_ref {
             unpair(loan_params_per_validator),
             ;;min_loan_per_validator, max_loan_per_validator,
             governance_fee,
+            disbalance_tolerance,
+            credit_start_prior_elections_end,
+
 
             jetton_minter, supply,
 
@@ -677,9 +713,7 @@ var compose_pool_full_data_internal( int update?) inline_ref {
             halter,
             approver,
 
-            controller_code,
-            pool_jetton_wallet_code,
-            payout_minter_code,
+            untriple(child_contract_codes),
 
             (_get_projected_conversion_ratio())
     );
@@ -731,12 +765,19 @@ int calculate_loan_amount(int min_loan, int max_loan, int max_interest) method_i
     if(max_interest < interest_rate) {
         return -1;
     }
+    if(credit_start_prior_elections_end) { ;; zero means do not check time
+        (_, _, int elections_end_before) = get_validator_config();
+        (_, int utime_until, _) = get_current_validator_set();
+        if(now() > utime_until - elections_end_before - credit_start_prior_elections_end) {
+            return -1;
+        }
+    }
 
     int creditable_funds = pair_first(get_balance())
             - muldiv_extra(requested_for_withdrawal, total_balance, supply)
             - MIN_TONS_FOR_STORAGE;
     var [_, _, _, borrowed, _, _, _] = current_round_borrowers;
-    int available_funds = min( creditable_funds, muldiv(256 + DISBALANCE_TOLERANCE, total_balance, 512) - borrowed );
+    int available_funds = min( creditable_funds, muldiv((DISBALANCE_TOLERANCE_BASIS / 2) + disbalance_tolerance, total_balance, DISBALANCE_TOLERANCE_BASIS) - borrowed );
 
     [int min_loan_per_validator, int max_loan_per_validator] = loan_params_per_validator;
     min_loan = max(min_loan, min_loan_per_validator);

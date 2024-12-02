@@ -64,6 +64,7 @@ const int interest_manager::operation_fee = 0x54d37487;
 const int interest_manager::request_notification = 0xb1ebae06;
 const int interest_manager::stats = 0xc1344900;
 const int interest_manager::set_interest = 0xc9f04485;
+const int interest_manager::set_operational_params = 0x4485c9f0;
 
 {- ========== Jetton OPCODES ========== -}
 const int jetton::transfer = 0xf8a7ea5;

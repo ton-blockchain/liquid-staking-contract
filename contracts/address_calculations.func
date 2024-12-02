@@ -1,7 +1,8 @@
 #include "metadata_utils.func";
+#include "auto/metadata.func";
 
-global cell controller_code;
-global cell payout_minter_code;
+;; [controller_code, pool_jetton_wallet_code, payout_minter_code]
+global [cell, cell, cell] child_contract_codes;
 
 slice addr_none() asm "b{00} PUSHSLICE";
 builder store_zeros(builder b, int n) asm "STZEROES";
@@ -30,7 +31,7 @@ cell controller_init_data (cell static_data) {
 cell controller_init_state (cell static_data) {
     return begin_cell()
             .store_uint(0, 1 + 1) ;; split_depth (Maybe = 0) and special (Maybe = 0)
-            .store_maybe_ref(controller_code)
+            .store_maybe_ref(child_contract_codes.triple_first())
             .store_maybe_ref(controller_init_data(static_data))
             .store_uint(0,1) ;; libraries - empty cell
             .end_cell();
@@ -59,8 +60,8 @@ cell calculate_payout_state_init(slice pool_address, int round_id, int distribut
     content_dict~udict_set_ref(256, "description"H, pack_metadata_value("Converts burned Pool Jettons to TON"));
   }
   content_dict~udict_set_ref(256, "symbol"H, pack_metadata_value("⏲️"));
-  content_dict~udict_set_ref(256, "uri"H, pack_metadata_value("my-custom-stake-address.ton"));
-  content_dict~udict_set_ref(256, "image"H, pack_metadata_value("my-custom-stake-address.ton/icon.img"));
+  content_dict~udict_set_ref(256, "uri"H, pack_metadata_value(NFT_URI));
+  content_dict~udict_set_ref(256, "image"H, pack_metadata_value(NFT_IMAGE_URI));
   content_dict~udict_set_ref(256, "render_type"H, pack_metadata_value("hidden"));
   ;; To make payout address unpredictable we use two sources of difficult to know in advance data:
   ;; Hash of contract storage and block random seed
@@ -77,7 +78,7 @@ cell calculate_payout_state_init(slice pool_address, int round_id, int distribut
            .end_cell();
   return begin_cell()
             .store_uint(0, 1 + 1) ;; split_depth (Maybe = 0) and special (Maybe = 0)
-            .store_maybe_ref(payout_minter_code)
+            .store_maybe_ref(child_contract_codes.triple_third())
             .store_maybe_ref(data)
             .store_uint(0,1) ;; libraries - empty cell
             .end_cell();

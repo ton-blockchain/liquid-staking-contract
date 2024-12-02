@@ -70,6 +70,10 @@ cell get_fundamental_addresses() inline {
         return (false, null());
     }
     slice cs = burning_config.begin_parse();
+    ifnot(cs~load_uint(8) == 1) {
+        ;; unknown config, skip
+        return (false, null());
+    }
     ifnot(cs~load_int(1)) {
         return (false, null());
     }

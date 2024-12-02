@@ -71,6 +71,7 @@ top_up#d372158c query_id:uint64 = InternalMsgBody;
 
 // Interest manager
 set_interest#c9f04485 query_id:uint64 interest_rate:uint16 = InternalMsgBody;
+set_operational_params#4485c9f0 query_id:uint64 min_loan_per_validator:Coins min_loan_per_validator:Coins max_loan_per_validator:Coins disbalance_tolerance:uint8 credit_start_prior_elections_end:uint48  = InternalMsgBody;
 operation_fee#54d37487 query_id:uint64 = InternalMsgBody;
 request_notification#b1ebae06 query_id:uint64 min_loan:Coins max_loan:Coins max_interest:uint24 = InternalMsgBody;
 stats#c1344900 query_id:uint64 borrowed:Coins expected:Coins returned:Coins profit_sign:int1 profit:Coins total_balance:Coins = InternalMsgBody;

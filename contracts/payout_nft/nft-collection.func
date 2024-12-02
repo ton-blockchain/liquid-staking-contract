@@ -110,8 +110,17 @@ slice calculate_nft_item_address(cell state_init) {
 
     if (op == op::init_collection) {
       throw_unless(error::unauthorized_init, equal_slice_bits(sender, admin));
+      throw_unless(error::can_not_reinit_started_distribution, distribution.null?());
+
       distribution = in_msg_body~load_ref();
-      throw_unless(333, distribution.begin_parse().slice_bits());
+      slice distr = distribution.begin_parse();
+      throw_if(error::wrong_initial_distribution_info, distr~load_bool()); ;; distribution can not be started on init
+      int jettons? = distr~load_bool();
+      throw_if(error::wrong_initial_distribution_info, distr~load_coins()); ;; initial amount should be zero
+      if(jettons?) {
+          distr~load_msg_addr();
+      }
+      distr.end_parse();
       return save_data(issued_bills, admin, distribution, collection_content, next_item_index, prev, current, next, next_state_init);
     }
     throw_unless(error::need_init, ~ cell_null?(distribution));
@@ -137,12 +146,11 @@ slice calculate_nft_item_address(cell state_init) {
       next = calculate_nft_item_address(next_state_init);
 
       var msg = begin_cell()
-                .store_uint(0x18, 6)
+                .store_msg_flags(msgflag::BOUNCEABLE)
                 .store_slice(current)
                 .store_coins(0)
-                .store_uint(4 + 2 + 1, 1 + 4 + 4 + 64 + 32 + 1 + 1 + 1)
-                .store_ref(current_state_init)
-                .store_ref(
+                .store_msgbody_prefix_stateinit(
+                  current_state_init,
                   begin_cell()
                     .store_op(op::init_nft)
                     .store_query_id(query_id)

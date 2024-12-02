@@ -1,5 +1,10 @@
 import {toNano} from "ton-core";
 
+export abstract class Metadata {
+    static readonly NFT_URI = "my-custom-stake-address.ton";
+    static readonly NFT_IMAGE_URI = "my-custom-stake-address.ton/icon.img";
+}
+
 export abstract class Conf {
     static readonly electorOpValue = toNano('1.03');
     static readonly minStorageController = toNano('2');
@@ -12,7 +17,7 @@ export abstract class Conf {
     static readonly stakeRecoverFine = toNano('10');
     static readonly gracePeriod    = 600;
     static readonly governorQuarantine = 86400;
-    static readonly sudoQuarantine = 86400;
+    static readonly sudoQuarantine = 2 * 24 * 3600;
     static readonly serviceNotificationAmount = toNano('0.02');
     static readonly governanceFee  = 155n * BigInt(2 ** 8);
     static readonly finalizeRoundFee = toNano('1');
@@ -76,6 +81,7 @@ export abstract class Op {
         set_interest : 0xc9f04485,
         operation_fee : 0x54d37487,
         request_notification : 0xb1ebae06,
+        set_operational_params: 0x4485c9f0,
         stats : 0xc1344900,
     }
     static readonly jetton = {
@@ -127,6 +133,7 @@ export abstract class Errors {
  static readonly interest_too_low = 0xf100;
  static readonly contradicting_borrowing_params = 0xf101;
  static readonly not_enough_funds_for_loan = 0xf102;
+ static readonly too_early_borrowing_request = 0xf105;
  static readonly total_credit_too_high = 0xf103;
 
  static readonly deposit_amount_too_low = 0xf200;
@@ -172,4 +179,6 @@ export abstract class Errors {
 
  static readonly no_credit = 0xfb00;
  static readonly too_early_loan_return = 0xfb01;
+
+ static readonly contradicting_operational_params = 0xfc00;
 }
